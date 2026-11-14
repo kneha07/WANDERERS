@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues on kneha07/field-shift (use the `gh` CLI). See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues on kneha07/WANDERERS (use the `gh` CLI). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
