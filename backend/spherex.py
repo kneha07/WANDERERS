@@ -6,9 +6,11 @@ from itertools import groupby
 import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+from astropy.wcs import WCS
 
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
+PIXEL_ARCSEC = 6.15
 SEXAGESIMAL = re.compile(r"\s*[+-]?\d[\d\s:hmsd°'\".,+-]*")
 
 
@@ -64,3 +66,22 @@ def choose_images(images, n):
     for d, imgs in by_det.items():
         chosen += [imgs[i] for i in np.linspace(0, len(imgs) - 1, take[d]).round().astype(int)]
     return sorted(chosen, key=lambda r: r["mjd"])
+
+
+def output_wcs(center, n):
+    """North-up, east-left TAN grid of n x n pixels (6.15 arcsec) centered on center."""
+    w = WCS(naxis=2)
+    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    w.wcs.crval = [center.ra.deg, center.dec.deg]
+    w.wcs.crpix = [(n + 1) / 2, (n + 1) / 2]
+    w.wcs.cdelt = [-PIXEL_ARCSEC / 3600, PIXEL_ARCSEC / 3600]
+    return w
+
+
+def display_xy(grid, n, coord):
+    """Sky position -> PNG pixel coordinates with the origin at the top-left corner.
+
+    Grid row 0 is south, but PNG row 0 is north (the PNG is flipped), so y counts down from the top.
+    """
+    x, y = grid.wcs_world2pix(coord.ra.deg, coord.dec.deg, 0)
+    return float(x) + 0.5, n - 0.5 - float(y)

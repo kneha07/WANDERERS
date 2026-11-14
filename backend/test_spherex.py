@@ -3,7 +3,10 @@ from collections import Counter
 
 import pytest
 
-from backend.spherex import choose_images, group_epochs, parse_coords
+from astropy import units as u
+from astropy.coordinates import SkyCoord
+
+from backend.spherex import choose_images, display_xy, group_epochs, output_wcs, parse_coords
 
 
 def test_sexagesimal_with_hms_letters():
@@ -77,3 +80,14 @@ def test_choice_gives_spare_slots_to_detectors_with_more_images():
 
 def test_choice_returns_all_images_when_fewer_than_asked():
     assert [r["mjd"] for r in choose_images(rows({"D3": [2.0], "D1": [1.0]}), 12)] == [1.0, 2.0]
+
+
+def test_ring_at_grid_center_is_in_the_middle_of_the_png():
+    center = SkyCoord(133.76, -7.24, unit="deg")
+    assert display_xy(output_wcs(center, 49), 49, center) == pytest.approx((24.5, 24.5))
+
+
+def test_ring_is_north_up_east_left_with_top_left_origin():
+    center = SkyCoord(269.45, 60.0, unit="deg")
+    star = center.spherical_offsets_by(5 * 6.15 * u.arcsec, 10 * 6.15 * u.arcsec)  # 5 px east, 10 px north
+    assert display_xy(output_wcs(center, 49), 49, star) == pytest.approx((24.5 - 5, 24.5 - 10), abs=0.01)
