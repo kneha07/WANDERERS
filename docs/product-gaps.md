@@ -19,7 +19,7 @@ The brief asks for a public tool that helps "as many people as possible pitch in
 3. **Statements a public site must not make.** RW Aurigae, a famous variable star, was labelled "Steady star". R Draconis showed "measured motion 0.43″/yr" beside a catalogue value of 0.02 with no warning (the shift is 1.1 pixels on a saturated core). *Both fixed in this branch.* Still open: "3 of 3 checks" counts "Gaia has this object" as support for the class, which is circular for a known object.
 4. **No check against the Solar System.** Between SPHEREx visits days apart, the commonest moving dot is an asteroid. The page compares against Gaia stars only. *Now stated as a limit; not yet checked.*
 5. **Two products, two designs.** `/` (precomputed, rich) and `/explore/` (live, thin) have separate looks, separate target lists and split features (issues #6, #9). The challenge's core flow, "type RA/Dec, get a video", works only with two local servers running.
-6. **Nothing is hosted.** There is no public URL. The static page cannot serve a new position, and "Ask" needs a local Claude CLI.
+6. **Only the static page is hosted.** `https://rajryadav4.github.io/wanderers/` serves the five missions and Sky Compass. The live explorer, typed coordinates and "Ask" still need local servers.
 7. **A 15-year hole in the time line.** Frames jump from WISE 2010 to SPHEREx 2025. NEOWISE imaged every position twice a year from 2014 to 2024, and there is no brightness-against-time chart at all, only a two-point difference.
 8. **Production basics.** No CI, no methods or about page, no data-release stamp or "last updated", no social preview tags, no download of the measurements, Aladin loaded from a CDN with no pinned hash, tests split over `test/` and `tests/` (#11).
 
@@ -59,6 +59,6 @@ Not regenerated: `explain.json` (needs the Claude CLI). The five texts still agr
 
 1. **Make the mover search recover its own targets.** Fix the pairing in `find_movers` (try the Gaia-predicted and target paths first, then similar brightness), run it on SPHEREx-only pairs as well, and add the IMCCE SkyBoT asteroid check per image. The vetting and the list are done.
 2. **One product.** Port the insight and evidence panels to the live explorer, or call the live API from the missions page, and close #6 and #9.
-3. **Host it.** Static `app/` on GitHub Pages with the five missions, and the live API on a small host with its disk cache and a rate limit.
+3. **Host the live part.** The static page is on GitHub Pages; put the live API on a small host with its disk cache and a rate limit.
 4. **Time line.** NEOWISE epochs between 2010 and 2025, plus a brightness-against-time chart per target.
 5. **Production basics.** CI for the three test suites, a methods page, a data-release stamp, CSV download of the spectrum and track.
