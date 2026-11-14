@@ -23,7 +23,7 @@ Every colour is a CSS variable in `web/src/index.css`. Components use the variab
 | Line | `#2A3B5C` | `--line` | 1px panel borders, dividers, chart grid |
 | Text | `#E8EEF8` | `--text` | Body text |
 | Muted | `#9AA8C2` | `--muted` | Labels, help text, axis labels (7.1:1 on the panel) |
-| Action | `#D42B14` | `--action` | **Primary buttons only**, with white text. It is the NASA red `#FC3D21`, made darker so that white text has 4.9:1. |
+| Action | `#D42B14` | `--action` | **Primary buttons only**, with white text. It is the NASA red `#FC3D21`, made darker so that white text has 5.0:1 (on `#FC3D21` it has only 3.6:1). |
 | Action hover | `#B52310` | `--action-hover` | Hover of a primary button |
 | Data blue | `#7CC4FF` | `--data` | Links, focus ring, selection, current frame, flipbook field on the sky map |
 | Amber | `#FFB547` | `--amber` | "Where to look" ring, candidates, predicted track |

@@ -554,7 +554,7 @@ export default function App() {
                     />
                     <p className="frame-label" aria-live={playing ? 'off' : 'polite'}>
                       {!loading && frame && !showDiff
-                        ? `${frame.label} · ${frame.n_images} images · frame ${at + 1} of ${count}`
+                        ? `Frame ${at + 1} of ${count} · ${frame.label} · ${frame.n_images} images`
                         : !loading && showDiff
                           ? `Difference: ${r!.difference!.to} minus ${r!.difference!.from}`
                           : ' '}

@@ -90,7 +90,7 @@ export function Thumbs({ ex, reduced, large }: { ex: Example; reduced: boolean; 
   // A two-frame blink, unless the reader asked for reduced motion (then side by side).
   if (ex.blink && !reduced)
     return (
-      <div className="thumbs">
+      <div className="thumbs blinking">
         <div className="blink">{figs}</div>
         <p className="hint">Blinks between {ex.images.map((i) => i.caption).join(' and ')}.</p>
       </div>
@@ -161,6 +161,7 @@ export const lookups = (m: RaDec) => {
   return {
     simbad: `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${c}&Radius=10&Radius.unit=arcsec`,
     gaia: `https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=I/355/gaiadr3&-c=${c}&-c.rs=10`,
+    wiseview: `http://byw.tools/wiseview#ra=${m.ra.toFixed(5)}&dec=${m.dec.toFixed(5)}&size=176&band=3&speed=164&minbright=-50.0000&maxbright=500.0000&window=0.5&diff_window=1&linear=1&color=&zoom=9&border=0&gaia=1&invert=1&maxdyr=0&scandir=0&neowise=0&diff=0&outer_epochs=0&unique_window=1&smooth_scan=0&shift=0&pmra=0&pmdec=0`,
   }
 }
 
@@ -252,6 +253,9 @@ export function TaskTab({ r, marks, onRemove, onCopyLink, onTalk }: TaskProps) {
                   </a>
                   <a href={links.gaia} target="_blank" rel="noreferrer">
                     Check Gaia ↗
+                  </a>
+                  <a href={links.wiseview} target="_blank" rel="noreferrer">
+                    WiseView ↗
                   </a>
                   <button type="button" onClick={() => onRemove(k)} aria-label={`Remove candidate ${k + 1}`}>
                     Remove

@@ -66,7 +66,13 @@ export function Stage(p: StageProps) {
       data-smooth={smooth}
       style={{ '--bri': p.bri, '--con': p.con } as CSSProperties}
       onClick={click}
-      tabIndex={-1}
+      // Keyboard: Enter marks a candidate at the crosshair (the view center).
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && r && !p.loading) p.onMark(n / 2, n / 2)
+      }}
+      tabIndex={0}
+      role="group"
+      aria-label="Flipbook image. Click a spot, or press Enter for the center, to mark a candidate."
       id="stage"
     >
       {src && (

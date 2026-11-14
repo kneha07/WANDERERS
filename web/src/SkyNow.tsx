@@ -79,7 +79,10 @@ export default function SkyNow({ star, here, setHere, reduced, say }: Props) {
       if (p.alt >= 0) {
         const q = dome(p.alt, p.az)
         cur.push(`${q.x.toFixed(1)},${q.y.toFixed(1)}`)
-      } else if (cur.length) out.push(cur.join(' ')), (cur = [])
+      } else if (cur.length) {
+        out.push(cur.join(' ')) // the path dips below the horizon: end this segment
+        cur = []
+      }
     }
     if (cur.length) out.push(cur.join(' '))
     return out

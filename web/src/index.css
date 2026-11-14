@@ -829,11 +829,21 @@ input[type='range'] {
   gap: 16px;
 }
 
+/* Images beside the text; the text drops below the images when the card is narrow. */
 .example {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px 16px;
-  align-items: start;
+  align-items: flex-start;
+}
+
+.example > :last-child {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.panel-body.example > * + * {
+  margin-top: 0;
 }
 
 .example h3 {
@@ -842,7 +852,18 @@ input[type='range'] {
 
 .thumbs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+}
+
+.thumbs.blinking {
+  flex-direction: column;
+  align-items: flex-start; /* the blink box is as wide as one image, so both captions line up */
+}
+
+.home h1 {
+  font-size: 1.5rem;
+  line-height: 1.3;
 }
 
 .thumbs figure {
