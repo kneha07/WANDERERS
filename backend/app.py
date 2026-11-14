@@ -25,5 +25,6 @@ def frames(
     q: str = Query(min_length=1, max_length=200),
     fov: float = Query(5, ge=2, le=15),
     per_group: int = Query(12, ge=1, le=30),
+    det: str = Query("", pattern="^(D[1-6])?$"),
 ):
-    return get_frames(q, fov, per_group)
+    return get_frames(q, fov, per_group, det)

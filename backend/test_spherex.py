@@ -9,8 +9,8 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from PIL import Image
 
-from backend.spherex import (choose_images, display_xy, group_epochs, output_wcs, parse_coords,
-                             subtract_background, to_png)
+from backend.spherex import (choose_images, display_xy, epoch_label, group_epochs, output_wcs, parse_coords, plan_epochs,
+                             bad_pixels, saturated_holes, subtract_background, to_png)
 
 
 def test_sexagesimal_with_hms_letters():
@@ -120,3 +120,60 @@ def test_background_removes_a_sky_gradient_and_keeps_stars():
     flat[20, 30] = 0.0
     assert np.isnan(flat[3, 3])
     assert np.nanmax(np.abs(flat)) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_saturated_holes_are_nan_cores_inside_bright_stars_only():
+    yy, xx = np.mgrid[:21, :21]
+    frame = 100.0 * np.exp(-((xx - 10) ** 2 + (yy - 10) ** 2) / 8.0)  # a bright star
+    frame[10:12, 10:12] = np.nan  # its saturated core: no data
+    frame[:, 0] = np.nan  # off the detector, touches the edge
+    frame[3, 16] = np.nan  # a bad pixel on dark sky
+    holes = saturated_holes(frame)
+    assert holes.sum() == 4
+    assert holes[10:12, 10:12].all()
+
+
+def test_epoch_labels_are_date_ranges_and_unique_for_30_day_bins():
+    # MJD 60902 = 2025-08-15. One 70-day pass is cut into three 30-day bins.
+    mjds = [60902.2, 60915.0, 60931.5, 60933.0, 60950.0, 60962.0, 60972.0]
+    labels = [epoch_label([mjds[i] for i in g]) for g in group_epochs(mjds)]
+    assert labels == ["2025-08-15 to 09-13", "2025-09-15 to 10-14", "2025-10-24"]
+
+
+def test_epoch_label_spanning_new_year_shows_both_years():
+    assert epoch_label([61029.0, 61053.0]) == "2025-12-20 to 2026-01-13"
+
+
+def two_passes_of_six_detectors():
+    """2 survey passes 180 days apart; each has 5 images on each of D1..D6."""
+    return [{"detector": f"D{d}", "mjd": start + d + 0.1 * i} for start in (60000.0, 60180.0)
+            for d in range(1, 7) for i in range(5)]
+
+
+def test_plan_uses_one_detector_only_when_asked():
+    epochs = plan_epochs(two_passes_of_six_detectors(), 4, "D6")
+    assert [len(e) for e in epochs] == [4, 4]
+    assert {im["detector"] for e in epochs for im in e} == {"D6"}
+
+
+def test_plan_mixes_all_detectors_by_default():
+    epochs = plan_epochs(two_passes_of_six_detectors(), 12)
+    assert [Counter(im["detector"] for im in e) for e in epochs] == [{f"D{d}": 2 for d in range(1, 7)}] * 2
+
+
+def test_bad_pixels_mask_saturation_and_defects_but_keep_bloomed_star_pixels():
+    clean, overflow, transient, hot, bloom, source = 0, 2, 1, 1024, 67108864, 2097152
+    flags = np.array([clean, overflow, transient, transient | bloom, hot, bloom, source, overflow | bloom])
+    assert bad_pixels(flags).tolist() == [False, True, True, False, True, False, False, True]
+
+
+def test_off_center_saturated_core_counts_but_a_bad_pixel_by_a_faint_star_does_not():
+    # Real cores seen on R Dra and Barnard's Star have rims of 0.12 to 0.8 of the frame maximum.
+    yy, xx = np.mgrid[:31, :31]
+    frame = 100.0 * np.exp(-((xx - 10) ** 2 + (yy - 10) ** 2) / 8.0)  # bright star
+    frame += 3.0 * np.exp(-((xx - 24) ** 2 + (yy - 24) ** 2) / 2.0)  # faint star
+    frame[11:14, 11:14] = np.nan  # saturated core, off the star's center: rim median is 0.22 of max
+    frame[24, 25] = np.nan  # bad pixel next to the faint star: rim median is 0.01 of max
+    holes = saturated_holes(frame)
+    assert holes.sum() == 9
+    assert holes[11:14, 11:14].all()
