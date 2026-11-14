@@ -110,6 +110,9 @@ def card(t):
         cls, support = "Variable star", [varies, gaia_var or t["target_in_gaia"], not moved]
     elif moved and t["target_in_gaia"]:
         cls, support = "Nearby star with fast proper motion", [moved, matches, t["target_in_gaia"]]
+    elif moved and matches and t["reference"].get("catalogued", True):
+        # not in Gaia with a motion, but the measured speed matches a published one (e.g. Luhman 16)
+        cls, support = "Nearby object with fast proper motion (published motion)", [moved, matches, True]
     elif moved:
         cls, support = "Unexplained mover", [moved]
     else:

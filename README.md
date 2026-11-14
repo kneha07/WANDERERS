@@ -47,6 +47,16 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
+**Through Webb** (console tab and Sky Compass). WANDERERS matches any coordinates against the outlines of every
+public JWST imaging frame in NASA's MAST archive (22,049 frames merged into ~5,500 pointings, `pipeline/make_webb.py`)
+and shows the real Webb pixels there, with the frame outline on top: a MAST preview placed with its own WCS for our
+targets and every catalogue star inside a Webb frame (`pipeline/make_webb_previews.py`), otherwise ESA ESASky's live
+JWST maps where their coverage map says they have data, otherwise the outline alone with links to the full image and
+the STScI programme page. In the Sky Compass, Webb pointings near where you aim appear as gold squares, and a chip
+offers "Webb looked here" when one is inside the crosshair. Picking a star tells you whether Webb has imaged it
+(WISE 0855, Fomalhaut, Vega, the Trapezium and 60+ others) or how far its nearest Webb frame is. For what Webb is
+observing right now, the app links to Space Telescope Live (STScI), which has no public API.
+
 Motion uses sensor fusion (`app/orient.js`): the gyroscope drives every movement and the compass only sets north,
 averaged while the phone lies flat and corrected slowly after. `node tests/orient.sim.js` replays realistic sensor
 streams (gyro drift, compass noise, tilt bias, declination, indoor magnetic distortion, Android spikes) through the
@@ -71,6 +81,10 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python pipeline/evidence.py
 # 4. plain-language explanations (Claude Code CLI, headless; no API key)
 .venv/bin/python pipeline/explain.py
+# 5. star names and Webb frames for the search and "Through Webb"
+.venv/bin/python pipeline/make_stars.py hygdata_v40.csv.gz
+.venv/bin/python pipeline/make_webb.py
+.venv/bin/python pipeline/make_webb_previews.py
 
 # view it
 node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -p
@@ -90,6 +104,9 @@ appears when `server.js` is running.
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
 | HYG database v4.0 (astronexus; Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0 | the 9,265-star name search (`app/data/stars.json`, same licence) |
+| MAST (STScI), JWST public level-3 images | Webb frame outlines (`s_region`) and previews for "Through Webb" |
+| ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
+| IRSA HiPS mirrors of 2MASS and DSS colour | sky underneath the Webb view |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
 
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
@@ -102,12 +119,19 @@ photometry with local background, and per-pixel solid angle from each image's WC
 - AllWISE is a 2010–2011 coadd; we treat it as epoch 2010.5.
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
 - Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py`.
+- Through Webb: ESASky's Webb maps hold a subset of the data (to mid-2024), and MAST full previews are too large for
+  phones, so many frames show the outline only, with a link to the full image. Frames are matched with the
+  catalogue (J2000) position; a fast-moving star can sit a few arcseconds from where Webb saw it.
+- Kapteyn's Star and Luhman 16 were first added with hand-typed coordinates that were 17-30″ off; they now use the
+  Gaia DR3 position (Luhman 16: Gaia position with the published motion from Bedin et al. 2017).
 
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py
-app/        index.html · style.css · app.js · data/<target>/ (generated)
+pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · gaia_facts.py
+            make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+app/        index.html · app.js · compass.html · compass.js · orient.js · sky.js · search.js · telescope.js · intro.js
+            data/<target>/ · stars.json · webb.json · webb/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
 ```
