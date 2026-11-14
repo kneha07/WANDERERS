@@ -1,4 +1,6 @@
 """get_frames and its cache with the network faked (IRSA SIA, S3, Gaia): no network, no real FITS files."""
+import base64
+import io
 import json
 import os
 import time
@@ -6,6 +8,7 @@ import time
 import numpy as np
 import pytest
 from fastapi import HTTPException
+from PIL import Image
 
 from backend import spherex
 
@@ -33,8 +36,7 @@ class FakeSky:
         n = ra.shape[0]
         yy, xx = np.indices((n, n))
         c = (n - 1) / 2
-        star = self.bright.get(url.split("@")[0], 50.0) * np.exp(-((xx - c) ** 2 + (yy - c) ** 2) / 2.0)
-        return star + np.random.default_rng(len(url)).normal(0, 0.1, (n, n))
+        return self.bright.get(url.split("@")[0], 50.0) * np.exp(-((xx - c) ** 2 + (yy - c) ** 2) / 2.0)  # no noise
 
 
 @pytest.fixture
@@ -112,3 +114,29 @@ def test_cache_write_retries_a_short_lock(tmp_path, monkeypatch):
     assert spherex.write_json(tmp_path / "a.json", {"x": 1}) is True
     assert json.loads((tmp_path / "a.json").read_text()) == {"x": 1}
     assert os.listdir(tmp_path) == ["a.json"]
+
+
+def pixels(png):
+    return np.asarray(Image.open(io.BytesIO(base64.b64decode(png.split(",")[1]))))
+
+
+def test_blink_and_difference_compare_only_detectors_that_both_frames_have(sky):
+    # Barnard's Star case: the first survey has D1 and D2, the last only D2. A fixed star is fainter in D1, so a
+    # stack of all detectors makes it brighten from frame to frame, and the difference shows a false residual.
+    sky.epochs = [(60000.0, ["D1", "D2"]), (60200.0, ["D2"])]
+    sky.bright = {"D1": 10.0, "D2": 100.0}
+    r = frames()
+    assert [f["detectors"] for f in r["frames"]] == [["D1", "D2"], ["D2"]]
+    assert [f["stack_detectors"] for f in r["frames"]] == [["D2"], ["D2"]]
+    assert (pixels(r["frames"][0]["png"]) == pixels(r["frames"][1]["png"])).all()  # the fixed star does not blink
+    assert r["difference"]["detectors"] == ["D2"]
+    assert set(np.unique(pixels(r["difference"]["png"]))) == {128}  # gray everywhere: no residual
+    assert any("only D2" in n for n in r["notes"])
+
+
+def test_without_a_detector_in_every_frame_each_frame_stacks_all_its_detectors_and_says_so(sky):
+    sky.epochs = [(60000.0, ["D1", "D2"]), (60100.0, ["D3"]), (60200.0, ["D1"])]
+    r = frames()
+    assert [f["stack_detectors"] for f in r["frames"]] == [["D1", "D2"], ["D3"], ["D1"]]
+    assert r["difference"]["detectors"] == ["D1"]  # the first and the last frame share D1
+    assert any("No detector is in every frame" in n for n in r["notes"])

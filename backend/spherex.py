@@ -185,6 +185,11 @@ def display_xy(grid, n, coord):
     return float(x) + 0.5, n - 0.5 - float(y)
 
 
+def stack_of(images, detectors):
+    """Mean of the aligned cutouts of the images taken with the given detectors."""
+    return np.nanmean([im["cutout"] for im in images if im["detector"] in detectors], axis=0)
+
+
 def to_png(v):
     """Image with values in [0, 1] (row 0 = south; n x n gray or n x n x 3 RGB) -> PNG data URL, north up.
     NaN is black."""
@@ -509,7 +514,7 @@ def build(q, name, coord, center, pm, fov, per_group, det):
             im["cutout"] = None
             n_failed += 1
 
-    frames, stacks, targets, by_det, planes, all_used = [], [], [], defaultdict(list), [], []
+    frames, kept, by_det, planes, all_used = [], [], defaultdict(list), [], []
     dropped = 0
     for e in epochs:
         used = [im for im in e if im["cutout"] is not None and np.isfinite(im["cutout"]).any()]
@@ -523,29 +528,37 @@ def build(q, name, coord, center, pm, fov, per_group, det):
             x, y = display_xy(grid, n, target)
             ring = {"x": round(x, 2), "y": round(y, 2)}
         tx, ty = (float(v) for v in grid.wcs_world2pix(target.ra.deg, target.dec.deg, 0))
-        names, dets = sorted({im["detector"] for im in used}), []
+        names, dets = sorted({im["detector"] for im in used}), {}
         for d in names:
             ims = [im for im in used if im["detector"] == d]
             img = np.nanmean([im["cutout"] for im in ims], axis=0)
-            dets.append({"group_index": len(frames), "img": img, "n_images": len(ims), "wavelength_um": wavelength_range(ims),
-                         "photometry": aperture_photometry(img, tx, ty), "centroid": centroid(img, tx, ty)})
-            by_det[d].append(dets[-1])
-        stack = np.nanmean([im["cutout"] for im in used], axis=0)
+            dets[d] = {"group_index": len(frames), "img": img, "n_images": len(ims), "wavelength_um": wavelength_range(ims),
+                       "photometry": aperture_photometry(img, tx, ty), "centroid": centroid(img, tx, ty)}
+            by_det[d].append(dets[d])
         # a core saturated in any detector shows white; else the other detectors would tint it
-        planes.append((*rgb_planes(dict(zip(names, (it["img"] for it in dets)))),
-                       np.logical_or.reduce([saturated_holes(it["img"]) for it in dets])))
+        planes.append((*rgb_planes({d: it["img"] for d, it in dets.items()}),
+                       np.logical_or.reduce([saturated_holes(it["img"]) for it in dets.values()])))
         all_used += used
-        stacks.append(stack)
-        targets.append((tx, ty))
+        kept.append((used, dets, (tx, ty)))
         # Measured per detector: the detectors see the target at different brightness and saturate differently,
         # so near a bright core the all-detector stack mixes different images in each pixel.
         frames.append({"label": epoch_label([im["mjd"] for im in used]), "mjd_mean": round(mjd, 4),
                        "date": Time(mjd, format="mjd").strftime("%Y-%m-%d"), "n_images": len(used), "ring": ring,
                        "detectors": names, "wavelength_um": wavelength_range(used),
-                       "centroid": mean_centroid([it["centroid"] for it in dets]),
-                       "photometry": aperture_photometry(stack, tx, ty) if all(it["photometry"] for it in dets) else None})
+                       "centroid": mean_centroid([it["centroid"] for it in dets.values()])})
     if not frames:
         raise HTTPException(502, "Could not read any SPHEREx image for this position. Try again in a minute.")
+
+    # Each detector sees a star at another brightness, so a stack of a changing detector mix makes fixed stars blink
+    # (Barnard's Star: D1-D6 first, D2+D5 last). The gray frames stack only the detectors that every frame has.
+    common = sorted(set.intersection(*(set(f["detectors"]) for f in frames)))
+    stacks, targets = [], []
+    for f, (used, dets, txy) in zip(frames, kept):
+        f["stack_detectors"] = common or f["detectors"]
+        stacks.append(stack_of(used, f["stack_detectors"]))
+        targets.append(txy)
+        f["photometry"] = (aperture_photometry(stacks[-1], *txy)
+                           if all(dets[d]["photometry"] for d in f["stack_detectors"]) else None)
 
     lo, hi = np.nanpercentile(stacks, [0.5, 99.7])  # one stretch for all frames, so blinking is fair
     holes = [saturated_holes(s) for s in stacks]
@@ -591,14 +604,27 @@ def build(q, name, coord, center, pm, fov, per_group, det):
     if k := sum(f["photometry"] is None for f in frames):
         notes.append(f"No photometry in {k} of {len(frames)} frames: in at least one detector the aperture has no data"
                      " (saturated core or detector edge). Per-detector photometry is given where it exists.")
+    if not common:
+        notes.append("No detector is in every frame, so each gray frame stacks all of its detectors: a fixed star can"
+                     " change brightness between frames. One detector (Expert settings) gives a fair comparison.")
+    elif any(f["detectors"] != common for f in frames):
+        notes.append(f"The gray frames stack only {' '.join(common)}, the detectors that every frame has, so a fixed star"
+                     " keeps its brightness between frames.")
     difference = None
-    if len(stacks) >= 2:
-        diff = stacks[-1] - stacks[0]  # a mover: dark where it was, bright where it is now
-        diff[holes[0] | holes[-1]] = np.nan  # saturated cores have no measurement: gray, like no data
+    if len(stacks) >= 2:  # last minus first, from the detectors that both frames have
+        pair = sorted(set(frames[0]["detectors"]) & set(frames[-1]["detectors"]))
+        first, last = (stack_of(kept[k][0], pair) for k in (0, -1)) if pair else (stacks[0], stacks[-1])
+        diff = last - first  # a mover: dark where it was, bright where it is now
+        diff[saturated_holes(first) | saturated_holes(last)] = np.nan  # saturated cores: gray, like no data
         s = np.nanpercentile(np.abs(diff), 99.7)
         v = 0.5 + 0.5 * np.sign(diff) * stretch(np.abs(diff), 0, s)
         difference = {"png": to_png(np.nan_to_num(v, nan=0.5)),  # no data -> gray (no change), not black
-                      "from": frames[0]["label"], "to": frames[-1]["label"]}
+                      "from": frames[0]["label"], "to": frames[-1]["label"], "detectors": pair or None}
+        if not pair:
+            notes.append("The first and the last frame have no detector in common, so the difference compares different"
+                         " wavelengths: a fixed star can leave a bright or dark spot.")
+        elif pair != common and (pair != frames[0]["detectors"] or pair != frames[-1]["detectors"]):
+            notes.append(f"The difference uses only {' '.join(pair)}, the detectors in both the first and the last frame.")
     return {
         "query": q,
         "name": name,
