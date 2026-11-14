@@ -568,7 +568,7 @@ export default function App() {
                           ? `Saturated in ${satN} of ${count} frames: SPHEREx cannot measure this star’s brightness change here. The white core has no data.${r!.frames.some((f) => f.centroid?.saturated) ? ' Positions come from the wings.' : ''}`
                           : ' '}
                     </p>
-                    <div className="toolbar" role="toolbar" aria-label="Flipbook controls">
+                    <div className="toolbar" role="group" aria-label="Flipbook controls">
                       <div className="group">
                         <button
                           type="button"
