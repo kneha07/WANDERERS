@@ -16,7 +16,10 @@
       <p class="tag">Catch what moves in the infrared sky, then read what it is made of.</p>
     </div>
   </div>
-  <div class="data-badge">Real data: NASA SPHEREx DR1 · NASA WISE · ESA Gaia DR3</div>
+  <div class="top-right">
+    <a class="compass-link" href="compass.html">📱 Sky Compass</a>
+    <div class="data-badge">Real data: NASA SPHEREx DR1 · NASA WISE · ESA Gaia DR3</div>
+  </div>
 </header>
 
 <main class="console">
@@ -30,8 +33,16 @@
       <form id="coordForm">
         <label>RA <input id="raIn" placeholder="08h55m10.83s or 133.795" autocomplete="off"></label>
         <label>Dec <input id="decIn" placeholder="-07d14m42.5s or -7.245" autocomplete="off"></label>
+        <label>Field of view
+          <select id="fovIn" aria-describedby="fovHint">
+            <option value="120">2′ close-up</option>
+            <option value="300" selected>5′ standard</option>
+            <option value="600">10′ wide (slower)</option>
+          </select>
+        </label>
         <button type="submit">Search</button>
       </form>
+      <p id="fovHint" class="hint">Wider fields catch faster-moving objects but take longer to prepare.</p>
       <p id="coordMsg" class="hint"></p>
       <p class="hint"><a id="exploreLink" href="/explore/" hidden>Explore any patch (live) →</a></p>
     </div>
@@ -44,10 +55,15 @@
         <h2 id="tName">Loading…</h2>
         <p id="tKind" class="hint"></p>
       </div>
-      <div class="channel" role="radiogroup" aria-label="Wavelength">
-        <button data-ch="w2" class="on" role="radio" aria-checked="true">4.6 µm</button>
-        <button data-ch="w1" role="radio" aria-checked="false">3.4 µm</button>
+      <div class="view-tabs" role="tablist" aria-label="View">
+        <button id="tabFlip" class="on" role="tab" aria-selected="true">Time-lapse</button>
+        <button id="tabMap" role="tab" aria-selected="false">Sky map · any coordinates</button>
       </div>
+    </div>
+    <div id="flipView">
+    <div class="channel" role="radiogroup" aria-label="Wavelength">
+      <button data-ch="w2" class="on" role="radio" aria-checked="true">4.6 µm</button>
+      <button data-ch="w1" role="radio" aria-checked="false">3.4 µm</button>
     </div>
     <div class="viewer">
       <canvas id="sky" width="600" height="600" aria-label="Sky image of the selected target"></canvas>
@@ -64,8 +80,54 @@
       <label><input type="checkbox" id="tTrail" checked> Measured path</label>
       <label><input type="checkbox" id="tDiff"> Difference (2026 − 2025)</label>
     </div>
+    <div class="mix" id="mix">
+      <label>Show
+        <select id="mixMode" aria-label="How to show the frames">
+          <option value="single">One frame</option>
+          <option value="sub">Subtract two frames</option>
+          <option value="add">Add frames together</option>
+        </select>
+      </label>
+      <span id="mixSub" class="mix-row" hidden>
+        <label>Later <select id="mixB"></select></label>
+        <label>minus earlier <select id="mixA"></select></label>
+      </span>
+      <fieldset id="mixAdd" class="mix-row" hidden>
+        <legend>Frames to add</legend>
+        <span id="mixChecks"></span>
+      </fieldset>
+      <span id="mixOpts" class="mix-row" hidden>
+        <label><input type="checkbox" id="mixSmooth" checked> Smooth lightly</label>
+        <label>Show differences above <input type="range" id="mixTh" min="10" max="90" value="60" aria-label="Difference threshold"></label>
+      </span>
+      <p class="hint" id="mixNote"></p>
+    </div>
     <p class="hint why">Each frame is matched by wavelength: WISE 2010 is compared with SPHEREx images taken at the same
       infrared colour, because SPHEREx records a different wavelength across every detector.</p>
+    </div>
+    <div id="mapView" hidden>
+      <div class="map-controls">
+        <label>Survey
+          <select id="mapSurvey">
+            <option value="spherex">SPHEREx DR1 · one of 102 colours</option>
+            <option value="wise">AllWISE colour (3.4 / 4.6 / 22 µm)</option>
+          </select></label>
+        <label id="lamWrap">Wavelength <span id="lamVal" class="mono"></span>
+          <input type="range" id="lam" min="1" max="102" value="96" aria-label="SPHEREx wavelength"></label>
+      </div>
+      <div id="aladin" class="aladin" aria-label="Interactive sky map"></div>
+      <p class="hint">Live from IRSA's all-sky maps (HiPS) via Aladin Lite. Drag to pan, scroll to zoom. Slide the
+        wavelength: cold brown dwarfs appear only at the long end, normal stars fade there. The orange marker is the
+        target; the dashed line is its measured path. This map works for any coordinates you type.</p>
+    </div>
+    <details class="meta" id="meta">
+      <summary>Frame details and data flags</summary>
+      <div id="metaBody"></div>
+    </details>
+    <p class="hint ext">
+      <a id="aladinLink" href="https://aladin.cds.unistra.fr/AladinLite/" target="_blank" rel="noopener noreferrer">Open this field in Aladin Lite ↗</a>
+      CDS sky viewer, showing the WISE infrared survey. Opens a new tab and sends it only this patch's coordinates.
+    </p>
   </section>
 
   <!-- RIGHT: evidence -->
@@ -105,6 +167,10 @@
     Confirming a new object needs follow-up by astronomers.</p>
   <p>Data: SPHEREx DR1 (NASA/IPAC IRSA) · AllWISE (NASA/IPAC IRSA) · Gaia DR3 (ESA). NASA Space Apps 2026 · Planet X and SPHEREx.</p>
 </footer>
+<script src="framemath.js"></script>
+<script src="chartlayout.js"></script>
+<script src="frameinfo.js"></script>
+<script src="aladinlink.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

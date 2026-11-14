@@ -100,8 +100,10 @@ the proxy answers HTTP 502 with a message that tells you how to start it. The WA
 | `per_group` | Images per epoch, 1 to 30 |
 | `det` | Empty for all detectors, or `D1` to `D6` for one detector (`D6` suits cold brown dwarfs such as WISE 0855) |
 
-The answer holds the center, the proper motion, one frame per epoch (PNG, date range, image count, ring position,
-saturated flag), per-detector frames, a difference image and counts of images used and failed. Errors come back as
+The answer holds the center, the proper motion, one frame per epoch (PNG, false-colour PNG, date range, image count,
+ring position, saturated flag, measured centroid, photometry, wavelengths), per-detector frames, a difference image,
+Gaia DR3 stars moved to each epoch, notes and counts of images used and failed. The full contract is
+[api.md](api.md). Errors come back as
 HTTP 400 (bad input), 404 (no images) or 502 (IRSA failed) with `{"detail": "..."}`. `GET /api/health` answers
 `{"ok": true}`. Results are cached in `backend/cache/` (delete the files to rebuild).
 
