@@ -8,7 +8,7 @@ from backend.spherex import get_frames
 
 # (query, detector): the web app opens WISE 0855 with the D6 (4.4-5 um) stack, where the cold brown dwarf is bright.
 TARGETS = [("Barnard's Star", ""), ("eps Ind B", ""), ("WISE J085510.83-071442.5", ""),
-           ("WISE J085510.83-071442.5", "D6"), ("RW Aur", ""), ("R Dra", "")]
+           ("WISE J085510.83-071442.5", "D6"), ("RW Aur", ""), ("R Dra", ""), ("Kapteyn's Star", "")]
 
 if __name__ == "__main__":
     failed = 0
