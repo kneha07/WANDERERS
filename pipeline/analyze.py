@@ -33,13 +33,14 @@ from reproject import reproject_interp
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
 from fetch import predict, CACHE, ROOT, FIELD_ARCSEC
+from fov import fov_of, npix_for
 
 warnings.simplefilter("ignore")
 from astropy import log as _astropy_log
 _astropy_log.setLevel("WARNING")   # the spectral WCS triggers an expected SIP notice; SIP is turned off right after
 OUT = ROOT / "app" / "data"
 GRID_PIX = 2.0                      # arcsec per display pixel
-NPIX = int(FIELD_ARCSEC / GRID_PIX)
+NPIX = int(FIELD_ARCSEC / GRID_PIX)         # default grid; a target with its own field of view uses npix_for()
 
 
 def pixel_sr(w, x, y):
@@ -78,11 +79,11 @@ BANDS = [
 ]
 
 
-def grid_wcs(centre):
+def grid_wcs(centre, npix=NPIX):
     w = WCS(naxis=2)
     w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
     w.wcs.crval = [centre.ra.deg, centre.dec.deg]
-    w.wcs.crpix = [NPIX / 2 + 0.5, NPIX / 2 + 0.5]
+    w.wcs.crpix = [npix / 2 + 0.5, npix / 2 + 0.5]
     w.wcs.cdelt = [-GRID_PIX / 3600, GRID_PIX / 3600]
     return w
 
@@ -183,6 +184,7 @@ def save_png(a, path):
 
 def analyze(tid):
     t = TARGETS[tid]
+    npix = npix_for(fov_of(t), GRID_PIX)        # pixels per side of this target's display grid
     meta = json.loads((CACHE / tid / "gaia.json").read_text())
     ref, stars = meta["ref"], meta["field_stars"]
     out = OUT / tid; out.mkdir(parents=True, exist_ok=True)
@@ -206,7 +208,7 @@ def analyze(tid):
 
     # Display grid centred between the first and last epoch, so the whole trail fits.
     mid = predict(ref, (2010.5 + vyear[-1]) / 2)
-    gw = grid_wcs(mid)
+    gw = grid_wcs(mid, npix)
 
     # ---- flipbook frames, two wavelength-matched channels -------------------------------
     channels = {
@@ -219,7 +221,7 @@ def analyze(tid):
         wf = CACHE / tid / spec["wise"]
         if wf.exists():
             h = fits.open(wf)[0]
-            img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(NPIX, NPIX))
+            img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(npix, npix))
             name = f"{ch}_wise2010.png"; save_png(img, out / name)
             frames[ch].append({"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name,
                                "img": img})
@@ -232,7 +234,7 @@ def analyze(tid):
                 h = fits.open(s["file"])
                 im = h["IMAGE"].data.astype(float)
                 im[bad_mask(h["FLAGS"], DISPLAY_BAD)] = np.nan
-                r, _ = reproject_interp((im, WCS(h["IMAGE"].header).celestial), gw, shape_out=(NPIX, NPIX))
+                r, _ = reproject_interp((im, WCS(h["IMAGE"].header).celestial), gw, shape_out=(npix, npix))
                 stack.append(r)
             img = np.nanmedian(np.array(stack), axis=0)
             yr = float(np.mean([s["year"] for s in sel]))
@@ -356,7 +358,7 @@ def analyze(tid):
                              pm_dec=st["pmdec"] * u.mas / u.yr, obstime=Time(2016.0, format="jyear"))
                 p = c.apply_space_motion(new_obstime=Time(f["year"], format="jyear"))
                 x, y = gw.world_to_pixel(p)
-                if 0 <= x < NPIX and 0 <= y < NPIX:
+                if 0 <= x < npix and 0 <= y < npix:
                     pos.append([round(float(x), 1), round(float(y), 1), round(st["g"], 1)])
             ghosts[f["png"]] = pos
 
@@ -364,7 +366,7 @@ def analyze(tid):
     result = {
         "id": tid, "name": t["name"], "kind": t["kind"], "story": t["story"],
         "reference": ref, "target_in_gaia": target_in_gaia,
-        "grid": {"npix": NPIX, "arcsec_per_pix": GRID_PIX, "centre_ra": mid.ra.deg, "centre_dec": mid.dec.deg},
+        "grid": {"npix": npix, "arcsec_per_pix": GRID_PIX, "centre_ra": mid.ra.deg, "centre_dec": mid.dec.deg},
         "frames": {ch: [{k: v for k, v in f.items() if k != "img"} for f in frames[ch]]
                    for ch in ("w2", "w1") if ch in frames},
         "diff": {ch: frames.get(ch + "_diff") for ch in ("w2", "w1")},
