@@ -50,6 +50,21 @@ node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -
 `app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
 appears when `server.js` is running.
 
+### Add or subtract frames
+
+Under the sky viewer, **Show** can subtract any two frames (later minus earlier, green = now, pink = before) or add
+several together (average, to lower noise). It works in the browser on the displayed images, so it is for spotting
+motion, not for measuring: the images are stretched, so the earlier frame's brightness is matched to the later one
+first, with a light smoothing option and a threshold slider to hide speckle. Faint targets such as WISE 0855 look
+noisy; the pipeline's raw-flux SPHEREx difference and the evidence card remain the measurements.
+
+Links keep the choice: `?target=wise0855&mix=sub&a=0&b=3` (subtract), `?target=rw_aur&mix=add&set=1,2` (add),
+with optional `th=0.6` and `sm=0`. Frame numbers count from 0 in the order of the frame slider.
+
+```bash
+node --test test/framemath.test.js   # includes checks on the real WISE 0855 and Barnard's Star frames
+```
+
 ## Data (all public)
 
 | Source | Used for |
