@@ -122,6 +122,32 @@ of `web/`. The coordinate box links to it for positions outside the five mission
 Double-click `start.cmd` (Windows) or `start.command` (macOS), or run `node start.js`.
 Setup and details: [docs/blink/README.md](docs/blink/README.md).
 
+## Run the tests
+
+All tests live in `test/`: Node tests (`*.test.js`) and Python tests (`test_*.py`, unittest style). One command runs them all:
+
+```bash
+node test/run-all.js            # everything; tests that need the pipeline packages are skipped, with a warning
+node test/run-all.js --strict   # a skipped test, or a missing Python, counts as a FAILURE
+```
+
+`--strict` is also switched on by `WANDERERS_STRICT=1` or `CI=true`. Use it in CI. A quick run on a machine without the
+pipeline packages passes with a warning, but that is not a full green: `test_data_quality.py` needs the packages from
+`pipeline/requirements.txt` (`python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt`; on Windows
+use `python` and `.venv\Scripts\pip`).
+
+One file at a time (Node 22 needs a file path, not a folder):
+
+| Command | Covers |
+|---|---|
+| `node --test test/fields.test.js` | on-demand fields: jobs, validation, field of view |
+| `node --test test/framemath.test.js` | add and subtract frames, with the real WISE 0855 and Barnard's Star frames |
+| `node --test test/frameinfo.test.js` | frame details and data flags, every committed target |
+| `node --test test/chartlayout.test.js` | spectrum chart width and band-name placement |
+| `node --test test/aladinlink.test.js` | the Aladin Lite link |
+| `node --test test/runall.test.js` | the test runner's own pass/fail logic |
+| `python3 -m unittest discover -s test -p 'test_*.py' -v` | field-of-view helpers, evidence cards, data quality (needs the packages) |
+
 ## Data (all public)
 
 | Source | Used for |
@@ -150,5 +176,6 @@ photometry with local background, and per-pixel solid angle from each image's WC
 pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py
 app/        index.html · style.css · app.js · data/<target>/ (generated)
 server.js   local demo server with live Claude answers
+test/       Node tests (*.test.js), Python tests (test_*.py) and run-all.js
 docs/field-shift/   our earlier Field Shift plan
 ```
