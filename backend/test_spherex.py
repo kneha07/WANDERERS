@@ -11,7 +11,7 @@ from PIL import Image
 
 from backend.spherex import (choose_images, display_xy, epoch_label, gaia_tracks, group_epochs, output_wcs, parse_coords, plan_epochs,
                              aperture_photometry, bad_pixels, centroid, saturated_holes, subtract_background, to_png,
-                             gaia_overlay, mean_centroid, wavelength_range)
+                             gaia_overlay, mean_centroid, rgb_planes, wavelength_range)
 
 
 def test_sexagesimal_with_hms_letters():
@@ -267,3 +267,16 @@ def test_gaia_overlay_keeps_the_150_brightest_stars_that_enter_the_view():
     ids = [s["source_id"] for s in gaia["stars"]]
     assert (len(ids), ids[:2], "far" in ids) == (150, ["mover", "199"], False)
     assert (gaia["release"], gaia["epoch_mjd"]) == ("Gaia DR3", 57388.5)
+
+
+def test_rgb_planes_map_short_to_blue_and_long_to_red_and_fill_a_missing_channel():
+    one = np.ones((3, 3))
+    by_detector = {"D1": 1 * one, "D2": 3 * one, "D5": 10 * one, "D6": 20 * one}  # no D3, D4: green is missing
+    (red, green, blue), filled = rgb_planes(by_detector)
+    # red = mean(D5, D6), blue = mean(D1, D2), green = mean of the other two channels
+    assert (red[0, 0], green[0, 0], blue[0, 0], filled) == (15.0, 8.5, 2.0, ["green"])
+
+
+def test_rgb_planes_with_one_channel_only_fill_the_others_with_it():
+    (red, green, blue), filled = rgb_planes({"D6": np.full((2, 2), 4.0)})
+    assert (red[0, 0], green[0, 0], blue[0, 0], sorted(filled)) == (4.0, 4.0, 4.0, ["blue", "green"])

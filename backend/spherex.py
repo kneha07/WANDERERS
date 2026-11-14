@@ -29,6 +29,7 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.io.votable import parse as parse_votable
 from astropy.time import Time
+from astropy.visualization import make_lupton_rgb
 from astropy.wcs import WCS
 from fastapi import HTTPException
 from PIL import Image
@@ -47,11 +48,13 @@ FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
 OVERFLOW, BLOOM = 2, 67108864  # saturated pixel; pixel inside the bloom of a bright star
 CACHE_DIR = Path(__file__).parent / "cache"
-CACHE_VERSION = 3  # bump when the response gains fields, so old cache files are not served
+CACHE_VERSION = 4  # bump when the response gains fields, so old cache files are not served
 # Centroid error floor, px (resampling, WCS, undersampled PSF): (clean core, core with no data). Measured in
 # 2026-11: Gaia stars in the Kapteyn's Star and RW Aur fields sit a median 0.1 px from their fits; per-detector
 # fits of saturated cores (Barnard's, Kapteyn's Star) scatter 0.1 to 0.35 px around the proper-motion track.
 CENTROID_FLOOR_PX = 0.1, 0.3
+# False-colour image: detectors per channel, short wavelengths blue (D1 0.75 um ... D6 5.0 um)
+RGB_CHANNELS = {"blue": ("D1", "D2"), "green": ("D3", "D4"), "red": ("D5", "D6")}
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
 SEXAGESIMAL = re.compile(r"\s*[+-]?\d[\d\s:hmsd°'\".,+-]*")
@@ -177,10 +180,42 @@ def display_xy(grid, n, coord):
 
 
 def to_png(v):
-    """Image with values in [0, 1] (row 0 = south) -> grayscale PNG data URL, north up. NaN is black."""
+    """Image with values in [0, 1] (row 0 = south; n x n gray or n x n x 3 RGB) -> PNG data URL, north up.
+    NaN is black."""
     buf = io.BytesIO()
     Image.fromarray(np.flipud(np.nan_to_num(v) * 255).round().astype(np.uint8)).save(buf, "PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def rgb_planes(by_detector):
+    """(red, green, blue) images of one frame from its per-detector stacks {"D1": img, ...}, and the names of the
+    channels that had no detector. Each channel is the mean of its detectors (RGB_CHANNELS); a channel without
+    images is the mean of the channels that have them."""
+    have = {c: np.nanmean([by_detector[d] for d in ds if d in by_detector], axis=0)
+            for c, ds in RGB_CHANNELS.items() if any(d in by_detector for d in ds)}
+    filled = [c for c in RGB_CHANNELS if c not in have]
+    mean = np.nanmean(list(have.values()), axis=0)
+    return [have.get(c, mean) for c in ("red", "green", "blue")], filled
+
+
+def rgb_pngs(planes, stacks, holes, q=3.0):
+    """Lupton asinh RGB PNG per frame, with one black level and stretch for all frames, so colours do not flicker.
+
+    planes: (red, green, blue) per frame (rgb_planes). Black is the median of all channel pixels (the sky). Q = 3
+    and stretch = 0.3 x (99.7th percentile - black) give the asinh curve of the gray frames: linear up to 10% of
+    the range, full scale at the 99.7th percentile. (Q = 8, the Lupton default, made the noise bright.)
+    holes: per frame, the pixels to show white (saturated cores). No-data pixels are black, like the gray frames.
+    """
+    v = np.concatenate([p[np.isfinite(p)] for ps in planes for p in ps])
+    lo, hi = np.percentile(v, [50, 99.7])
+    out = []
+    for ps, s, h in zip(planes, stacks, holes):
+        rgb = make_lupton_rgb(*(np.nan_to_num(p) for p in ps), minimum=lo, stretch=0.1 * q * max(hi - lo, 1e-12), Q=q,
+                              output_dtype=float)
+        rgb[~np.isfinite(s)] = 0.0
+        rgb[h] = 1.0
+        out.append(to_png(rgb))
+    return out
 
 
 def bad_pixels(flags):
@@ -466,7 +501,7 @@ def build(q, name, coord, center, pm, fov, per_group, det):
             im["cutout"] = None
             n_failed += 1
 
-    frames, stacks, targets, by_det = [], [], [], defaultdict(list)
+    frames, stacks, targets, by_det, planes, all_used = [], [], [], defaultdict(list), [], []
     for e in epochs:
         used = [im for im in e if im["cutout"] is not None and np.isfinite(im["cutout"]).any()]
         if not used:
@@ -486,6 +521,10 @@ def build(q, name, coord, center, pm, fov, per_group, det):
                          "photometry": aperture_photometry(img, tx, ty), "centroid": centroid(img, tx, ty)})
             by_det[d].append(dets[-1])
         stack = np.nanmean([im["cutout"] for im in used], axis=0)
+        # a core saturated in any detector shows white; else the other detectors would tint it
+        planes.append((*rgb_planes(dict(zip(names, (it["img"] for it in dets)))),
+                       np.logical_or.reduce([saturated_holes(it["img"]) for it in dets])))
+        all_used += used
         stacks.append(stack)
         targets.append((tx, ty))
         # Measured per detector: the detectors see the target at different brightness and saturate differently,
@@ -508,6 +547,9 @@ def build(q, name, coord, center, pm, fov, per_group, det):
             frame["photometry"] = None
             if frame["centroid"]:
                 frame["centroid"]["saturated"] = True
+    white = [h | sat for h, (_, _, sat) in zip(holes, planes)]
+    for frame, png in zip(frames, rgb_pngs([p for p, _, _ in planes], stacks, white) if not det else [None] * len(frames)):
+        frame["rgb_png"] = png  # false colour; null for a single-detector view
     detectors = {}
     for d, items in sorted(by_det.items()):
         lo_d, hi_d = np.nanpercentile([it["img"] for it in items], [0.5, 99.7])
@@ -516,7 +558,16 @@ def build(q, name, coord, center, pm, fov, per_group, det):
                          "png": to_png(stretch(np.where(saturated_holes(it["img"]), np.inf, it["img"]), lo_d, hi_d))}
                         for it in items]
 
-    notes = []
+    notes, rgb = [], None
+    if not det:
+        rgb = {"channels": {c: list(ds) for c, ds in RGB_CHANNELS.items()}, "wavelength_um": {},
+               "method": "Lupton asinh RGB (astropy)"}
+        for c, ds in RGB_CHANNELS.items():
+            ims = [im for im in all_used if im["detector"] in ds]
+            rgb["wavelength_um"][c] = wavelength_range(ims) if ims else None
+        if k := sum(bool(filled) for _, filled, _ in planes):
+            notes.append(f"Colour image: {k} of {len(frames)} frames lack the detectors of one or two channels; there a"
+                         " missing channel shows the mean of the other channels, so the colours are less true.")
     if n_failed:
         notes.append(f"{n_failed} image{'s' if n_failed > 1 else ''} failed after retries.")
     if stats["retries"]:
@@ -546,6 +597,7 @@ def build(q, name, coord, center, pm, fov, per_group, det):
         "frames": frames,
         "detectors": detectors,
         "difference": difference,
+        "rgb": rgb,
         "photometry_unit": "mJy (aperture r = 2.5 px, sky from the 4-7 px annulus)",
         "notes": notes,
         "n_images_used": sum(f["n_images"] for f in frames),
