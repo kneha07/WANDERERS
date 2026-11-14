@@ -51,7 +51,11 @@ const smooth = (k) => k * k * (3 - 2 * k);
 
 // ---------- the true motion: 50 seconds at 60 Hz ----------
 const TABLE_YAW = 30;
+let TILT_SWEEP = false;
 function truth(t) {
+  if (TILT_SWEEP && t >= 7 && t < 20) {        // tilt the camera between 33 and 57 deg up, as in the recording
+    return { R: poseMatrix(170, 45 + 12 * Math.sin(2 * Math.PI * (t - 7) / 4), 3), phase: "holdA" };
+  }
   const flat = O.matFromEuler(TABLE_YAW, 0, 0);
   const A = poseMatrix(120, 40, 5), B = poseMatrix(300, 60, -8);
   const tremor = (R) => O.mul(R, O.matFromEuler(0.15 * Math.sin(2 * Math.PI * 0.8 * t), 0.15 * Math.sin(2 * Math.PI * 1.3 * t + 1),
@@ -79,7 +83,10 @@ function sensors(R, t, sc) {
   if (sc.platform === "ios") {
     const em = O.eulerFromMat(Rm);
     const f = [-Rm[0][2], -Rm[1][2], -Rm[2][2]];
-    let heading = Math.abs(em.beta) < 45 ? 360 - em.alpha : O.azAlt(f).az;   // iOS: device top when flat, camera when upright
+    // iOS (confirmed by a real recording): heading follows the phone TOP when the top is within 45 deg of
+    // horizontal, otherwise the CAMERA; so it flips 180 deg when the camera passes 45 deg up.
+    const topElev = Math.asin(Rm[2][1]) * R2D, top = [Rm[0][1], Rm[1][1], Rm[2][1]];
+    let heading = Math.abs(topElev) < 45 ? O.azAlt(top).az : O.azAlt(f).az;
     heading = O.wrap360(heading + disturb + gauss(sc.compassNoise));
     out.push({ ...relEvt, webkitCompassHeading: heading, webkitCompassAccuracy: sc.compassNoise * 2 });
   } else {
@@ -113,7 +120,7 @@ function oldEngine() {
 
 // ---------- run ----------
 function run(sc) {
-  seed = sc.seed;
+  seed = sc.seed; TILT_SWEEP = !!sc.tiltSweep;
   const engines = { old: oldEngine(), neu: new O.Fusion() };
   engines.neu.decl = DECL;
   const stats = { old: {}, neu: {} };
@@ -159,6 +166,8 @@ const scenarios = [
   { name: "iPhone, outdoors", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, seed: 1 },
   { name: "iPhone, indoors (metal nearby)", platform: "ios", compassNoise: 6, gyroDrift: 0.03, indoor: true, seed: 2 },
   { name: "iPhone, indoors + landmark fine-tune", platform: "ios", compassNoise: 6, gyroDrift: 0.03, indoor: true, fineTuneAt: 15, seed: 3 },
+  { name: "iPhone, tilting across 45 deg (the recorded bug), calibrated", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, tiltSweep: true, seed: 7 },
+  { name: "iPhone, tilting across 45 deg, NOT calibrated", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, tiltSweep: true, skipCalibration: true, seed: 8 },
   { name: "iPhone, user skips calibration", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, skipCalibration: true, seed: 6 },
   { name: "Android, outdoors", platform: "android", compassNoise: 3, gyroDrift: 0.01, indoor: false, spikeRate: 0, seed: 4 },
   { name: "Android, compass spikes", platform: "android", compassNoise: 3, gyroDrift: 0.01, indoor: false, spikeRate: 0.02, seed: 5 },
