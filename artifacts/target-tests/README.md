@@ -18,4 +18,4 @@ Each contact sheet shows the stacked frames scaled 6x and the amber "where to lo
 2. MEDIUM: duplicate frame labels (R Dra). Use the mean-epoch date.
 3. MEDIUM: WISE 0855 is too faint in the all-detector stack. Add a `det=D6` long-wavelength stack, and use it as the default for the WISE chip.
 4. LOW: the WISE chip note must say that the challenge coordinates are from 2010.
-5. LOW (not sent, tracked in kneha07/field-shift#3): D1/D2 frames show scattered-light gradients that the plane background fit does not remove.
+5. LOW (not sent, tracked in kneha07/WANDERERS#5): D1/D2 frames show scattered-light gradients that the plane background fit does not remove.
