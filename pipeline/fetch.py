@@ -13,7 +13,6 @@ with backoff and every file is cached under data/cache/<target>/. Re-running onl
 what is missing.
 """
 import io, json, sys, time, warnings
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +27,7 @@ from astropy.time import Time
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
 from fov import DEFAULT_FOV, fov_of, clamp_fov, position_id
+from tolerant import download_tolerant
 
 warnings.simplefilter("ignore")
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +38,10 @@ FIELD_ARCSEC = DEFAULT_FOV  # default side of the square field we analyse; a tar
 SPX_PIX = 6.15              # SPHEREx pixel scale, arcsec
 KEEP_HDUS = ("IMAGE", "FLAGS", "VARIANCE", "WCS-WAVE")
 MAX_IMAGES = 150            # SPHEREx cutouts per target (see fetch())
+# IRSA often answers "503 busy". A cutout that still fails after get()'s retries is skipped, not fatal. The run stops only if
+# fewer than this share of the cutouts could be had (cached ones count): the analysis needs enough images per survey to build
+# a frame and a spectrum, and losing up to half still leaves that. Run fetch again to retry the missing ones.
+MIN_CUTOUT_SHARE = 0.5
 
 session = requests.Session()
 session.headers["User-Agent"] = "wanderers-spaceapps/0.1"
@@ -223,12 +227,15 @@ def fetch(tid):
         tmp.rename(f)            # atomic: a killed run never leaves a half-written .fits
         return "new"
 
-    with ThreadPoolExecutor(3) as ex:   # gentle on IRSA during the hackathon
-        done = 0
-        for status in ex.map(one, spx):
-            done += 1
-            if done % 6 == 0 or done == len(spx):
-                print(f"   SPHEREx cutouts {done}/{len(spx)}", flush=True)
+    def progress(done, total, n_failed):
+        if done % 6 == 0 or done == total:
+            print(f"   SPHEREx cutouts {done}/{total}" + (f" ({n_failed} could not be downloaded)" if n_failed else ""), flush=True)
+
+    # 3 threads: gentle on IRSA during the hackathon
+    res = download_tolerant(list(spx), one, workers=3, min_ok_fraction=MIN_CUTOUT_SHARE, on_progress=progress)
+    if res.failed:
+        print(f"   !! {len(res.failed)} of {res.total} cutouts could not be downloaded (IRSA busy?). Continuing with the "
+              f"{res.ok} that worked; run fetch again to retry the rest.", flush=True)
 
     # --- AllWISE atlas: W1 and W2, epoch ~2010.5 ---------------------------------------------
     c10 = predict(ref, 2010.5)
