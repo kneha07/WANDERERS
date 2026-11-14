@@ -1,4 +1,7 @@
-"""HTTP API for the blink tool. Run from the repo root: uvicorn backend.app:app --port 8000"""
+"""HTTP API for the live SPHEREx explorer. Run from the repo root: uvicorn backend.app:app --port 8001
+
+WANDERERS server.js (port 8000) proxies /api/frames and /api/live-health to this server.
+"""
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse

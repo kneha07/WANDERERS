@@ -330,3 +330,19 @@ footer {
   margin: 0 0 8px;
   color: var(--ring);
 }
+
+.back-link,
+.deep-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.chips li {
+  display: flex;
+  flex-direction: column;
+}
+
+.deep-link {
+  font-size: 0.85em;
+}
