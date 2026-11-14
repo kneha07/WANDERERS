@@ -11,7 +11,7 @@ A person under clouds or city lights points the phone at the sky and sees the st
 | View | Shows | Source | Honest label on screen |
 |---|---|---|---|
 | **Eye** (default) | What a human eye sees on a clear night: stars to a chosen faintness, the planets, Moon and Sun | Star catalogue and computed positions, drawn on the phone | "Drawn from measured star positions. Not a photograph." |
-| **Deep** | Far more stars than an eye can see, plus the Milky Way and nebulae | Real survey photographs, loaded as tiles from the archive | "Survey photographs taken 1983–2006. Not a live view." |
+| **Deep** | Far more stars than an eye can see, plus the Milky Way and nebulae | Real survey photographs, loaded as tiles from the archive | "Survey photographs taken decades ago. Not a live view." |
 
 Nothing is stored on our server. Deep tiles go from the archive straight to the phone and are kept there for a limited time.
 
