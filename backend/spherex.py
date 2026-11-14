@@ -1,4 +1,6 @@
 """SPHEREx blink pipeline: resolve a target, find images, align cutouts, make PNG frames."""
+import base64
+import io
 import re
 from collections import defaultdict
 from itertools import groupby
@@ -7,6 +9,7 @@ import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+from PIL import Image
 
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
@@ -85,3 +88,10 @@ def display_xy(grid, n, coord):
     """
     x, y = grid.wcs_world2pix(coord.ra.deg, coord.dec.deg, 0)
     return float(x) + 0.5, n - 0.5 - float(y)
+
+
+def to_png(v):
+    """Image with values in [0, 1] (row 0 = south) -> grayscale PNG data URL, north up. NaN is black."""
+    buf = io.BytesIO()
+    Image.fromarray(np.flipud(np.nan_to_num(v) * 255).round().astype(np.uint8)).save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()

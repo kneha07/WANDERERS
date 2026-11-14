@@ -1,12 +1,16 @@
 """Pure-logic tests for the SPHEREx blink pipeline. No network."""
+import base64
+import io
 from collections import Counter
 
+import numpy as np
 import pytest
 
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+from PIL import Image
 
-from backend.spherex import choose_images, display_xy, group_epochs, output_wcs, parse_coords
+from backend.spherex import choose_images, display_xy, group_epochs, output_wcs, parse_coords, to_png
 
 
 def test_sexagesimal_with_hms_letters():
@@ -91,3 +95,16 @@ def test_ring_is_north_up_east_left_with_top_left_origin():
     center = SkyCoord(269.45, 60.0, unit="deg")
     star = center.spherical_offsets_by(5 * 6.15 * u.arcsec, 10 * 6.15 * u.arcsec)  # 5 px east, 10 px north
     assert display_xy(output_wcs(center, 49), 49, star) == pytest.approx((24.5 - 5, 24.5 - 10), abs=0.01)
+
+
+def test_png_pixels_and_ring_agree_on_where_a_star_is():
+    center, n = SkyCoord(10.0, 20.0, unit="deg"), 21
+    grid = output_wcs(center, n)
+    star = center.spherical_offsets_by(-6 * 6.15 * u.arcsec, 4 * 6.15 * u.arcsec)  # 6 px west, 4 px north
+    x, y = grid.wcs_world2pix(star.ra.deg, star.dec.deg, 0)
+    frame = np.zeros((n, n))
+    frame[round(float(y)), round(float(x))] = 1.0  # frames are indexed [grid y, grid x]
+    png = np.asarray(Image.open(io.BytesIO(base64.b64decode(to_png(frame).split(",")[1]))))
+    row, col = np.unravel_index(np.argmax(png), png.shape)
+    ring_x, ring_y = display_xy(grid, n, star)
+    assert (col, row) == (int(ring_x), int(ring_y)) == (16, 6)
