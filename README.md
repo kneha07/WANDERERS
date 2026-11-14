@@ -40,16 +40,21 @@ Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `?target=wise08
 Gaia), measures it and plays it as a flipbook in a few minutes. The public static site cannot do this by
 itself because IRSA does not allow direct browser requests (no CORS), so it shows the prepared patches.
 
-**Sky Compass** (`app/compass.html`). An intro places you in the universe (galaxy field, Milky Way, the Solar
-System at today's positions, the NASA Blue Marble Earth with the real day/night line, then your region from NASA
-GIBS with your city, time zone and sidereal time). One-step calibration: lay the phone flat for 3 seconds. Then an
-augmented-reality sky: objects drawn where they really are, a compass tape, tilt scale, mini radar and telemetry.
+**Sky Compass** (`app/compass.html`, an extra for phones). The intro uses only real imagery: the NASA Blue Marble /
+Black Marble Earth with the real day/night line swings in to your location, then NASA GIBS imagery of your region
+with your city, time zone and sidereal time. Calibration takes ~10 s: lay the phone flat, hold, and give it three
+quarter turns. The gyroscope measures the turns, so if the compass disagrees the app reports magnetic interference
+(magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
+landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
 Motion uses sensor fusion (`app/orient.js`): the gyroscope drives every movement and the compass only sets north,
 averaged while the phone lies flat and corrected slowly after. `node tests/orient.sim.js` replays realistic sensor
 streams (gyro drift, compass noise, tilt bias, declination, indoor magnetic distortion, Android spikes) through the
-old and new engines: the new one holds 0.1-0.5° error with 0.1° wobble outdoors, versus 1.5-14° (up to 55° while
-panning) before. Indoors, magnetic distortion is removed with one "North check" tap on a star, the Moon or a landmark.
+old and new engines, including the iPhone heading flip seen in a real test recording (the compass switches from the
+phone's top to its camera at 45° tilt, so pointing above 45° flipped the old version by 180°). The new engine holds
+0.1-0.5° error with 0.1° wobble; with a 12° magnetic case, four-direction calibration gives 0.1-0.8° (one direction:
+5-9°) and flags the interference. A uniform bias from a steel building cannot be seen by any calibration on a table;
+one sight check removes it.
 
 ## Run it
 

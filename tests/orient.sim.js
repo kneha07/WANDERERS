@@ -51,17 +51,25 @@ const smooth = (k) => k * k * (3 - 2 * k);
 
 // ---------- the true motion: 50 seconds at 60 Hz ----------
 const TABLE_YAW = 30;
-let TILT_SWEEP = false;
+let ONE_STOP = false, TILT_SWEEP = false;
 function truth(t) {
-  if (TILT_SWEEP && t >= 7 && t < 20) {        // tilt the camera between 33 and 57 deg up, as in the recording
-    return { R: poseMatrix(170, 45 + 12 * Math.sin(2 * Math.PI * (t - 7) / 4), 3), phase: "holdA" };
+  if (TILT_SWEEP && t >= 12 && t < 20) {        // tilt the camera between 33 and 57 deg up, as in the recording
+    return { R: poseMatrix(170, 45 + 12 * Math.sin(2 * Math.PI * (t - 12) / 4), 3), phase: "holdA" };
   }
-  const flat = O.matFromEuler(TABLE_YAW, 0, 0);
+  // flat on the table: four stops a quarter turn apart (or one stop if the user only does one)
+  const yaws = [30, 120, 210, 300], seg = [0, 1.8, 2.3, 4.1, 4.6, 6.4, 6.9, 9];
+  let flatYaw = 30;
+  if (!ONE_STOP) for (let i = 0; i < 4; i++) {
+    if (t >= seg[2 * i] && t < seg[2 * i + 1]) flatYaw = yaws[i];
+    else if (i < 3 && t >= seg[2 * i + 1] && t < seg[2 * i + 2]) flatYaw = yaws[i] + 90 * smooth((t - seg[2 * i + 1]) / 0.5);
+    else if (t >= 6.9) flatYaw = 300;
+  }
+  const flat = O.matFromEuler(flatYaw, 0, 0), flatEnd = O.matFromEuler(ONE_STOP ? 30 : 300, 0, 0);
   const A = poseMatrix(120, 40, 5), B = poseMatrix(300, 60, -8);
   const tremor = (R) => O.mul(R, O.matFromEuler(0.15 * Math.sin(2 * Math.PI * 0.8 * t), 0.15 * Math.sin(2 * Math.PI * 1.3 * t + 1),
                                                 0.1 * Math.sin(2 * Math.PI * 1.6 * t + 2)));
-  if (t < 4) return { R: flat, phase: "flat" };
-  if (t < 7) return { R: slerp(flat, A, smooth((t - 4) / 3)), phase: "pickup" };
+  if (t < 9) return { R: flat, phase: "flat" };
+  if (t < 12) return { R: slerp(flatEnd, A, smooth((t - 9) / 3)), phase: "pickup" };
   if (t < 20) return { R: tremor(A), phase: "holdA" };
   if (t < 30) {   // pan across north and through the horizon (gimbal-lock zone for Euler angles)
     const k = smooth((t - 20) / 10);
@@ -87,7 +95,8 @@ function sensors(R, t, sc) {
     // horizontal, otherwise the CAMERA; so it flips 180 deg when the camera passes 45 deg up.
     const topElev = Math.asin(Rm[2][1]) * R2D, top = [Rm[0][1], Rm[1][1], Rm[2][1]];
     let heading = Math.abs(topElev) < 45 ? O.azAlt(top).az : O.azAlt(f).az;
-    heading = O.wrap360(heading + disturb + gauss(sc.compassNoise));
+    const hardIron = (sc.hardIron || 0) * Math.sin((heading + 135) * D2R);    // e.g. a MagSafe case
+    heading = O.wrap360(heading + disturb + hardIron + gauss(sc.compassNoise));
     out.push({ ...relEvt, webkitCompassHeading: heading, webkitCompassAccuracy: sc.compassNoise * 2 });
   } else {
     out.push({ ...relEvt, absolute: false });
@@ -120,7 +129,7 @@ function oldEngine() {
 
 // ---------- run ----------
 function run(sc) {
-  seed = sc.seed; TILT_SWEEP = !!sc.tiltSweep;
+  seed = sc.seed; TILT_SWEEP = !!sc.tiltSweep; ONE_STOP = !!sc.oneStop;
   const engines = { old: oldEngine(), neu: new O.Fusion() };
   engines.neu.decl = DECL;
   const stats = { old: {}, neu: {} };
@@ -129,7 +138,8 @@ function run(sc) {
   engines.neu.onCalibrated = (r) => { calResult = r; };
   for (let i = 0; i <= 50 * 60; i++) {
     const t = i / 60, tr = truth(t);
-    if (i === 30 && !sc.skipCalibration) engines.neu.startFlatCalibration();
+    if (i === 1 && !sc.skipCalibration) engines.neu.startFlatCalibration();
+    if (sc.oneStop && Math.abs(t - 4.5) < 1e-9) engines.neu.finishCalibrationNow();
     if (sc.fineTuneAt && Math.abs(t - sc.fineTuneAt) < 1e-9) {
       const f = [-tr.R[0][2], -tr.R[1][2], -tr.R[2][2]], a = O.azAlt(f);
       calDone = engines.neu.fineTune(a.az, a.alt);    // user aims at a known landmark / star
@@ -139,7 +149,7 @@ function run(sc) {
     for (const who of ["old", "neu"]) {
       const p = engines[who].pointing();
       if (!p) continue;
-      const settle = (tr.phase === "holdA" && t < 9) || (tr.phase === "holdB" && t < 32) || (sc.fineTuneAt && Math.abs(t - sc.fineTuneAt) < 1);
+      const settle = (tr.phase === "holdA" && t < 13) || (tr.phase === "holdB" && t < 32) || (sc.fineTuneAt && Math.abs(t - sc.fineTuneAt) < 1);
       const phase = tr.phase === "holdA" && sc.fineTuneAt && t > sc.fineTuneAt ? "holdA+" : tr.phase;
       if (tr.phase !== "flat" && tr.phase !== "pickup" && !settle) add(who, phase, { e: O.angle(p.forward, fTrue), f: p.forward, ft: fTrue });
     }
@@ -166,6 +176,8 @@ const scenarios = [
   { name: "iPhone, outdoors", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, seed: 1 },
   { name: "iPhone, indoors (metal nearby)", platform: "ios", compassNoise: 6, gyroDrift: 0.03, indoor: true, seed: 2 },
   { name: "iPhone, indoors + landmark fine-tune", platform: "ios", compassNoise: 6, gyroDrift: 0.03, indoor: true, fineTuneAt: 15, seed: 3 },
+  { name: "iPhone + magnetic case (12 deg), ONE-direction calibration", platform: "ios", compassNoise: 4, gyroDrift: 0.03, hardIron: 12, oneStop: true, seed: 9 },
+  { name: "iPhone + magnetic case (12 deg), FOUR-direction calibration", platform: "ios", compassNoise: 4, gyroDrift: 0.03, hardIron: 12, seed: 10 },
   { name: "iPhone, tilting across 45 deg (the recorded bug), calibrated", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, tiltSweep: true, seed: 7 },
   { name: "iPhone, tilting across 45 deg, NOT calibrated", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, tiltSweep: true, skipCalibration: true, seed: 8 },
   { name: "iPhone, user skips calibration", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, skipCalibration: true, seed: 6 },
@@ -186,7 +198,7 @@ let fail = worst >= 1e-9;
 const fmt = (x) => x.toFixed(2).padStart(6);
 for (const sc of scenarios) {
   const { summary, calResult } = run(sc);
-  console.log(`\n${sc.name}  (calibration: ${calResult ? `${calResult.quality}, compass scatter ±${calResult.compassScatter?.toFixed(1)}°` : "none"})`);
+  console.log(`\n${sc.name}  (calibration: ${calResult ? `${calResult.quality}, ${calResult.stops} stop(s)${calResult.spread != null ? `, compass disagreement up to ${calResult.spread.toFixed(1)}°` : ""}` : "none"})`);
   console.log("  phase    engine   mean err   max err   wobble (RMS)");
   for (const ph of ["holdA", "holdA+", "pan", "holdB"]) {
     for (const who of ["old", "neu"]) {
@@ -197,7 +209,9 @@ for (const sc of scenarios) {
   const n = summary.neu;
   // Targets: outdoors < 1.5 deg error; indoors the magnetic distortion can only be removed by a fine-tune,
   // so before it we only require < 10 deg; after a fine-tune < 1.5 deg. Wobble < 0.5 deg everywhere.
-  const checks = sc.fineTuneAt ? [["holdA+", 1.5], ["holdB", 1.5]] : sc.indoor ? [["holdA", 10], ["holdB", 10]]
+  if (sc.hardIron && !sc.oneStop && calResult && calResult.quality === "good") { fail = true; console.log("  -> FAIL: magnetic case not detected"); }
+  const checks = sc.oneStop ? [] : sc.fineTuneAt ? [["holdA+", 1.5], ["holdB", 1.5]] : sc.indoor ? [["holdA", 10], ["holdB", 10]]
+    : sc.hardIron ? [["holdA", 2], ["holdB", 2]]
     : sc.skipCalibration ? [["holdA", 3], ["holdB", 3]] : [["holdA", 1.5], ["holdB", 1.5]];
   for (const [ph, okErr] of checks) {
     if (!(n[ph].meanErr < okErr && n[ph].jitter < 0.5)) { fail = true; console.log(`  -> FAIL: ${ph} error ${n[ph].meanErr.toFixed(2)}°, wobble ${n[ph].jitter.toFixed(2)}°`); }
