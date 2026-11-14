@@ -3,7 +3,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { createFieldService } = require("../fields");
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "wanderers-"));
@@ -18,7 +18,7 @@ function fake(dataDir, { analyzeWrites = true, failOn = null, delay = 0 } = {}) 
     onLine(`running ${script}`);
     if (delay) await wait(delay);
     if (script === failOn) throw new Error(`${script} exited with code 1 at ${dataDir}/secret`);
-    if (script === "fetch.py") return `target id: ${svc.idFor(+args[1], +args[3])}\n`;
+    if (script === "fetch.py") return `target id: ${svc.idFor(+args[1], +args[3], +args[5])}\n`;
     if (script === "analyze.py" && analyzeWrites) { fs.mkdirSync(path.join(dataDir, args[0]), { recursive: true }); fs.writeFileSync(path.join(dataDir, args[0], "target.json"), "{}"); }
     return "";
   };
@@ -144,5 +144,61 @@ test("HTTP: /api/job rejects bad ids and unknown jobs", async () => {
     assert.equal((await fetch(base + "/api/job?id=../x")).status, 400);
     assert.equal((await fetch(base + "/api/job")).status, 400);
     assert.equal((await fetch(base + "/api/job?id=1.0000_2.0000")).status, 404);
+  });
+});
+
+// ---- field of view ----
+test("field of view: ids, jobs and the fetch command", async () => {
+  const dir = tmp(), { svc, calls } = fake(dir);
+  assert.equal(svc.idFor(133.7951, -7.2451, 300), "pos_133p7951_s7p2451");          // default keeps the old id
+  assert.equal(svc.idFor(133.7951, -7.2451, 600), "pos_133p7951_s7p2451_f600");
+  const a = svc.start(20, 30), b = svc.start(20, 30, 600), c = svc.start(20, 30, 600);
+  assert.notEqual(a.job, b.job, "different field sizes are different jobs");
+  assert.equal(b.job, c.job, "same size shares a job");
+  assert.match(b.job, /_f600$/);
+  await until(() => ["done"].includes(svc.status(a.job).status) && svc.status(b.job).status === "done", 4000);
+  assert.equal(svc.status(b.job).tid, "pos_20p0000_n30p0000_f600");
+  const fetches = calls.filter((x) => x[0] === "fetch.py").map((x) => x.slice(1).join(" "));
+  assert.ok(fetches.includes("--ra 20 --dec 30 --fov 300"), fetches.join(" | "));
+  assert.ok(fetches.includes("--ra 20 --dec 30 --fov 600"), fetches.join(" | "));
+});
+
+test("field of view: a cached field of that size is ready, other sizes are not", () => {
+  const dir = tmp(), { svc, calls } = fake(dir, { delay: 50 });
+  const tid = svc.idFor(10, 20, 120);
+  fs.mkdirSync(path.join(dir, tid)); fs.writeFileSync(path.join(dir, tid, "target.json"), "{}");
+  assert.deepEqual(svc.start(10, 20, 120), { status: "ready", tid });
+  assert.notEqual(svc.start(10, 20, 300).status, "ready");
+});
+
+test("field of view must be a whole number from 60 to 900", () => {
+  const { svc } = fake(tmp());
+  for (const f of [59, 901, 0, -300, 300.5, NaN, Infinity, "300"]) assert.throws(() => svc.start(10, 20, f), (e) => e.status === 400, String(f));
+  for (const f of [60, 120, 300, 600, 900]) assert.doesNotThrow(() => fake(tmp()).svc.start(10, 20, f), String(f));   // a fresh service each: four can wait at most
+});
+
+test("job ids with a field-of-view suffix are accepted, junk is not", () => {
+  const { svc } = fake(tmp());
+  assert.throws(() => svc.status("1.0000_2.0000_f600"), (e) => e.status === 404);   // valid format, unknown job
+  for (const id of ["1.0000_2.0000_f", "1.0000_2.0000_fx", "1.0000_2.0000_f600_f600", "../_f600"]) assert.throws(() => svc.status(id), (e) => e.status === 400, id);
+});
+
+test("ids match pipeline/fov.py (Python) for many positions and sizes", { skip: spawnSync("python3", ["--version"]).status !== 0 && "python3 not available" }, () => {
+  const { svc } = fake(tmp()), cases = [];
+  for (const [ra, dec] of [[133.7951, -7.2451], [76.9564, 30.4014], [0, 0], [248.16734, 66.75501], [10.00005, -0.00004], [359.9999, -89.9999]])
+    for (const fov of [60, 120, 300, 600, 900]) cases.push([ra, dec, fov]);
+  const code = "import sys, json\nsys.path.insert(0, 'pipeline')\nimport fov\n" +
+    "print(json.dumps([fov.position_id(r, d, f) for r, d, f in json.loads(sys.argv[1])]))";
+  const r = spawnSync("python3", ["-I", "-c", code, JSON.stringify(cases)], { cwd: path.join(__dirname, "..") });
+  assert.equal(r.status, 0, String(r.stderr));
+  const py = JSON.parse(r.stdout.toString());
+  cases.forEach(([ra, dec, fov], i) => assert.equal(svc.idFor(ra, dec, fov), py[i], `${ra},${dec},${fov}`));
+});
+
+test("HTTP: /api/field rejects a bad field of view", async () => {
+  await withServer(async (base) => {
+    assert.equal((await post(base, "/api/field", { ra: 10, dec: 5, fov: "600" })).status, 400);
+    assert.equal((await post(base, "/api/field", { ra: 10, dec: 5, fov: 5000 })).status, 400);
+    assert.equal((await post(base, "/api/field", { ra: 10, dec: 5, fov: 12.5 })).status, 400);
   });
 });

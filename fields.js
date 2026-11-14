@@ -2,7 +2,8 @@
 // When a user types coordinates that are not cached yet, run the existing pipeline for them
 // (fetch.py --ra --dec, then analyze.py, then evidence.py) and report progress.
 //
-//   POST /api/field   {"ra": 133.795, "dec": -7.245}  ->  {status, tid | job, stage}
+//   POST /api/field   {"ra": 133.795, "dec": -7.245, "fov": 600}  ->  {status, tid | job, stage}
+//                     fov (optional) is the side of the field in arcseconds: a whole number, 60 to 900.
 //   GET  /api/job?id=<job>                              ->  {status, stage, detail, tid, error}
 //
 // One job runs at a time (the steps write into app/data/ and rewrite index.json), a few can wait.
@@ -11,6 +12,7 @@
 const { spawn } = require("child_process");
 const fs = require("fs"), path = require("path");
 
+const DEFAULT_FOV = 300, MIN_FOV = 60, MAX_FOV = 900;   // arcsec; same limits as pipeline/fov.py
 const MAX_ACTIVE = 4;                 // running + waiting
 const STEP_TIMEOUT_MS = 20 * 60 * 1000;
 const KEEP_MS = 30 * 60 * 1000;       // how long finished jobs stay queryable
@@ -43,10 +45,12 @@ function createFieldService(opts = {}) {
   const jobs = new Map(), queue = [];
   let running = false;
 
-  // Same id that pipeline/fetch.py add_position() makes, so cached fields are found without a job.
-  const idFor = (ra, dec) =>
-    `pos_${ra.toFixed(4)}_${(dec < 0 ? "-" : "+") + Math.abs(dec).toFixed(4)}`.replace(/\./g, "p").replace(/\+/g, "n").replace(/-/g, "s");
-  const jobKey = (ra, dec) => `${ra.toFixed(4)}_${dec.toFixed(4)}`;
+  // Same id that pipeline/fetch.py add_position() makes (via pipeline/fov.py), so cached fields are found
+  // without a job. The default field keeps the original format; other sizes get a "_f<arcsec>" suffix.
+  const idFor = (ra, dec, fov = DEFAULT_FOV) =>
+    `pos_${ra.toFixed(4)}_${(dec < 0 ? "-" : "+") + Math.abs(dec).toFixed(4)}`.replace(/\./g, "p").replace(/\+/g, "n").replace(/-/g, "s")
+    + (fov === DEFAULT_FOV ? "" : `_f${fov}`);
+  const jobKey = (ra, dec, fov = DEFAULT_FOV) => `${ra.toFixed(4)}_${dec.toFixed(4)}` + (fov === DEFAULT_FOV ? "" : `_f${fov}`);
   const hasData = (tid) => fs.existsSync(path.join(dataDir, tid, "target.json"));
   // Never show server paths to the browser.
   const clean = (s) => String(s || "").split(root).join(".").replace(/\/(Users|home)\/[^\s:]+/g, "<path>").slice(0, 200);
@@ -58,7 +62,7 @@ function createFieldService(opts = {}) {
   async function work(j) {
     const log = (l) => { j.detail = clean(l).slice(0, 120); };
     j.status = "running"; j.stage = "Downloading images (step 1 of 3)";
-    const out = await run("fetch.py", ["--ra", String(j.ra), "--dec", String(j.dec)], log);
+    const out = await run("fetch.py", ["--ra", String(j.ra), "--dec", String(j.dec), "--fov", String(j.fov)], log);
     const m = /target id:\s*([A-Za-z0-9_]+)/.exec(out);
     if (!m) throw new Error("Could not register this position.");
     j.tid = m[1];
@@ -82,21 +86,23 @@ function createFieldService(opts = {}) {
   }
 
   // Returns {status:"ready", tid} for cached fields, otherwise a job view.
-  function start(ra, dec) {
+  function start(ra, dec, fov = DEFAULT_FOV) {
     if (!Number.isFinite(ra) || !Number.isFinite(dec) || ra < 0 || ra >= 360 || dec < -90 || dec > 90)
       throw httpError(400, "RA must be 0-360 degrees and Dec -90 to 90 degrees.");
-    const tid = idFor(ra, dec);
+    if (!Number.isInteger(fov) || fov < MIN_FOV || fov > MAX_FOV)
+      throw httpError(400, `Field of view must be a whole number of arcseconds, ${MIN_FOV} to ${MAX_FOV}.`);
+    const tid = idFor(ra, dec, fov);
     if (hasData(tid)) return { status: "ready", tid };
-    const key = jobKey(ra, dec), old = jobs.get(key);
+    const key = jobKey(ra, dec, fov), old = jobs.get(key);
     if (old && old.status !== "error") return view(old);
     if (active() >= MAX_ACTIVE) throw httpError(429, "Several fields are being prepared. Try again in a few minutes.");
-    const j = { key, ra, dec, tid, status: "queued", stage: "Waiting in line", detail: "" };
+    const j = { key, ra, dec, fov, tid, status: "queued", stage: "Waiting in line", detail: "" };
     jobs.set(key, j); queue.push(j); pump();
     return view(j);
   }
 
   function status(id) {
-    if (!/^[0-9.]+_-?[0-9.]+$/.test(id || "")) throw httpError(400, "Bad job id.");
+    if (!/^[0-9.]+_-?[0-9.]+(_f[0-9]+)?$/.test(id || "")) throw httpError(400, "Bad job id.");
     const j = jobs.get(id);
     if (!j) throw httpError(404, "Unknown job.");
     return view(j);
@@ -126,7 +132,8 @@ function createFieldService(opts = {}) {
     if (req.method === "POST" && url.pathname === "/api/field") {
       readJson(req).then((b) => {
         if (typeof b.ra !== "number" || typeof b.dec !== "number") throw httpError(400, "ra and dec must be numbers.");
-        const r = start(b.ra, b.dec); send(r.status === "ready" ? 200 : 202, r);
+        if (b.fov !== undefined && typeof b.fov !== "number") throw httpError(400, "fov must be a number.");
+        const r = start(b.ra, b.dec, b.fov === undefined ? DEFAULT_FOV : b.fov); send(r.status === "ready" ? 200 : 202, r);
       }).catch(fail);
       return true;
     }
