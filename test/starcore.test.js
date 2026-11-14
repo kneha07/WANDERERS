@@ -82,3 +82,31 @@ test("year labels", () => {
   assert.equal(C.fmtYear(0), "1 BCE");
   assert.equal(C.fmtYear(-7999), "8000 BCE");
 });
+
+test("crossing the celestial pole: RA jumps by 180° but the star moves smoothly", () => {
+  const s = FX.cases.find((c) => /Pole/.test(c.star.name)).star;
+  const a = C.propagate(s, 2016), b = C.propagate(s, 2200);
+  const dRa = ((b.ra - a.ra + 540) % 360) - 180;      // RA change wrapped into [-180, 180)
+  assert.ok(Math.abs(Math.abs(dRa) - 180) < 1, `RA flipped to the other side of the pole (${dRa.toFixed(2)}°)`);
+  let prev = a;
+  for (let y = 2017; y <= 2200; y += 1) {           // no jumps on the sky from one year to the next
+    const p = C.propagate(s, y);
+    assert.ok(C.separationArcsec(prev, p) < 10, String(y)); prev = p;
+  }
+});
+
+test("crossing RA 0h/24h: RA stays in [0, 360) and the motion is continuous", () => {
+  const s = FX.cases.find((c) => /RA 0h/.test(c.star.name)).star;
+  let prev = C.propagate(s, 2016);
+  for (let y = 2017; y <= 2200; y += 1) {
+    const p = C.propagate(s, y);
+    assert.ok(p.ra >= 0 && p.ra < 360, String(p.ra));
+    assert.ok(C.separationArcsec(prev, p) < 10, String(y)); prev = p;
+  }
+  assert.ok(C.propagate(s, 2200).ra < 1, "now just past 0h");
+});
+
+test("orthographic projection keeps points across RA 0h together", () => {
+  const a = C.ortho(359.9, 0, 0.05, 0), b = C.ortho(0.1, 0, 0.05, 0);
+  assert.ok(a.front && b.front && Math.abs(a.x - b.x) < 0.3);
+});
