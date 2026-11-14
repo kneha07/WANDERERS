@@ -31,7 +31,7 @@ from astropy.time import Time
 from astropy.wcs import WCS
 from fastapi import HTTPException
 from PIL import Image
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import binary_dilation, label, map_coordinates
 
 PIXEL_ARCSEC = 6.15
 CENTER_MJD = 61041.0  # epoch J2026.0: cutouts are centered on the target's position at this date
@@ -41,8 +41,7 @@ S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
 FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
 # FLAGS bits that mark bad pixels (cosmic rays, hot/dead pixels, persistence). These show up as false blinkers.
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
-# Saturated star cores also carry TRANSIENT and SUR_ERROR, so pixels with these bits are kept.
-SATURATED = 2 | 67108864  # OVERFLOW BLOOM. OUTLIER is not masked either: it could hide a real mover.
+OVERFLOW, BLOOM = 2, 67108864  # saturated pixel; pixel inside the bloom of a bright star
 CACHE_DIR = Path(__file__).parent / "cache"
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
@@ -106,6 +105,21 @@ def choose_images(images, n):
     return sorted(chosen, key=lambda r: r["mjd"])
 
 
+def plan_epochs(images, per_group, det=""):
+    """Survey epochs as lists of chosen images. With det (e.g. 'D6'), only that detector's images count."""
+    if det:
+        images = [im for im in images if im["detector"] == det]
+    return [choose_images([images[i] for i in g], per_group) for g in group_epochs([im["mjd"] for im in images])]
+
+
+def epoch_label(mjds):
+    """Date range of an epoch, e.g. '2025-08-15 to 09-13'. Unique, because epochs do not overlap."""
+    first, last = (Time(t, format="mjd").strftime("%Y-%m-%d") for t in (min(mjds), max(mjds)))
+    if first == last:
+        return first
+    return f"{first} to {last[5:] if first[:4] == last[:4] else last}"
+
+
 def output_wcs(center, n):
     """North-up, east-left TAN grid of n x n pixels (6.15 arcsec) centered on center."""
     w = WCS(naxis=2)
@@ -130,6 +144,36 @@ def to_png(v):
     buf = io.BytesIO()
     Image.fromarray(np.flipud(np.nan_to_num(v) * 255).round().astype(np.uint8)).save(buf, "PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def bad_pixels(flags):
+    """Pixels to drop (NaN), from the FLAGS bits.
+
+    Saturated (OVERFLOW) pixels hold unreliable values (R Dra's core reads dark), so they go; a NaN core
+    inside a bright star is shown white later (saturated_holes). A bloomed star also carries TRANSIENT and
+    SUR_ERROR as a side effect, so BLOOM pixels keep their values. OUTLIER is not used: it could hide a mover.
+    """
+    return ((flags & OVERFLOW) != 0) | (((flags & BAD_FLAGS) != 0) & ((flags & BLOOM) == 0))
+
+
+def saturated_holes(img):
+    """Mask of saturated star cores: NaN regions that do not touch the edge and whose rim median is at
+    least 5% of the brightest pixel of the frame.
+
+    Saturated pixels are NaN (see bad_pixels). Off-detector NaN touches the edge; a bad pixel on dark sky
+    or next to a faint star has a rim near 1% of the maximum. Real cores (R Dra, Barnard's Star): 12-80%.
+    """
+    regions, n = label(np.isnan(img))
+    holes = np.zeros(img.shape, bool)
+    if not n or not np.isfinite(img).any():
+        return holes
+    bright = 0.05 * np.nanmax(img)
+    edge = set(np.unique(np.r_[regions[0], regions[-1], regions[:, 0], regions[:, -1]]))
+    for k in range(1, n + 1):
+        region = regions == k
+        if k not in edge and np.median(img[binary_dilation(region) & ~region]) >= bright:
+            holes |= region
+    return holes
 
 
 def stretch(img, lo, hi):
@@ -232,8 +276,7 @@ def read_cutout(url, ra, dec):
         if x0 >= x1 or y0 >= y1:
             return None
         data = hdu.section[y0:y1, x0:x1].astype(float)
-        flags = hdul["FLAGS"].section[y0:y1, x0:x1]  # row-tiled RICE: a small read
-        data[((flags & BAD_FLAGS) != 0) & ((flags & SATURATED) == 0)] = np.nan
+        data[bad_pixels(hdul["FLAGS"].section[y0:y1, x0:x1])] = np.nan  # FLAGS is row-tiled RICE: a small read
     return subtract_background(map_coordinates(data, [y - y0, x - x0], order=1, cval=np.nan))
 
 
@@ -264,12 +307,11 @@ def read_with_retry(url, ra, dec):
             time.sleep(2 * (attempt + 1))
 
 
-def build(q, name, coord, center, pm, fov, per_group):
+def build(q, name, coord, center, pm, fov, per_group, det):
     """Find, read, align and stack the images; return the API response (without 'cached')."""
-    images = query_images(center)
-    if not images:
-        raise HTTPException(404, "No SPHEREx images cover this position yet.")
-    epochs = [choose_images([images[i] for i in g], per_group) for g in group_epochs([im["mjd"] for im in images])]
+    epochs = plan_epochs(query_images(center), per_group, det)
+    if not epochs:
+        raise HTTPException(404, f"No SPHEREx {det + ' ' if det else ''}images cover this position yet.")
     n = round(fov * 60 / PIXEL_ARCSEC)
     grid = output_wcs(center, n)
     ra, dec = grid.wcs_pix2world(*np.meshgrid(np.arange(n), np.arange(n)), 0)  # indexed [grid y, grid x]
@@ -286,37 +328,43 @@ def build(q, name, coord, center, pm, fov, per_group):
             im["cutout"] = None
             n_failed += 1
 
-    frames, stacks, by_det = [], [], defaultdict(list)
+    frames, stacks, targets, by_det = [], [], [], defaultdict(list)
     for e in epochs:
         used = [im for im in e if im["cutout"] is not None and np.isfinite(im["cutout"]).any()]
         if not used:
             continue
         mjd = float(np.mean([im["mjd"] for im in used]))
-        t = Time(mjd, format="mjd")
+        target = at_epoch(coord, pm, mjd) if pm else center
         ring = None
         if pm:
-            x, y = display_xy(grid, n, at_epoch(coord, pm, mjd))
+            x, y = display_xy(grid, n, target)
             ring = {"x": round(x, 2), "y": round(y, 2)}
         for d in sorted({im["detector"] for im in used}):
             cuts = [im["cutout"] for im in used if im["detector"] == d]
             by_det[d].append({"group_index": len(frames), "img": np.nanmean(cuts, axis=0), "n_images": len(cuts)})
         stacks.append(np.nanmean([im["cutout"] for im in used], axis=0))
-        frames.append({"label": t.strftime("%Y-%m") + " survey", "mjd_mean": round(mjd, 4),
-                       "date": t.strftime("%Y-%m-%d"), "n_images": len(used), "ring": ring})
+        targets.append([float(v) for v in grid.wcs_world2pix(target.ra.deg, target.dec.deg, 0)])
+        frames.append({"label": epoch_label([im["mjd"] for im in used]), "mjd_mean": round(mjd, 4),
+                       "date": Time(mjd, format="mjd").strftime("%Y-%m-%d"), "n_images": len(used), "ring": ring})
     if not frames:
         raise HTTPException(502, "Could not read any SPHEREx image for this position. Try again in a minute.")
 
     lo, hi = np.nanpercentile(stacks, [0.5, 99.7])  # one stretch for all frames, so blinking is fair
-    for frame, s in zip(frames, stacks):
-        frame["png"] = to_png(stretch(s, lo, hi))
+    holes = [saturated_holes(s) for s in stacks]
+    yy, xx = np.indices((n, n))
+    for frame, s, h, (tx, ty) in zip(frames, stacks, holes, targets):
+        frame["saturated"] = bool((h & ((xx - tx) ** 2 + (yy - ty) ** 2 <= 9)).any())  # within 3 px
+        frame["png"] = to_png(stretch(np.where(h, np.inf, s), lo, hi))  # a saturated core shows white
     detectors = {}
     for d, items in sorted(by_det.items()):
         lo_d, hi_d = np.nanpercentile([it["img"] for it in items], [0.5, 99.7])
-        detectors[d] = [{"group_index": it["group_index"], "png": to_png(stretch(it["img"], lo_d, hi_d)),
-                         "n_images": it["n_images"]} for it in items]
+        detectors[d] = [{"group_index": it["group_index"], "n_images": it["n_images"],
+                         "png": to_png(stretch(np.where(saturated_holes(it["img"]), np.inf, it["img"]), lo_d, hi_d))}
+                        for it in items]
     difference = None
     if len(stacks) >= 2:
         diff = stacks[-1] - stacks[0]  # a mover: dark where it was, bright where it is now
+        diff[holes[0] | holes[-1]] = np.nan  # saturated cores have no measurement: gray, like no data
         s = np.nanpercentile(np.abs(diff), 99.7)
         v = 0.5 + 0.5 * np.sign(diff) * stretch(np.abs(diff), 0, s)
         difference = {"png": to_png(np.nan_to_num(v, nan=0.5)),  # no data -> gray (no change), not black
@@ -326,6 +374,7 @@ def build(q, name, coord, center, pm, fov, per_group):
         "name": name,
         "center": {"ra": round(float(center.ra.deg), 6), "dec": round(float(center.dec.deg), 6)},
         "pm": {"pmra": pm[0], "pmdec": pm[1]} if pm else None,
+        "det": det or None,
         "fov_arcmin": fov,
         "pixel_arcsec": PIXEL_ARCSEC,
         "size_px": n,
@@ -337,16 +386,19 @@ def build(q, name, coord, center, pm, fov, per_group):
     }
 
 
-def get_frames(q, fov=5.0, per_group=12):
-    """API response for query q; served from the disk cache when the same view was built before."""
+def get_frames(q, fov=5.0, per_group=12, det=""):
+    """API response for query q; served from the disk cache when the same view was built before.
+
+    det: '' stacks all detectors; 'D1'..'D6' stacks only that detector (D6 suits cold brown dwarfs).
+    """
     coord, name, pm = resolve(q)
     center = at_epoch(coord, pm, CENTER_MJD) if pm else coord
     fov, per_group = float(fov), int(per_group)
-    key = json.dumps([round(center.ra.deg, 5), round(center.dec.deg, 5), fov, per_group])
+    key = json.dumps([round(center.ra.deg, 5), round(center.dec.deg, 5), fov, per_group, det])
     path = CACHE_DIR / (hashlib.sha256(key.encode()).hexdigest() + ".json")
     if path.exists():
         return {**json.loads(path.read_text()), "query": q, "cached": True}
-    result = build(q, name, coord, center, pm, fov, per_group)
+    result = build(q, name, coord, center, pm, fov, per_group, det)
     CACHE_DIR.mkdir(exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=CACHE_DIR, suffix=".tmp")
     with os.fdopen(fd, "w") as f:
