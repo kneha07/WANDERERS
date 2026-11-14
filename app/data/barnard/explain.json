@@ -1,0 +1,18 @@
+{
+ "summary": "Barnard's Star is a cool red dwarf about six light-years away, and it crosses our sky faster than any other star. WANDERERS compared WISE images from 2010 with SPHEREx images from 2026 and saw it move 163 arcseconds. That is 10.39 arcseconds per year, within 0.1% of Gaia's catalogue value, so we are confident about the motion. Its brightness stayed steady within the uncertainty (+0.03 \u00b1 0.03 mag). The star is too bright for SPHEREx, though: all 176 measurements are flagged, so there is no reliable spectrum.",
+ "qa": [
+  {
+   "q": "Why do we think this is what the card says?",
+   "a": "Three checks agree. Between 2010 and 2026 it moved 163 arcseconds, and its measured speed, 10.39 arcseconds per year, matches the Gaia DR3 catalogue value to within 0.1 percent. Gaia also lists it as a known source. It is too bright for SPHEREx, so all 176 SPHEREx measurements are flagged and its center is saturated. The brightness change, +0.03 \u00b1 0.03 magnitudes, is too uncertain to confirm it stayed steady."
+  },
+  {
+   "q": "What would make you less sure?",
+   "a": "The identity is solid: the measured speed matches Gaia within 0.1%. I would be less sure if new images showed the speed drifting from Gaia's, or if the small east-west gap (782 versus 802 thousandths of an arcsecond per year) grew. The brightness is already shaky. All 176 SPHEREx points are flagged as too bright, so the +0.03 mag change, measured from the star's outer glow, is within its \u00b10.03 uncertainty."
+  },
+  {
+   "q": "Why use both WISE and SPHEREx?",
+   "a": "WISE took pictures of this part of the sky in 2010, and SPHEREx took more in 2025 and 2026. Using both gives a 15.7-year gap. Over that time Barnard's Star moved 163 arcseconds, about 26.5 SPHEREx pixels. Its measured speed of 10.39 arcseconds per year matches Gaia DR3. Either telescope on its own would see much less movement. All 176 SPHEREx measurements are flagged because this star is too bright, so no spectrum is shown."
+  }
+ ],
+ "model_note": "Written by Claude (Claude Code, headless) from target.json only."
+}

@@ -1,84 +1,80 @@
-# Field Shift: Adapting Farms with NASA Data
+# WANDERERS
 
-> A decision-support tool that combines NASA Earth observations with local soil information, crop traits, and farmer priorities to help farmers **explore** crop-rotation strategies that strengthen soil health and resilience to changing conditions.
+> Catch what moves in the infrared sky, then read what it is made of.
 
-**2026 NASA Space Apps Challenge** · Challenge: *Field Shift: Adapting Farms with NASA Data* · Subjects: Earth Science, Software
+**NASA Space Apps 2026 · Challenge: Planet X and SPHEREx · Team Hello Universe (Seattle)**
 
-> **Field Shift supports farmer judgment. It does not replace it.** Every recommendation is a starting point for conversation with farmers and local agricultural experts.
+Pluto was found by flipping between two photos of the sky and spotting the dot that moved. WANDERERS does
+that with real infrared data spanning 2010 to 2026, then goes one step further: it uses SPHEREx's
+102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
+evidence on screen. Unmatched objects are called **candidates, never discoveries**.
 
----
+## What it does
 
-## The Problem
+1. **Flipbook across 16 years.** WISE (2010) and SPHEREx (2025, 2026) images of the same patch, matched by
+   wavelength (4.6 µm and 3.4 µm channels), so you compare like with like.
+2. **Gaia "ghosts".** Circles show where every star Gaia knows about *should* be in each frame. Anything that
+   moves without a ghost is unexplained.
+3. **Measured path.** The target's position is measured in every frame and compared with the catalogue motion.
+4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (hundreds of them), each
+   placed at the wavelength that image recorded there, gives a 0.75–5 µm spectrum. Water, methane and CO/CO₂
+   bands are marked.
+5. **Brightness change.** The two SPHEREx sky surveys are compared wavelength by wavelength.
+6. **Evidence card.** Simple, stated rules turn the measurements into a classification and a confidence
+   ("3 of 3 checks support it"). No black-box score.
+7. **Explanations by Claude.** Written from the measurements only, with rules against over-claiming.
 
-Farmers face shifting temperatures, unpredictable rainfall, water shortages, extreme weather, erosion, and declining soil health. Choosing a new crop for a rotation is hard: a crop that improves soil in one place may use too much water, introduce disease, miss the local market, or not fit the growing season somewhere else.
+The five challenge test targets are the five "missions": Barnard's Star, R Draconis, RW Aurigae,
+Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `?target=wise0855&ch=w2`.
 
-## What Field Shift Does
+## Run it
 
-Given a field location, the farmer's current rotation, and their priorities, Field Shift:
+```bash
+# one-time setup
+python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 
-1. **Characterizes local conditions** from long-term NASA datasets (temperature, rainfall, soil moisture, evapotranspiration, vegetation stress, frost risk, water trends).
-2. **Finds vulnerable periods**, such as when fields are typically bare or when the current crop shows stress.
-3. **Compares at least three rotation strategies**, including the existing rotation.
-4. **Explains each strategy**: why it was suggested, supporting evidence, expected benefits, information gaps, and risks that need local review.
-5. **Adapts to farmer priorities**: water conservation, forage value, nitrogen fixation, erosion reduction, organic matter, supplemental income, market suitability.
+# 1. download and cache data (resumable; IRSA is busy during the hackathon, the script retries)
+.venv/bin/python pipeline/fetch.py all
+# 2. measure: frames, motion, spectrum, brightness change
+.venv/bin/python pipeline/analyze.py all
+# 3. evidence cards + target list
+.venv/bin/python pipeline/evidence.py
+# 4. plain-language explanations (Claude Code CLI, headless; no API key)
+.venv/bin/python pipeline/explain.py
 
-## Data Sources
+# view it
+node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -p
+# or any static server on app/, e.g.  python3 -m http.server -d app 8000
+```
 
-| Dataset | Used for |
+`app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
+appears when `server.js` is running.
+
+## Data (all public)
+
+| Source | Used for |
 |---|---|
-| NASA POWER | Temperature, solar radiation, rainfall, frost risk |
-| GPM | Precipitation and extreme-rainfall events |
-| SMAP | Soil moisture and soil moisture anomalies |
-| ECOSTRESS | Land-surface temperature, evapotranspiration, heat/water stress |
-| Landsat / MODIS | NDVI and vegetation indices, bare-field periods |
-| GRACE / GRACE-FO | Long-term groundwater and water-storage trends |
-| SRTM (and other elevation products) | Slope, erosion risk, frost-prone low areas |
-| GEDI (optional) | Biomass |
-| Local soil data (e.g. SoilGrids / SSURGO) | Texture, organic matter, infiltration |
+| NASA SPHEREx DR1 spectral images (IRSA) | 2025 and 2026 images, spectrum, brightness change |
+| NASA WISE / AllWISE atlas (IRSA) | 2010 images at 3.4 and 4.6 µm |
+| ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
+| Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
 
-Datasets with different spatial and temporal resolutions are harmonized onto a common analysis grid (resampling and aggregation) so they can be combined into explainable features.
+Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
+turned off, the conservative bad-pixel flag set from the SPHEREx Explanatory Supplement, 3-pixel aperture
+photometry with local background, and per-pixel solid angle from each image's WCS.
 
-## Rotation Evaluation Criteria
+## Honest limits
 
-- Nutrient cycling (nitrogen-fixing crops such as legumes)
-- Erosion risk and ground cover (cover crops)
-- Organic matter contribution
-- Pest- and disease-cycle disruption
-- Water use and drought tolerance (including deep-rooted crops that improve infiltration)
-- Forage potential and income/market fit
+- Bright stars (Barnard's Star) saturate SPHEREx at many wavelengths; those points are dropped and the card says so.
+- AllWISE is a 2010–2011 coadd; we treat it as epoch 2010.5.
+- Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
+- Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py`.
 
-## Planned Features
+## Repo layout
 
-- Interactive map with overlays: long-term soil moisture, heat waves, water-storage decline, erosion and frost zones
-- Timeline of bare-field periods and crop-stress seasons
-- Farmer priority and constraint inputs (water availability, equipment, markets)
-- Side-by-side rotation comparison with plain-language explanations
-- Scenario sliders for rainfall and temperature changes
-- Glossary: evapotranspiration, soil moisture anomaly, NDVI, frost risk, water balance
-- Uncertainty display and clear flags for where local expertise must validate results
-
-## Satellite vs. Ground Data
-
-Satellites give consistent, long-term, wide coverage but at coarse resolution and with indirect measurements. Ground measurements (soil tests, field observations, farmer experience) are precise but local. Field Shift uses satellite data for patterns and trends, and asks users to supply local knowledge to ground-truth them.
-
-## Limitations
-
-- Outputs are pattern-based and probabilistic, not guarantees.
-- Coarse satellite resolution may miss field-scale variation.
-- Pest, disease, market, and equipment factors need local review.
-
-## Getting Started
-
-_Setup instructions coming soon._
-
-## Team
-
-_Add team members here._
-
-## License
-
-_To be decided._
-
-## Acknowledgments
-
-NASA Earth science data and the NASA Space Apps Challenge.
+```
+pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py
+app/        index.html · style.css · app.js · data/<target>/ (generated)
+server.js   local demo server with live Claude answers
+docs/field-shift/   our earlier Field Shift plan
+```
