@@ -88,11 +88,16 @@ http.createServer(async (req, res) => {
         if (err) { res.writeHead(502); return res.end(JSON.stringify({ error: "Claude CLI failed: " + (errOut || err.message).slice(0, 200) })); }
         res.writeHead(200); res.end(JSON.stringify({ answer: out.trim() }));
       });
-    } catch (e) { res.writeHead(400); res.end(JSON.stringify({ error: String(e.message || e) })); }
+    } catch (e) {   // never send fs errors (they hold server paths) to the client
+      if (e.code === "ENOENT") { res.writeHead(404); return res.end(JSON.stringify({ error: "unknown target" })); }
+      res.writeHead(400); res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) }));
+    }
     return;
   }
   // static files, no directory traversal
-  let p = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname)));
+  let p;
+  try { p = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname))); }
+  catch { res.writeHead(400); return res.end("bad URL"); }   // malformed %-escape must not crash the server
   if (!p.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
   fs.readFile(p, (err, data) => {
     if (err) { res.writeHead(404); return res.end("not found"); }
