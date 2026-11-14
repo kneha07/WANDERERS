@@ -4,3 +4,7 @@ __pycache__/
 web/node_modules/
 web/dist/
 .worktrees/
+data/cache/
+.venv/
+.DS_Store
+data/*.log
