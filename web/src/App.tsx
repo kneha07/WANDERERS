@@ -2,72 +2,51 @@
 //
 //   home (no q) ──search/chip──► loading ──► result | empty (404) | error (400/502/timeout/offline)
 //   result ──search/chip──► loading (the old result stays, dimmed, until the new one lands)
-//   result ──click pixel──► popover (the only layer) ──Esc/close/backdrop/Back──► result
+//   any ──"?" or first visit──► tutorial (the only layer) ──Esc/close/backdrop/Back──► where it was
 //
-// URL ?q=&fov=&view=&det= : a search is a new place (pushState); toggles replace it (replaceState);
-// popstate re-reads the URL, so Back returns to the previous target or home in one press.
+// URL ?q=&fov=&view=&det=&look=&c= : a search is a new place (pushState); toggles and new candidates replace it
+// (replaceState); popstate re-reads the URL, so Back returns to the previous target or home in one press.
 import { useEffect, useReducer, useRef, useState } from 'react'
-import type { FormEvent, MouseEvent } from 'react'
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { marksFromParam, marksToParam } from './data'
+import type { Result } from './data'
+import { AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard } from './panels'
+import { COLOUR_LINE, EXAMPLES, FieldGuide, TaskTab, Thumbs, Tutorial, reportText } from './rail'
+import SkyContext from './SkyContext'
+import SkyNow, { CITIES } from './SkyNow'
+import type { Here } from './SkyNow'
+import { decText, pixelToSky, raText } from './sky'
+import type { RaDec } from './sky'
+import { LOOKS, needsRgb, Stage, Timeline } from './viewer'
+import type { Look } from './viewer'
 
-type Ring = { x: number; y: number }
-type Frame = {
-  label: string
-  mjd_mean: number
-  date: string
-  n_images: number
-  png: string
-  ring: Ring | null
-  saturated: boolean
-}
-type DetectorFrame = { group_index: number; png: string; n_images: number }
-type Result = {
-  query: string
-  name: string | null
-  center: { ra: number; dec: number }
-  pm: { pmra: number; pmdec: number } | null
-  det: string | null
-  fov_arcmin: number
-  pixel_arcsec: number
-  size_px: number
-  frames: Frame[]
-  detectors: Record<string, DetectorFrame[]>
-  difference: { png: string; from: string; to: string } | null
-  n_images_used: number
-  n_failed: number
-  cached: boolean
-}
 type View = 'blink' | 'diff'
-type Place = { q: string; fov: number; view: View; det: string } // everything the URL holds
+type Place = { q: string; fov: number; view: View; det: string; look: Look; marks: RaDec[] } // everything the URL holds
 type Failure = { kind: 'empty' | 'input' | 'busy' | 'timeout' | 'offline' | 'server'; message: string }
+type Layer = 'tutorial' | null
 type State = Place & {
   status: 'home' | 'loading' | 'result' | 'empty' | 'error'
   result: Result | null // the last result; it stays on screen, dimmed, while the next one loads
   failure: Failure | null
   attempt: number // Retry bumps it, so the same place loads again
   since: number // when loading started (ms), for the elapsed-seconds counter
-  pick: { ra: number; dec: number } | null // the pixel popover
+  layer: Layer
 }
 type Action =
   | { type: 'place'; place: Place; cached: Result | null; at: number }
   | { type: 'loaded'; key: string; result: Result }
   | { type: 'failed'; key: string; failure: Failure }
   | { type: 'retry'; at: number }
-  | { type: 'pick'; ra: number; dec: number }
-  | { type: 'unpick' }
+  | { type: 'layer'; layer: Layer }
 
 // det: the WISE 0855 brown dwarf is bright only near 4.5 um, so its chip opens the D6 stack.
+// id: the WANDERERS mission id (app/data/index.json), for the deep-dive link.
 const TARGETS = [
   { id: 'barnard', q: "Barnard's Star", det: '', label: "Barnard's Star", note: 'fastest-moving star' },
   { id: 'eps_indi_b', q: 'eps Ind B', det: '', label: 'Epsilon Indi B', note: 'fast brown dwarf pair' },
-  {
-    id: 'wise0855',
-    q: 'WISE J085510.83-071442.5',
-    det: 'D6',
-    label: 'WISE 0855',
-    note: 'cold brown dwarf, D6 stack; uses the 2026 position; the challenge coordinates are from 2010',
-  },
-  { id: 'rw_aur', q: 'RW Aur', det: '', label: 'RW Aurigae', note: 'variable star' },
-  { id: 'r_dra', q: 'R Dra', det: '', label: 'R Draconis', note: 'variable star, many images' },
+  { id: 'wise0855', q: 'WISE J085510.83-071442.5', det: 'D6', label: 'WISE 0855', note: 'cold brown dwarf, D6 stack (2026 position)' },
+  { id: 'rw_aur', q: 'RW Aur', det: '', label: 'RW Aurigae', note: 'young variable star' },
+  { id: 'r_dra', q: 'R Dra', det: '', label: 'R Draconis', note: 'pulsating giant, many images' },
 ]
 const DETECTORS = [
   ['', 'All detectors, stacked'],
@@ -78,31 +57,48 @@ const DETECTORS = [
   ['D5', 'D5 only (3.83–4.41 µm)'],
   ['D6', 'Long-wavelength stack (D6 only, 4.42–5.00 µm): best for cold brown dwarfs like WISE 0855'],
 ]
+const TABS = [
+  ['task', 'Task'],
+  ['data', 'Data'],
+  ['guide', 'Field guide'],
+] as const
+type Tab = (typeof TABS)[number][0]
 const TIMEOUT_MS = 180_000
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches
+const TUTORIAL_KEY = 'wanderers-explore-tutorial-seen'
+const MAX_MARKS = 20
 
 const clampFov = (f: number) => Math.min(15, Math.max(2, Math.round(f) || 5))
-const deg = (v: number, sign = false) => (sign && v >= 0 ? '+' : '') + v.toFixed(5) + '°'
 const keyOf = (p: { q: string; fov: number; det: string }) => `${p.q}|${p.fov}|${p.det}`
-const placeOf = (s: State): Place => ({ q: s.q, fov: s.fov, view: s.view, det: s.det })
+const placeOf = (s: State): Place => ({ q: s.q, fov: s.fov, view: s.view, det: s.det, look: s.look, marks: s.marks })
+const short = (v: number) => (v < 1 ? v.toFixed(2) : v.toPrecision(2))
 
 function readUrl(): Place {
   const p = new URLSearchParams(location.search)
   const det = p.get('det') ?? ''
+  const look = LOOKS.find(([k]) => k === p.get('look'))?.[0] ?? 'raw'
   return {
     q: (p.get('q') ?? '').trim(),
     fov: clampFov(Number(p.get('fov') ?? 5)),
     view: p.get('view') === 'diff' ? 'diff' : 'blink',
     det: /^D[1-6]$/.test(det) ? det : '',
+    look,
+    marks: marksFromParam(p.get('c')),
   }
 }
 
 function urlOf(p: Place): string {
-  if (!p.q) return location.pathname
-  const s = new URLSearchParams({ q: p.q, fov: String(p.fov) })
-  if (p.view === 'diff') s.set('view', 'diff')
-  if (p.det) s.set('det', p.det)
-  return `${location.pathname}?${s}`
+  const s = new URLSearchParams()
+  if (p.q) {
+    s.set('q', p.q)
+    s.set('fov', String(p.fov))
+    if (p.view === 'diff') s.set('view', 'diff')
+    if (p.det) s.set('det', p.det)
+  }
+  if (p.look !== 'raw') s.set('look', p.look) // the look persists across targets
+  if (p.q && p.marks.length) s.set('c', marksToParam(p.marks))
+  const qs = s.toString()
+  return location.pathname + (qs ? `?${qs}` : '')
 }
 
 function failureOf(status: number, detail: unknown): Failure {
@@ -120,10 +116,10 @@ function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'place': {
       const p = a.place
-      if (!p.q) return { ...s, ...p, status: 'home', failure: null, pick: null }
+      if (!p.q) return { ...s, ...p, status: 'home', failure: null }
       if (keyOf(p) === keyOf(s) && s.status !== 'home') return { ...s, ...p } // a toggle: same data
-      if (a.cached) return { ...s, ...p, status: 'result', result: a.cached, failure: null, pick: null }
-      return { ...s, ...p, status: 'loading', failure: null, pick: null, since: a.at }
+      if (a.cached) return { ...s, ...p, status: 'result', result: a.cached, failure: null }
+      return { ...s, ...p, status: 'loading', failure: null, since: a.at }
     }
     case 'loaded':
       return a.key === keyOf(s) ? { ...s, status: 'result', result: a.result } : s
@@ -131,29 +127,37 @@ function reducer(s: State, a: Action): State {
       return a.key === keyOf(s) ? { ...s, status: a.failure.kind === 'empty' ? 'empty' : 'error', failure: a.failure } : s
     case 'retry':
       return { ...s, status: 'loading', failure: null, attempt: s.attempt + 1, since: a.at }
-    case 'pick':
-      return { ...s, pick: { ra: a.ra, dec: a.dec } }
-    case 'unpick':
-      return { ...s, pick: null }
+    case 'layer':
+      return { ...s, layer: a.layer }
   }
 }
 
 function initState(): State {
   const p = readUrl()
-  return { ...p, status: p.q ? 'loading' : 'home', result: null, failure: null, attempt: 0, since: Date.now(), pick: null }
+  return { ...p, status: p.q ? 'loading' : 'home', result: null, failure: null, attempt: 0, since: Date.now(), layer: null }
 }
 
-function lookupLinks(ra: number, dec: number): [string, string][] {
-  const r = ra.toFixed(5)
-  const d = dec.toFixed(5)
-  const coord = encodeURIComponent(`${r} ${d}`)
-  return [
-    ['SIMBAD', `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${coord}&Radius=10&Radius.unit=arcsec`],
-    ['Gaia DR3 (VizieR)', `https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=I/355/gaiadr3&-c=${coord}&-c.rs=10`],
-    ['WiseView', `http://byw.tools/wiseview#ra=${r}&dec=${d}&size=176&band=3&speed=164&minbright=-50.0000&maxbright=500.0000&window=0.5&diff_window=1&linear=1&color=&zoom=9&border=0&gaia=1&invert=1&maxdyr=0&scandir=0&neowise=0&diff=0&outer_epochs=0&unique_window=1&smooth_scan=0&shift=0&pmra=0&pmdec=0`],
-    ['Backyard Worlds', 'https://www.zooniverse.org/projects/marckuchner/backyard-worlds-planet-9/talk'],
-  ]
+/** True once: the first visit in this browser. Storage can be blocked; then the tutorial waits for the "?" button. */
+function firstVisit() {
+  try {
+    if (localStorage.getItem(TUTORIAL_KEY)) return false
+    localStorage.setItem(TUTORIAL_KEY, '1')
+    return true
+  } catch {
+    return false
+  }
 }
+
+const PlayIcon = ({ playing }: { playing: boolean }) => (
+  <svg className="icon" viewBox="0 0 20 20" aria-hidden="true">
+    {playing ? <path d="M6 4h3v12H6zM11 4h3v12h-3z" fill="currentColor" /> : <path d="M6 4l10 6-10 6z" fill="currentColor" />}
+  </svg>
+)
+const StepIcon = ({ dir }: { dir: 1 | -1 }) => (
+  <svg className="icon" viewBox="0 0 20 20" aria-hidden="true" style={dir < 0 ? { transform: 'scaleX(-1)' } : undefined}>
+    <path d="M5 4l8 6-8 6zM14 4h2v12h-2z" fill="currentColor" />
+  </svg>
+)
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, null, initState)
@@ -162,14 +166,19 @@ export default function App() {
   const [playing, setPlaying] = useState(!REDUCED_MOTION)
   const [fps, setFps] = useState(2)
   const [showRing, setShowRing] = useState(true)
+  const [showGaia, setShowGaia] = useState(true)
   const [showCross, setShowCross] = useState(false)
+  const [bri, setBri] = useState(1)
+  const [con, setCon] = useState(1)
+  const [tab, setTab] = useState<Tab>('task')
+  const [here, setHere] = useState<Here>(CITIES[0]) // memory only, never stored or sent
   const [preloaded, setPreloaded] = useState<Result | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [toast, setToast] = useState('')
-  const cache = useRef(new Map<string, Result>()) // q+fov -> result: Back to a target is instant
-  const stageRef = useRef<HTMLDivElement>(null)
+  const cache = useRef(new Map<string, Result>()) // q+fov+det -> result: Back to a target is instant
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const closeRef = useRef<HTMLButtonElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
   const toastTimer = useRef(0)
   const key = keyOf(state)
   const r = state.result
@@ -191,24 +200,37 @@ export default function App() {
     if (!q) return
     if (keyOf({ q, fov: state.fov, det }) === key && (state.status === 'error' || state.status === 'empty'))
       dispatch({ type: 'retry', at: Date.now() })
-    else go({ q, view: 'blink', det }, 'push')
+    else go({ q, view: 'blink', det, marks: [] }, 'push')
   }
 
-  // First arrival from outside (shared link): put home under it, so Back stays in the app.
+  const openTutorial = () => {
+    returnFocus.current = document.activeElement as HTMLElement | null
+    history.pushState({ app: 1, layer: 'tutorial' }, '', location.href)
+    dispatch({ type: 'layer', layer: 'tutorial' })
+  }
+  // Esc, the close buttons, a backdrop click and browser Back all end here.
+  const closeLayer = () => {
+    if (history.state?.layer) history.back()
+    else dispatch({ type: 'layer', layer: null })
+  }
+
+  // First arrival from outside (shared link): put home under it, so Back stays in the app. Then the first-run tutorial.
   useEffect(() => {
-    if (history.state?.app && !history.state?.pick) return
-    const here = location.pathname + location.search
-    const deep = readUrl().q !== ''
-    history.replaceState({ app: 1 }, '', location.pathname)
-    if (deep) history.pushState({ app: 1 }, '', here)
-  }, [])
+    if (!history.state?.app || history.state?.layer) {
+      const deepUrl = location.pathname + location.search
+      const place = readUrl()
+      history.replaceState({ app: 1 }, '', urlOf({ ...place, q: '' }))
+      if (place.q) history.pushState({ app: 1 }, '', deepUrl)
+    }
+    if (firstVisit()) openTutorial()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onPop = () => {
       const place = readUrl()
       setInput(place.q)
       dispatch({ type: 'place', place, cached: cache.current.get(keyOf(place)) ?? null, at: Date.now() })
-      if (!history.state?.pick) dispatch({ type: 'unpick' })
+      if (!history.state?.layer) dispatch({ type: 'layer', layer: null })
     }
     addEventListener('popstate', onPop)
     return () => removeEventListener('popstate', onPop)
@@ -266,7 +288,7 @@ export default function App() {
     if (!r) return
     let live = true
     const srcs = [
-      ...r.frames.map((f) => f.png),
+      ...r.frames.flatMap((f) => (f.rgb_png ? [f.png, f.rgb_png] : [f.png])),
       ...Object.values(r.detectors).flatMap((d) => d.map((x) => x.png)),
       ...(r.difference ? [r.difference.png] : []),
     ]
@@ -288,8 +310,9 @@ export default function App() {
 
   const frames = r?.frames ?? []
   const count = frames.length
-  const frame = count ? frames[index % count] : null
-  const canPlay = state.status === 'result' && preloaded === r && state.view === 'blink' && !state.pick && count > 1
+  const at = count ? index % count : 0
+  const frame = count ? frames[at] : null
+  const canPlay = state.status === 'result' && preloaded === r && state.view === 'blink' && !state.layer && count > 1
 
   useEffect(() => {
     if (!canPlay || !playing) return
@@ -305,11 +328,11 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
 
-  // Keyboard: space = play or pause, arrows = step. Text fields, sliders and the popover keep their keys.
+  // Keyboard: space = play or pause, arrows = step. Text fields, menus, tabs and the layer keep their keys.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement
-      if (!count || state.pick || el.closest('input, textarea, select')) return
+      if (!count || state.layer || el.closest('input, textarea, select, [role=tablist], dialog')) return
       if (e.key === ' ') {
         if (el.closest('button, a, summary')) return // the browser activates the focused control
         e.preventDefault()
@@ -322,319 +345,475 @@ export default function App() {
     }
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
-  }, [count, state.pick])
+  }, [count, state.layer])
 
-  // The popover is a native modal <dialog>: focus moves in, the page behind is inert.
+  // The layer is a native modal <dialog>: focus moves in, the page behind is inert; focus returns on close.
   useEffect(() => {
     const d = dialogRef.current
     if (!d) return
-    if (state.pick && !d.open) {
+    if (state.layer && !d.open) {
       d.showModal()
-      closeRef.current?.focus()
-    } else if (!state.pick && d.open) {
+      d.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+    } else if (!state.layer && d.open) {
       d.close()
-      stageRef.current?.focus()
+      const back = returnFocus.current
+      ;(back?.isConnected && back !== document.body ? back : searchRef.current)?.focus()
     }
-  }, [state.pick])
-
-  // Esc, the close button, a backdrop click and browser Back all end here.
-  const closePick = () => {
-    if (history.state?.pick) history.back()
-    else dispatch({ type: 'unpick' })
-  }
-
-  const onPick = (e: MouseEvent<HTMLDivElement>) => {
-    if (!r || state.status !== 'result') return
-    // North up, east left; small-field approximation around the center.
-    const box = e.currentTarget.getBoundingClientRect()
-    const n = r.size_px
-    const scale = r.pixel_arcsec / 3600
-    const dx = ((e.clientX - box.left) / box.width) * n - n / 2 // grid pixels right of center (west)
-    const dy = ((e.clientY - box.top) / box.height) * n - n / 2 // grid pixels below center (south)
-    const dec = r.center.dec - dy * scale
-    const ra = (r.center.ra - (dx * scale) / Math.cos((r.center.dec * Math.PI) / 180) + 360) % 360
-    history.pushState({ app: 1, pick: 1 }, '', location.href)
-    dispatch({ type: 'pick', ra, dec })
-  }
+  }, [state.layer])
 
   const say = (text: string) => {
     clearTimeout(toastTimer.current)
     setToast(text)
-    toastTimer.current = window.setTimeout(() => setToast(''), 3000)
+    toastTimer.current = window.setTimeout(() => setToast(''), 4000)
   }
-  const copyLink = () =>
-    navigator.clipboard.writeText(location.href).then(
-      () => say('Link copied'),
+  const copy = (text: string, done: string) =>
+    navigator.clipboard.writeText(text).then(
+      () => say(done),
       () => say('Could not copy. Use the address bar.'),
     )
+
+  const pickFrame = (i: number) => {
+    setPlaying(false)
+    setIndex(i)
+  }
+
+  const mark = (x: number, y: number) => {
+    if (!r || state.status !== 'result') return
+    if (state.marks.length >= MAX_MARKS) return say(`At most ${MAX_MARKS} candidates. Remove one first.`)
+    const p = pixelToSky(r, x, y)
+    go({ marks: [...state.marks, { ra: +p.ra.toFixed(5), dec: +p.dec.toFixed(5) }] }, 'replace')
+    setTab('task')
+    say(`Candidate ${state.marks.length + 1} marked at ${raText(p.ra)} ${decText(p.dec)}. See the Task tab.`)
+  }
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     search(input)
   }
 
+  const tabKeys = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const i = TABS.findIndex(([id]) => id === tab)
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key]
+    if (next === undefined) return
+    e.preventDefault()
+    const t = TABS[(next + TABS.length) % TABS.length][0]
+    setTab(t)
+    document.getElementById(`tab-${t}`)?.focus()
+  }
+
   const busy = loading && input.trim() === state.q
-  const n = r?.size_px ?? 1
-  const showDiff = state.view === 'diff' && r?.difference
-  const ring = showDiff ? r.frames[r.frames.length - 1].ring : frame?.ring
+  const showDiff = state.view === 'diff' && !!r?.difference
+  const rgbOk = !!r?.frames.some((f) => f.rgb_png)
+  const wl = r?.rgb?.wavelength_um
+  const satN = r?.frames.filter((f) => f.saturated).length ?? 0
+  const current = TARGETS.find((t) => t.q === state.q)
 
   return (
-    <main>
-      <header>
-        <a className="back-link" href="/">
-          ← WANDERERS missions
-        </a>
-        <h1>SPHEREx Blink</h1>
-        <p className="lead">
-          Watch one patch of sky change over SPHEREx's surveys. A <strong>mover</strong> is an object whose position
-          changes between surveys (a nearby star or brown dwarf). A <strong>blinker</strong> changes in brightness (a
-          variable star).
+    <>
+      <header className="topbar">
+        <p className="brand">
+          WANDERERS <span>· Explore</span>
         </p>
-      </header>
-
-      <form className="search" onSubmit={onSubmit} role="search">
-        <label htmlFor="q">Target name or RA/Dec</label>
-        <div className="row">
+        <form className="search" onSubmit={onSubmit} role="search">
+          <label htmlFor="q" className="sr-only">
+            Target name or RA/Dec
+          </label>
           <input
             id="q"
+            ref={searchRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Barnard's Star, or 269.45 4.69"
             autoComplete="off"
           />
-          <button id="search-btn" type="submit" disabled={busy || !input.trim()} aria-busy={busy}>
+          <button id="search-btn" className="primary" type="submit" disabled={busy || !input.trim()} aria-busy={busy}>
             {busy ? 'Searching…' : 'Show'}
           </button>
-        </div>
-      </form>
-
-      {state.status === 'home' && (
-        <p id="home-hint" className="hint">
-          Type a star name or a sky position, or pick a test target.
-        </p>
-      )}
-      {state.status === 'empty' && (
-        <div id="empty-state" className="panel">
-          <p>No SPHEREx images cover this position yet. Try one of the test targets below.</p>
-        </div>
-      )}
-      {state.status === 'error' && state.failure && (
-        <div className="panel error" role="alert">
-          <p>{state.failure.message}</p>
-          {state.failure.kind === 'input' && (
-            <p className="hint">Examples: Barnard's Star · 269.45 4.69 · 17h57m48.5s +04d41m36s</p>
-          )}
-          <button type="button" onClick={() => dispatch({ type: 'retry', at: Date.now() })}>
-            Retry
+        </form>
+        <nav className="topbar-links" aria-label="Site">
+          <button type="button" id="help-btn" onClick={openTutorial} aria-label="How to look: open the tutorial">
+            ?
           </button>
-        </div>
-      )}
+          <a href="/">← Missions</a>
+        </nav>
+      </header>
 
-      <ul className="chips" aria-label="Test targets">
-        {TARGETS.map((t) => (
-          <li key={t.q}>
-            <button
-              type="button"
-              className="chip"
-              data-target={t.q}
-              onClick={() => {
-                setInput(t.q)
-                search(t.q, t.det)
-              }}
-            >
-              <strong>{t.label}</strong>
-              <span>{t.note}</span>
-            </button>
-            <a className="deep-link" href={`/?target=${t.id}`}>
-              Deep dive in WANDERERS
-            </a>
-          </li>
-        ))}
-      </ul>
-
-      {(loading || state.status === 'result') && (
-        <section className="viewer" data-status={state.status} aria-busy={loading} aria-label="Blink viewer">
-          <p className="target">
-            {loading || !r ? (
-              <>Loading {state.q}…</>
-            ) : (
-              <>
-                <strong>{r.name ?? r.query}</strong> · RA {deg(r.center.ra)} Dec {deg(r.center.dec, true)}
-                {r.pm && ' · 2026.0 position'} · {r.fov_arcmin}′ field
-              </>
-            )}
-          </p>
-
-          <div className="views" role="group" aria-label="View">
-            <button type="button" aria-pressed={state.view === 'blink'} disabled={!r} onClick={() => go({ view: 'blink' }, 'replace')}>
-              Blink
-            </button>
-            <button type="button" aria-pressed={state.view === 'diff'} disabled={!r} onClick={() => go({ view: 'diff' }, 'replace')}>
-              Difference
-            </button>
-          </div>
-
-          <div className="stage" ref={stageRef} tabIndex={-1} onClick={onPick}>
-            {r && frame && (
-              <img
-                src={showDiff ? r.difference!.png : frame.png}
-                alt={
-                  showDiff
-                    ? `Difference image, ${r.difference!.to} minus ${r.difference!.from}`
-                    : `SPHEREx ${frame.label}, ${frame.date}, ${frame.n_images} images stacked`
-                }
-              />
-            )}
-            {r && (
-              <svg viewBox={`0 0 ${n} ${n}`} aria-hidden="true">
-                {showRing && ring && <circle cx={ring.x} cy={ring.y} r={2.5} className="ring" />}
-                {showCross && <path className="cross" d={`M${n / 2 - 3} ${n / 2}h2m2 0h2M${n / 2} ${n / 2 - 3}v2m0 2v2`} />}
-              </svg>
-            )}
-            {loading && (
-              <p className="indicator" role="status">
-                <span>
-                  Fetching SPHEREx images from IRSA. The first load of a target takes up to a minute; later loads are
-                  instant. <span aria-hidden="true">{elapsed} s</span>
-                </span>
-              </p>
-            )}
-          </div>
-
-          <p className="frame-label" aria-live={playing ? 'off' : 'polite'}>
-            {!loading && frame && !showDiff
-              ? `${frame.label} · ${frame.n_images} images · frame ${(index % count) + 1} of ${count}`
-              : !loading && showDiff
-                ? `${r.difference!.to} minus ${r.difference!.from}`
-                : ' '}
-          </p>
-
-          <p className="saturated-note">
-            {!loading && r?.frames.some((f) => f.saturated)
-              ? 'Saturated: SPHEREx cannot measure this star’s brightness change here. The white core has no data.'
-              : ' '}
-          </p>
-
-          {state.view === 'diff' && r && !loading ? (
-            <p className="diff-note">
-              {r.difference
-                ? 'A mover shows as a dark and bright pair: dark where it was, bright where it is now. A blinker shows as a dark or bright spot.'
-                : 'A difference needs at least two surveys. This position has only one so far.'}
-            </p>
-          ) : (
-            <div className="controls">
-              <button type="button" onClick={() => setPlaying((p) => !p)} disabled={!canPlay}>
-                {playing && canPlay ? 'Pause' : 'Play'}
-              </button>
-              <button type="button" onClick={() => setIndex((index + count - 1) % count)} disabled={!canPlay} aria-label="Previous frame">
-                ◀
-              </button>
-              <button type="button" onClick={() => setIndex((index + 1) % count)} disabled={!canPlay} aria-label="Next frame">
-                ▶
-              </button>
-              <label className="speed">
-                Speed {fps}/s
-                <input type="range" min={1} max={10} value={fps} onChange={(e) => setFps(Number(e.target.value))} />
-              </label>
+      <main className="page">
+        <div className="status-row">
+          {state.status === 'empty' && (
+            <div id="empty-state" className="state">
+              <p>No SPHEREx images cover this position yet. Try one of the test targets below.</p>
             </div>
           )}
+          {state.status === 'error' && state.failure && (
+            <div className="state error" role="alert">
+              <AlertIcon />
+              <p>
+                {state.failure.message}
+                {state.failure.kind === 'input' && (
+                  <span className="hint" style={{ display: 'block' }}>
+                    Examples: Barnard's Star · 269.45 4.69 · 17h57m48.5s +04d41m36s
+                  </span>
+                )}
+              </p>
+              <button type="button" onClick={() => dispatch({ type: 'retry', at: Date.now() })}>
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
 
-          <div className="toggles">
-            <label>
-              <input type="checkbox" checked={showRing} onChange={(e) => setShowRing(e.target.checked)} disabled={!r?.pm} />
-              Show where to look{r && !r.pm && ' (needs a known proper motion: search by name)'}
-            </label>
-            <label>
-              <input type="checkbox" checked={showCross} onChange={(e) => setShowCross(e.target.checked)} />
-              Crosshair at center
-            </label>
-          </div>
-          <p className="hint">
-            Click a pixel to look it up in other catalogs. Black means no data (off the detector). White in a star core means saturated.
-            Keys: Space plays or pauses, ← and → step.
-          </p>
-
-          <div className="share">
-            <button type="button" onClick={copyLink} disabled={!r}>
-              Copy share link
-            </button>
-            <span className="toast" role="status">
-              {toast}
-            </span>
-          </div>
-
-          {r && (
-            <details className="expert">
-              <summary>Expert</summary>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  go({ fov: clampFov(Number(new FormData(e.currentTarget).get('fov'))) }, 'replace')
+        <ul className="chips" aria-label="Test targets">
+          {TARGETS.map((t) => (
+            <li key={t.q}>
+              <button
+                type="button"
+                className="chip"
+                data-target={t.q}
+                aria-current={current === t ? 'true' : undefined}
+                onClick={() => {
+                  setInput(t.q)
+                  search(t.q, t.det)
                 }}
               >
-                <label>
-                  Field of view (arcmin, 2 to 15)
-                  <input key={state.fov} name="fov" type="number" min={2} max={15} step={1} defaultValue={state.fov} />
-                </label>
-                <button type="submit">Apply</button>
-              </form>
-              <label>
-                Detector
-                <select value={state.det} onChange={(e) => go({ det: e.target.value }, 'replace')}>
-                  {DETECTORS.map(([value, text]) => (
-                    <option key={value} value={value}>
-                      {text}
-                    </option>
+                <strong>{t.label}</strong>
+                <span>{t.note}</span>
+              </button>
+              <a className="deep-link" href={`/?target=${t.id}`}>
+                Deep dive in WANDERERS →
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        {state.status === 'home' && (
+          <div className="home">
+            <section className="panel">
+              <header className="panel-head">
+                <h2 className="panel-title">Explore any patch of sky</h2>
+              </header>
+              <div className="panel-body">
+                <h1>Blink NASA SPHEREx images to find what moves or changes</h1>
+                <p id="home-hint" className="muted">
+                  Type a star name or a sky position, or pick a test target.
+                </p>
+                <p>
+                  The tool gets the SPHEREx survey images of that patch from IRSA, stacks one frame per survey and plays them as a
+                  flipbook. A <strong>mover</strong> changes position between surveys (a nearby star or brown dwarf). A{' '}
+                  <strong>blinker</strong> changes brightness (a variable star).
+                </p>
+                <p className="hint">
+                  Then mark candidates, check them against Gaia DR3 and SIMBAD, and report them on Backyard Worlds Talk.
+                </p>
+              </div>
+            </section>
+            {EXAMPLES.map((ex) => (
+              <section className="panel" key={ex.id}>
+                <header className="panel-head">
+                  <h2 className="panel-title">Field guide · {ex.title}</h2>
+                </header>
+                <div className="panel-body example">
+                  <Thumbs ex={ex} reduced={REDUCED_MOTION} />
+                  <p>{ex.text}</p>
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {(loading || state.status === 'result') && (
+          <div className="results" data-status={state.status} aria-busy={loading}>
+            <div className="workspace">
+              <section className="viewer" data-status={state.status} aria-label="Flipbook">
+                <div className="target-line" id="target-line">
+                  <h1 id="target-name">{loading || !r ? `Loading ${state.q}…` : (r.name ?? r.query)}</h1>
+                  {r && !loading && (
+                    <span className="mono muted">
+                      {raText(r.center.ra)} {decText(r.center.dec)} · {r.pm ? 'J2026.0' : 'as entered'} · {r.fov_arcmin}′ ·{' '}
+                      {count} frames
+                    </span>
+                  )}
+                </div>
+                <Boundary name="Flipbook">
+                  <div className="flip">
+                    <Stage
+                      r={r}
+                      index={at}
+                      diff={state.view === 'diff'}
+                      look={state.look}
+                      bri={bri}
+                      con={con}
+                      ring={showRing && !!r?.pm}
+                      gaia={showGaia}
+                      cross={showCross}
+                      marks={state.marks}
+                      loading={loading}
+                      elapsed={elapsed}
+                      query={state.q}
+                      onMark={mark}
+                    />
+                    <p className="frame-label" aria-live={playing ? 'off' : 'polite'}>
+                      {!loading && frame && !showDiff
+                        ? `${frame.label} · ${frame.n_images} images · frame ${at + 1} of ${count}`
+                        : !loading && showDiff
+                          ? `Difference: ${r!.difference!.to} minus ${r!.difference!.from}`
+                          : ' '}
+                    </p>
+                    <p className="note">
+                      {!loading && state.view === 'diff' && r
+                        ? r.difference
+                          ? 'A mover shows as a dark and bright pair: dark where it was, bright where it is now. A blinker shows as a dark or bright spot.'
+                          : 'A difference needs at least two surveys. This position has only one so far.'
+                        : !loading && satN
+                          ? `Saturated in ${satN} of ${count} frames: SPHEREx cannot measure this star’s brightness change here. The white core has no data.${r!.frames.some((f) => f.centroid?.saturated) ? ' Positions come from the wings.' : ''}`
+                          : ' '}
+                    </p>
+                    <div className="toolbar" role="toolbar" aria-label="Flipbook controls">
+                      <div className="group">
+                        <button
+                          type="button"
+                          onClick={() => setPlaying((p) => !p)}
+                          disabled={!canPlay}
+                          aria-label={playing && canPlay ? 'Pause' : 'Play'}
+                        >
+                          <PlayIcon playing={playing && canPlay} />
+                        </button>
+                        <button type="button" onClick={() => pickFrame((at + count - 1) % count)} disabled={!canPlay} aria-label="Previous frame">
+                          <StepIcon dir={-1} />
+                        </button>
+                        <button type="button" onClick={() => pickFrame((at + 1) % count)} disabled={!canPlay} aria-label="Next frame">
+                          <StepIcon dir={1} />
+                        </button>
+                        <label className="speed">
+                          {fps}/s
+                          <input type="range" min={1} max={10} value={fps} onChange={(e) => setFps(Number(e.target.value))} aria-label="Speed, frames per second" />
+                        </label>
+                      </div>
+                      <div className="group" role="group" aria-label="View">
+                        <button type="button" aria-pressed={state.view === 'blink'} disabled={!r} onClick={() => go({ view: 'blink' }, 'replace')}>
+                          Blink
+                        </button>
+                        <button type="button" aria-pressed={state.view === 'diff'} disabled={!r} onClick={() => go({ view: 'diff' }, 'replace')}>
+                          Difference
+                        </button>
+                      </div>
+                      <div className="group" role="group" aria-label="Overlays">
+                        <button
+                          type="button"
+                          className="toggle"
+                          aria-pressed={showRing && !!r?.pm}
+                          disabled={!r?.pm}
+                          onClick={() => setShowRing((v) => !v)}
+                          title={r && !r.pm ? 'Needs a known proper motion: search by name' : 'Where the target should be'}
+                        >
+                          <svg viewBox="0 0 16 16" aria-hidden="true">
+                            <circle cx="8" cy="8" r="5.5" fill="none" strokeWidth="2" strokeDasharray="4 2" className="legend-ring" />
+                          </svg>
+                          Ring
+                        </button>
+                        <button
+                          type="button"
+                          className="toggle"
+                          aria-pressed={showGaia && !!r?.gaia}
+                          disabled={!r?.gaia}
+                          onClick={() => setShowGaia((v) => !v)}
+                          title={r?.gaia ? `${r.gaia.stars.length} ${r.gaia.release} stars` : 'No Gaia data in this answer'}
+                        >
+                          <svg viewBox="0 0 16 16" aria-hidden="true">
+                            <circle cx="8" cy="8" r="5" fill="none" strokeWidth="1.2" className="legend-ghost" />
+                          </svg>
+                          Gaia
+                        </button>
+                        <button type="button" className="toggle" aria-pressed={showCross} onClick={() => setShowCross((v) => !v)}>
+                          <svg viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="M2 8h4m4 0h4M8 2v4m0 4v4" strokeWidth="1.5" className="legend-cross" />
+                          </svg>
+                          Crosshair
+                        </button>
+                      </div>
+                      <div className="group">
+                        <label className="speed" style={{ fontFamily: 'var(--sans)' }}>
+                          <span className="group-label">Look</span>
+                          <select id="look" value={state.look} onChange={(e) => go({ look: e.target.value as Look }, 'replace')}>
+                            {LOOKS.map(([k, label]) => (
+                              <option key={k} value={k} disabled={!!r && needsRgb(k) && !rgbOk}>
+                                {label}
+                                {!!r && needsRgb(k) && !rgbOk ? ' (no colour image for this view)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                    {needsRgb(state.look) && (
+                      <p className="colour-legend">
+                        {rgbOk && wl ? (
+                          <>
+                            {(['blue', 'green', 'red'] as const)
+                              .filter((c) => wl[c])
+                              .map((c) => `${c} ${short(wl[c]![0])}–${short(wl[c]![1])} µm`)
+                              .join(' · ')}
+                            . {COLOUR_LINE}
+                          </>
+                        ) : rgbOk ? (
+                          COLOUR_LINE
+                        ) : (
+                          'Infrared colour needs the colour image (rgb_png), which this view does not have (for example a one-detector stack). Showing gray, smoothed.'
+                        )}
+                      </p>
+                    )}
+                    <Timeline r={r} index={at} diff={showDiff} onPick={pickFrame} />
+                    <p className="hint" style={{ width: '100%' }}>
+                      Click the image to mark a candidate. Black means no data; a white star core is saturated. Keys: Space plays or
+                      pauses, ← and → step.
+                    </p>
+                    <details className="expert">
+                      <summary>Expert settings</summary>
+                      <div className="expert-grid">
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            go({ fov: clampFov(Number(new FormData(e.currentTarget).get('fov'))) }, 'replace')
+                          }}
+                        >
+                          <label>
+                            Field (arcmin, 2 to 15)
+                            <input key={state.fov} name="fov" type="number" min={2} max={15} step={1} defaultValue={state.fov} />
+                          </label>
+                          <button type="submit">Apply</button>
+                        </form>
+                        <label>
+                          Detector
+                          <select value={state.det} onChange={(e) => go({ det: e.target.value }, 'replace')}>
+                            {DETECTORS.map(([value, text]) => (
+                              <option key={value} value={value}>
+                                {text}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Brightness <span className="mono">{bri.toFixed(2)}</span>
+                          <input type="range" min={0.5} max={2} step={0.05} value={bri} onChange={(e) => setBri(Number(e.target.value))} />
+                        </label>
+                        <label>
+                          Contrast <span className="mono">{con.toFixed(2)}</span>
+                          <input type="range" min={0.5} max={2} step={0.05} value={con} onChange={(e) => setCon(Number(e.target.value))} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBri(1)
+                            setCon(1)
+                          }}
+                          disabled={bri === 1 && con === 1}
+                        >
+                          Reset display
+                        </button>
+                      </div>
+                      <p className="hint" style={{ paddingBottom: 8 }}>
+                        Brightness and contrast change the display only. Measurements use the raw pixels.
+                      </p>
+                    </details>
+                  </div>
+                </Boundary>
+              </section>
+
+              <aside className="rail panel" aria-label="Task, data and field guide">
+                <div className="tabs" role="tablist" aria-label="Rail" onKeyDown={tabKeys}>
+                  {TABS.map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      id={`tab-${id}`}
+                      aria-selected={tab === id}
+                      aria-controls="rail-panel"
+                      tabIndex={tab === id ? 0 : -1}
+                      onClick={() => setTab(id)}
+                    >
+                      {label}
+                    </button>
                   ))}
-                </select>
-              </label>
-              <p>
-                Images used: {r.n_images_used} · failed: {r.n_failed} · pixel {r.pixel_arcsec}″ · {r.size_px}×
-                {r.size_px} px · {r.cached ? 'from the server cache' : 'freshly built'}
-                {r.pm && ` · proper motion ${r.pm.pmra.toFixed(1)}, ${r.pm.pmdec.toFixed(1)} mas/yr`}
-              </p>
-            </details>
-          )}
-        </section>
-      )}
+                </div>
+                <div className="panel-body rail-body" role="tabpanel" id="rail-panel" aria-labelledby={`tab-${tab}`} tabIndex={0}>
+                  <Boundary name={TABS.find(([id]) => id === tab)![1]} key={tab}>
+                    {tab === 'task' && (
+                      <TaskTab
+                        r={loading ? null : r}
+                        marks={state.marks}
+                        onRemove={(k) => {
+                          go({ marks: state.marks.filter((_, i) => i !== k) }, 'replace')
+                          say(`Candidate ${k + 1} removed.`)
+                        }}
+                        onCopyLink={() => copy(location.href, 'Link copied. It holds the target, the view and your marks.')}
+                        onTalk={() => r && state.marks.length && copy(reportText(r, state.marks, location.href), 'Report copied. Paste it into your Talk post.')}
+                      />
+                    )}
+                    {tab === 'data' &&
+                      (r && !loading ? (
+                        <>
+                          <h3 className="panel-title">Target</h3>
+                          <TargetCard r={r} />
+                          <h3 className="panel-title">Data quality</h3>
+                          <QualityPanel r={r} />
+                        </>
+                      ) : (
+                        <Skeleton lines={6} />
+                      ))}
+                    {tab === 'guide' && <FieldGuide reduced={REDUCED_MOTION} />}
+                  </Boundary>
+                </div>
+              </aside>
+            </div>
+
+            <div className="grid">
+              <Panel id="motion" title="Motion · predicted vs measured">
+                {r ? <MotionPanel r={r} index={at} onPick={pickFrame} /> : <Skeleton lines={8} />}
+              </Panel>
+              <Panel id="brightness" title="Brightness · per frame">
+                {r ? <BrightnessPanel r={r} index={at} /> : <Skeleton lines={8} />}
+              </Panel>
+              <Panel id="sky-context" title="Sky context">
+                {r ? <SkyContext r={r} reduced={REDUCED_MOTION} /> : <Skeleton lines={8} />}
+              </Panel>
+              <Panel id="sky-now" title="Your sky now">
+                {r ? <SkyNow star={r.center} here={here} setHere={setHere} reduced={REDUCED_MOTION} say={say} /> : <Skeleton lines={8} />}
+              </Panel>
+            </div>
+            <div className="grid">
+              <Panel id="frames" title="Frames">
+                {r ? <FramesTable r={r} index={at} onPick={pickFrame} /> : <Skeleton lines={5} />}
+              </Panel>
+            </div>
+          </div>
+        )}
+
+        <footer>
+          Data: NASA/JPL-Caltech/IPAC SPHEREx (IRSA), ESA Gaia DR3, CDS. Not an official NASA product.
+          <br />
+          WANDERERS · NASA Space Apps 2026, Planet X and SPHEREx challenge. Sky map: Aladin Lite (CDS).
+        </footer>
+      </main>
 
       <dialog
         ref={dialogRef}
-        className="popover"
-        aria-labelledby="pick-title"
+        className="dialog"
+        aria-labelledby="layer-title"
         onCancel={(e) => {
           e.preventDefault()
-          closePick()
+          closeLayer()
         }}
         onClick={(e) => {
-          if (e.target === e.currentTarget) closePick() // a click on the backdrop
+          if (e.target === e.currentTarget) closeLayer() // a click on the backdrop
         }}
       >
-        {state.pick && (
-          <div className="popover-body">
-            <h2 id="pick-title">
-              RA {deg(state.pick.ra)} Dec {deg(state.pick.dec, true)}
-            </h2>
-            <p className="hint">Look up this pixel (opens a new tab):</p>
-            <ul>
-              {lookupLinks(state.pick.ra, state.pick.dec).map(([label, href]) => (
-                <li key={label}>
-                  <a href={href} target="_blank" rel="noreferrer">
-                    {label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <button type="button" ref={closeRef} onClick={closePick}>
-              Close
-            </button>
-          </div>
-        )}
+        {state.layer === 'tutorial' && <Tutorial reduced={REDUCED_MOTION} onClose={closeLayer} />}
       </dialog>
 
-      <footer>
-        Data: NASA SPHEREx (IRSA, DR1 and QR3), names via CDS Sesame. NASA Space Apps 2026, Planet X and SPHEREx.
-      </footer>
-    </main>
+      <p className="toast" role="status" aria-live="polite">
+        {toast}
+      </p>
+    </>
   )
 }

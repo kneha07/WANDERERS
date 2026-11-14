@@ -126,3 +126,14 @@ export function motionOf(r: Result) {
 }
 
 export const DETECTOR_IDS = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6'] as const
+
+/** First-of-month MJDs between a and b, thinned to at most max labels. */
+export function monthTicks(a: number, b: number, max: number) {
+  const out: number[] = []
+  const d = new Date(dateOf(a) + 'T00:00:00Z')
+  d.setUTCDate(1)
+  for (d.setUTCMonth(d.getUTCMonth() + 1); d.getTime() / DAY_MS + MJD_UNIX <= b; d.setUTCMonth(d.getUTCMonth() + 1))
+    out.push(d.getTime() / DAY_MS + MJD_UNIX)
+  const step = Math.ceil(out.length / max)
+  return out.filter((_, i) => i % step === 0)
+}
