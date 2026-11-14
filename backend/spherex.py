@@ -39,6 +39,9 @@ SESAME_URL = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?"
 SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
 FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
+# FLAGS bits that mark bad pixels (cosmic rays, hot/dead pixels, persistence). These show up as false blinkers.
+# Not masked: OVERFLOW (saturated star cores) and OUTLIER (could hide a real mover).
+BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
 CACHE_DIR = Path(__file__).parent / "cache"
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
@@ -228,9 +231,24 @@ def read_cutout(url, ra, dec):
         if x0 >= x1 or y0 >= y1:
             return None
         data = hdu.section[y0:y1, x0:x1].astype(float)
-    cut = map_coordinates(data, [y - y0, x - x0], order=1, cval=np.nan)
-    # ponytail: median background, use the ZODI HDU if gradients show
-    return cut - np.nanmedian(cut)
+        data[(hdul["FLAGS"].section[y0:y1, x0:x1] & BAD_FLAGS) != 0] = np.nan  # row-tiled RICE: small read
+    return subtract_background(map_coordinates(data, [y - y0, x - x0], order=1, cval=np.nan))
+
+
+def subtract_background(cut):
+    """Remove the sky level and its linear gradient (zodi, D1/D2 airglow) from an aligned cutout.
+
+    The plane is fitted to the faintest 90% of the pixels, so stars do not pull it up.
+    """
+    # ponytail: plane background; the ZODI HDU does not hold airglow, a curved model if curved gradients show
+    yy, xx = np.indices(cut.shape)
+    a = np.c_[np.ones(cut.size), xx.ravel(), yy.ravel()]
+    v = cut.ravel()
+    ok = np.isfinite(v) & (v <= np.nanpercentile(v, 90))
+    if ok.sum() < 3:
+        return cut - np.nanmedian(cut)
+    rest = cut - (a @ np.linalg.lstsq(a[ok], v[ok], rcond=None)[0]).reshape(cut.shape)
+    return rest - np.nanmedian(rest)
 
 
 def read_with_retry(url, ra, dec):
@@ -298,7 +316,8 @@ def build(q, name, coord, center, pm, fov, per_group):
     if len(stacks) >= 2:
         diff = stacks[-1] - stacks[0]  # a mover: dark where it was, bright where it is now
         s = np.nanpercentile(np.abs(diff), 99.7)
-        difference = {"png": to_png(0.5 + 0.5 * np.sign(diff) * stretch(np.abs(diff), 0, s)),
+        v = 0.5 + 0.5 * np.sign(diff) * stretch(np.abs(diff), 0, s)
+        difference = {"png": to_png(np.nan_to_num(v, nan=0.5)),  # no data -> gray (no change), not black
                       "from": frames[0]["label"], "to": frames[-1]["label"]}
     return {
         "query": q,

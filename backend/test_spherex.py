@@ -5,12 +5,12 @@ from collections import Counter
 
 import numpy as np
 import pytest
-
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from PIL import Image
 
-from backend.spherex import choose_images, display_xy, group_epochs, output_wcs, parse_coords, to_png
+from backend.spherex import (choose_images, display_xy, group_epochs, output_wcs, parse_coords,
+                             subtract_background, to_png)
 
 
 def test_sexagesimal_with_hms_letters():
@@ -108,3 +108,15 @@ def test_png_pixels_and_ring_agree_on_where_a_star_is():
     row, col = np.unravel_index(np.argmax(png), png.shape)
     ring_x, ring_y = display_xy(grid, n, star)
     assert (col, row) == (int(ring_x), int(ring_y)) == (16, 6)
+
+
+def test_background_removes_a_sky_gradient_and_keeps_stars():
+    yy, xx = np.mgrid[:49, :49]
+    cutout = 5.0 + 0.02 * xx - 0.03 * yy  # sky level plus a gradient (airglow, zodi)
+    cutout[20, 30] += 10.0  # a star
+    cutout[3, 3] = np.nan  # a masked pixel
+    flat = subtract_background(cutout)
+    assert flat[20, 30] == pytest.approx(10.0)
+    flat[20, 30] = 0.0
+    assert np.isnan(flat[3, 3])
+    assert np.nanmax(np.abs(flat)) == pytest.approx(0.0, abs=1e-9)
