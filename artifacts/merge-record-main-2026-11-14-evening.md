@@ -34,3 +34,12 @@ Preserved and not touched: uncommitted edits in `.worktrees/real-sky` (`app/comp
 ## Push
 
 `main` is not pushed. The push waits for the PR #19/#20 reviews, the star-info merge and the user's go-ahead.
+
+## Update: review results
+
+| PR | tech_lead | project_manager | user_advocate | Decision |
+|---|---|---|---|---|
+| #19 (`8299018`) | PASS (0 high) | PASS (0 high) | running | Merge the pinned SHA if the user_advocate review passes. The `server.js` star-predict lookup has the same Windows bug: #27. |
+| #20 (`5cbd519`) | FAIL (2 high) | FAIL (2 high) | not run (phase 1 failed) | Not merged. "Changes requested" is posted on the PR. |
+
+The live explorer's phase-2 user_advocate review failed (H1, stale panels while loading): #26. The fix is in progress on `feat/star-info`.
