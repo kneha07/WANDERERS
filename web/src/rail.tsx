@@ -138,7 +138,7 @@ export function Tutorial({ reduced, onClose }: { reduced: boolean; onClose: () =
       )}
       <p className="credit">{CREDIT}</p>
       <div className="dialog-foot">
-        <button type="button" onClick={onClose}>
+        <button type="button" id="layer-close" onClick={onClose}>
           {last ? 'Close' : 'Skip tutorial'}
         </button>
         <div className="actions" style={{ marginTop: 0 }}>

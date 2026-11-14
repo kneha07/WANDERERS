@@ -965,6 +965,12 @@ input[type='range'] {
   fill: var(--amber);
 }
 
+.chart .sat.hollow {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1.5;
+}
+
 .chart .label-data {
   fill: var(--text);
 }

@@ -498,17 +498,17 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
         ))}
         {missing.map((f) => (
           <g key={`m${f}`}>
-            <path className="sat" d={`M${X(r.frames[f].mjd_mean)} ${T + H - 4}l-5 -9h10z`} />
+            <path className={r.frames[f].saturated ? 'sat' : 'sat hollow'} d={`M${X(r.frames[f].mjd_mean)} ${T + H - 4}l-5 -9h10z`} />
             <text className="label-data" x={X(r.frames[f].mjd_mean)} y={T + H - 18} textAnchor="middle">
-              {r.frames[f].saturated ? 'SAT' : 'n/a'} {f + 1}
+              {f + 1}
             </text>
           </g>
         ))}
       </svg>
       <ul className="legend">
         <li>● measured flux ±1σ, labelled by {pick === 'each' ? 'detector' : 'survey'}</li>
-        <li>▲ SAT: saturated — not measurable</li>
-        <li>▲ n/a: no data at the target</li>
+        <li>▲ survey saturated — not measurable</li>
+        <li>△ no data at the target</li>
       </ul>
       <p className="summary">
         {pick === 'each'

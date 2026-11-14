@@ -1,26 +1,32 @@
 {
-  "baseUrl": "http://localhost:5173",
+  "baseUrl": "http://localhost:5183",
   "home": { "path": "/explore/", "ready": "#home-hint" },
+  "setup": [{ "click": "#layer-close", "ifVisible": true }],
   "screens": [
     {
       "name": "Result (chip)",
-      "steps": [{ "click": "[data-target='RW Aur']", "wait": ".target:has-text('RW Aur')" }],
+      "steps": [{ "click": "[data-target='RW Aur']", "wait": "#target-name:has-text('RW Aur')" }],
       "ready": ".viewer[data-status=result]"
     },
     {
       "name": "Second target",
       "steps": [
-        { "click": "[data-target='RW Aur']", "wait": ".target:has-text('RW Aur')" },
-        { "click": "[data-target=\"Barnard's Star\"]", "wait": ".target:has-text('Barnard')" }
+        { "click": "[data-target='RW Aur']", "wait": "#target-name:has-text('RW Aur')" },
+        { "click": "[data-target=\"Barnard's Star\"]", "wait": "#target-name:has-text('Barnard')" }
       ],
       "ready": ".viewer[data-status=result]"
     },
     {
-      "name": "Pixel popover",
+      "name": "Candidate marked",
       "steps": [
-        { "click": "[data-target='RW Aur']", "wait": ".target:has-text('RW Aur')" },
-        { "click": ".stage", "wait": "dialog[open]" }
+        { "click": "[data-target='RW Aur']", "wait": ".viewer[data-status=result]" },
+        { "click": "#stage", "wait": ".cand" }
       ],
+      "ready": ".cand"
+    },
+    {
+      "name": "Tutorial layer",
+      "steps": [{ "click": "#help-btn", "wait": "dialog[open]" }],
       "ready": "dialog[open]"
     }
   ],

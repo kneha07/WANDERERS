@@ -64,7 +64,7 @@ export default function SkyNow({ star, here, setHere, reduced, say }: Props) {
     if (reduced) return setT(1)
     const t0 = performance.now()
     const step = (ms: number) => {
-      const v = Math.min(1, (ms - t0) / 1600)
+      const v = Math.min(1, Math.max(0, (ms - t0) / 1600)) // a frame time can be a little before t0
       setT(v)
       if (v < 1) raf.current = requestAnimationFrame(step)
     }
@@ -84,7 +84,7 @@ export default function SkyNow({ star, here, setHere, reduced, say }: Props) {
     if (cur.length) out.push(cur.join(' '))
     return out
   }
-  const runAt = path[Math.round(72 * t)]
+  const runAt = path[Math.round(72 * t)] ?? path[72]
   const dot = t < 1 ? runAt : { ...pos, k: 72 }
   const d = dome(dot.alt, dot.az)
   const up = pos.alt >= 0
