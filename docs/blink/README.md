@@ -1,5 +1,18 @@
 # Explore any patch (live mode)
 
+## Run it in one click
+
+- **Windows:** double-click `start.cmd`.
+- **macOS:** double-click `start.command`.
+- **Any system:** run `node start.js` in the repo folder. Add `--precompute` to cache the five challenge targets first.
+
+You need Node.js and Python 3.11 or newer. The first run creates `backend/.venv`, installs the web packages and builds
+`web/dist`. Then it starts the live API (port 8001) and `server.js` (port 8000), waits for both, and opens
+<http://localhost:8000>. If our servers already run, it uses them. If another program holds port 8000 or 8001, it
+stops with a message. Press Ctrl+C (or close the window) to stop both servers.
+
+## What this mode is
+
 SPHEREx Blink is the "Explore any patch" mode of WANDERERS. Type a star name or a sky position. The tool gets
 the SPHEREx images of that patch from IRSA and shows them as a short blink video. Moving and changing objects
 stand out.

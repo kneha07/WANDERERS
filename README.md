@@ -55,6 +55,7 @@ appears when `server.js` is running.
 Open <http://localhost:8000/explore/>, type any star name or sky position, and see its SPHEREx images as a blink
 video, fetched live from IRSA. It needs the live API (`backend/`, port 8001) next to `node server.js`, and a build
 of `web/`. The coordinate box links to it for positions outside the five missions.
+Double-click `start.cmd` (Windows) or `start.command` (macOS), or run `node start.js`.
 Setup and details: [docs/blink/README.md](docs/blink/README.md).
 
 ## Data (all public)
