@@ -1,6 +1,8 @@
 """SPHEREx blink pipeline: resolve a target, find images, align cutouts, make PNG frames."""
 import re
+from itertools import groupby
 
+import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 
@@ -23,3 +25,23 @@ def parse_coords(q):
         except ValueError:
             raise ValueError(hint) from None
     return None
+
+
+def group_epochs(mjds):
+    """Group observation times (MJD) into survey epochs. Returns lists of indices, in time order."""
+    groups = []
+    for i in sorted(range(len(mjds)), key=mjds.__getitem__):
+        if groups and mjds[i] - mjds[groups[-1][-1]] <= 20:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    epochs = []
+    for g in groups:
+        t0 = mjds[g[0]]
+        if mjds[g[-1]] - t0 > 45:  # long pass (deep field): cut into consecutive 30-day bins
+            epochs += [list(b) for _, b in groupby(g, key=lambda i: (mjds[i] - t0) // 30)]
+        else:
+            epochs.append(g)
+    if len(epochs) > 12:  # keep 12, evenly spaced; first and last stay for the longest baseline
+        epochs = [epochs[k] for k in np.linspace(0, len(epochs) - 1, 12).round().astype(int)]
+    return epochs
