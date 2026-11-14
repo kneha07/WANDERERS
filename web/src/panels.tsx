@@ -272,7 +272,7 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
   const h = Math.max(1, (Math.max(...xs) - Math.min(...xs)) / 2, (Math.max(...ys) - Math.min(...ys)) / 2) * 1.25
   const L = 56
   const T = 12
-  const W = 240
+  const W = 300
   const X = (x: number) => L + ((x - (cx - h)) / (2 * h)) * W
   const Y = (y: number) => T + ((y - (cy - h)) / (2 * h)) * W
   // Axis values: arcsec from the view center, east positive (to the left), north positive (up).
@@ -286,11 +286,12 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
   const meas = pts.filter((p) => p.c)
   const shift = (a?: { x: number; y: number } | null, b?: { x: number; y: number } | null) =>
     a && b ? { sep: Math.hypot(b.x - a.x, b.y - a.y) * s, pa: ((Math.atan2(-(b.x - a.x), -(b.y - a.y)) * 180) / Math.PI + 360) % 360 } : null
+  const words = (m: ReturnType<typeof shift>) => (!m ? '–' : m.sep < 0.05 ? 'no motion' : `${m.sep.toFixed(1)}″ toward PA ${m.pa.toFixed(0)}°`)
   const measured = shift(meas[0]?.c, meas[meas.length - 1]?.c)
   const predicted = shift(rings[0]?.ring, rings[rings.length - 1]?.ring)
   return (
     <>
-      <svg className="chart" viewBox={`0 0 ${L + W + 12} ${T + W + 44}`} role="img" aria-labelledby="motion-desc">
+      <svg className="chart" viewBox={`0 0 ${L + W + 12} ${T + W + 44}`} style={{ maxWidth: 460 }} role="img" aria-labelledby="motion-desc">
         <desc id="motion-desc">
           Predicted target positions (dashed line) and measured positions with error bars, one per frame, north up, east left.
         </desc>
@@ -354,9 +355,7 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
         </li>
       </ul>
       <p className="summary">
-        {measured ? `Measured: ${measured.sep.toFixed(1)}″ toward PA ${measured.pa.toFixed(0)}°` : 'Measured: –'}
-        {' · '}
-        {predicted ? `Predicted: ${predicted.sep.toFixed(1)}″ toward PA ${predicted.pa.toFixed(0)}°` : 'Predicted: no proper motion'}
+        Measured: {words(measured)} · Predicted: {predicted ? words(predicted) : 'no proper motion'}
         {meas.length > 1 && ` (frame ${meas[0].i + 1} → ${meas[meas.length - 1].i + 1})`}
       </p>
       <div className="table-wrap">
@@ -391,31 +390,49 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
 
 // ---------- brightness ----------
 
-type Point = { x: number; frame: number; phot: Phot | null; saturated: boolean }
+type Point = { x: number; frame: number; phot: Phot | null; tag: string }
 
-export function BrightnessPanel({ r, index }: { r: Result; index: number }) {
-  const [series, setSeries] = useState('stack')
+/** Frame numbers as short text: [2, 3] -> '2–3', [1, 3, 4] -> '1, 3–4'. */
+export function spans(nums: number[]) {
+  const out: string[] = []
+  for (let i = 0; i < nums.length; i++) {
+    let j = i
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++
+    out.push(j > i ? `${nums[i]}–${nums[j]}` : `${nums[i]}`)
+    i = j
+  }
+  return out.join(', ')
+}
+
+const fmt = (p: Phot) => `${+p.flux.toPrecision(4)} ± ${+p.err.toPrecision(2)}`
+
+export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: number; deepLink?: string }) {
+  const [series, setSeries] = useState<string | null>(null)
   if (!r.frames.some((f) => f.photometry !== undefined))
     return <Empty>This API answer has no photometry. Update the backend to see the brightness per frame.</Empty>
   const dets = Object.keys(r.detectors).sort()
-  const pick = series === 'stack' || r.detectors[series] ? series : 'stack'
-  const points: Point[] =
-    pick === 'stack'
-      ? r.frames.map((f, i) => ({ x: f.mjd_mean, frame: i, phot: f.photometry ?? null, saturated: f.saturated }))
-      : r.detectors[pick].map((d) => ({
-          x: r.frames[d.group_index].mjd_mean,
-          frame: d.group_index,
-          phot: d.photometry ?? null,
-          saturated: r.frames[d.group_index].saturated,
-        }))
-  const good = points.filter((p) => p.phot)
+  const ofStack = (): Point[] => r.frames.map((f, i) => ({ x: f.mjd_mean, frame: i, phot: f.photometry ?? null, tag: 'stack' }))
+  const ofDet = (d: string): Point[] =>
+    r.detectors[d].map((x) => ({ x: r.frames[x.group_index].mjd_mean, frame: x.group_index, phot: x.photometry ?? null, tag: d }))
+  // How many surveys each series measured. The panel opens on the series with the most (the stack wins a tie);
+  // when no series has two points, it shows every detector at once, so no measurement is hidden.
+  const counts = [['stack', r.frames.filter((f) => f.photometry).length] as const, ...dets.map((d) => [d, ofDet(d).filter((p) => p.phot).length] as const)]
+  const most = counts.reduce((a, b) => (b[1] > a[1] ? b : a))
+  const pick = series && (series === 'stack' || series === 'each' || r.detectors[series]) ? series : most[1] >= 2 ? most[0] : 'each'
+  const groups = pick === 'stack' ? [ofStack()] : pick === 'each' ? dets.map(ofDet) : [ofDet(pick)]
+  const all = groups.flat()
+  const good = all.filter((p) => p.phot)
+  const seen = new Set(good.map((p) => p.frame))
+  const missing = [...new Set(all.filter((p) => !p.phot && !seen.has(p.frame)).map((p) => p.frame))].sort((a, b) => a - b)
+  const sat = missing.filter((f) => r.frames[f].saturated).map((f) => f + 1)
+  const gap = missing.filter((f) => !r.frames[f].saturated).map((f) => f + 1)
   const unit = (r.photometry_unit ?? 'flux').split(' (')[0]
-  const wl = pick === 'stack' ? null : r.detectors[pick].find((d) => d.wavelength_um)?.wavelength_um
-  const change = brightnessChange(good.map((p) => p.phot!))
-  const L = 56
+  const wl = pick === 'stack' || pick === 'each' ? null : r.detectors[pick].find((d) => d.wavelength_um)?.wavelength_um
+  const change = pick === 'each' ? null : brightnessChange(good.map((p) => p.phot!))
+  const L = 64
   const T = 12
-  const W = 300
-  const H = 160
+  const W = 440
+  const H = 180
   const x0 = Math.min(...r.frames.map((f) => f.mjd_mean)) - 15
   const x1 = Math.max(...r.frames.map((f) => f.mjd_mean)) + 15
   const lo = good.length ? Math.min(...good.map((p) => p.phot!.flux - p.phot!.err)) : 0
@@ -425,24 +442,25 @@ export function BrightnessPanel({ r, index }: { r: Result; index: number }) {
   const y1 = hi + pad
   const X = (v: number) => L + ((v - x0) / (x1 - x0)) * W
   const Y = (v: number) => T + H - ((v - y0) / (y1 - y0)) * H
-  const months = monthTicks(x0, x1, 4)
+  const band = (d: string) => r.detectors[d].find((x) => x.wavelength_um)?.wavelength_um
   return (
     <>
       <label className="place-row">
         Series
         <select value={pick} onChange={(e) => setSeries(e.target.value)}>
           <option value="stack">{r.det ? `Stack (${r.det} only)` : 'All detectors (stack)'}</option>
+          {dets.length > 1 && <option value="each">Each detector (all points)</option>}
           {dets.map((d) => (
             <option key={d} value={d}>
-              {d} only{r.detectors[d].find((x) => x.wavelength_um) ? ` (${um(r.detectors[d].find((x) => x.wavelength_um)!.wavelength_um)} µm)` : ''}
+              {d} only{band(d) ? ` (${um(band(d))} µm)` : ''}
             </option>
           ))}
         </select>
       </label>
-      <svg className="chart" viewBox={`0 0 ${L + W + 12} ${T + H + 44}`} role="img" aria-labelledby="phot-desc">
+      <svg className="chart" viewBox={`0 0 ${L + W + 12} ${T + H + 44}`} style={{ maxWidth: 640 }} role="img" aria-labelledby="phot-desc">
         <desc id="phot-desc">
-          Brightness of the target per frame in {unit}, with 1σ error bars, against the date. Frames marked saturated have no
-          measurement.
+          Brightness of the target per frame in {unit}, with 1σ error bars, against the date. Frames marked SAT are saturated and
+          have no measurement.
         </desc>
         {ticks(y0, y1).map((v) => (
           <g key={`y${v}`}>
@@ -452,7 +470,7 @@ export function BrightnessPanel({ r, index }: { r: Result; index: number }) {
             </text>
           </g>
         ))}
-        {months.map((m) => (
+        {monthTicks(x0, x1, 5).map((m) => (
           <text key={m} x={X(m)} y={T + H + 14} textAnchor="middle">
             {dateOf(m).slice(0, 7)}
           </text>
@@ -464,42 +482,62 @@ export function BrightnessPanel({ r, index }: { r: Result; index: number }) {
         <text className="axis-title" transform={`translate(14 ${T + H / 2}) rotate(-90)`} textAnchor="middle">
           Flux ({unit})
         </text>
-        {good.length > 1 && <polyline className="series" points={good.map((p) => `${X(p.x)},${Y(p.phot!.flux)}`).join(' ')} />}
-        {points.map((p) =>
-          p.phot ? (
-            <g key={p.frame}>
-              <line className="err" x1={X(p.x)} x2={X(p.x)} y1={Y(p.phot.flux - p.phot.err)} y2={Y(p.phot.flux + p.phot.err)} />
-              <circle className="meas" cx={X(p.x)} cy={Y(p.phot.flux)} r={4} />
-              {p.frame === index && <circle className="current-ring" cx={X(p.x)} cy={Y(p.phot.flux)} r={8} />}
-              <text className="label-data" x={X(p.x) + 8} y={Y(p.phot.flux) - 6}>
-                {p.frame + 1}
-              </text>
-            </g>
-          ) : (
-            <g key={p.frame}>
-              <path className="sat" d={`M${X(p.x)} ${T + H - 4}l-5 -9h10z`} />
-              <text className="label-data" x={X(p.x)} y={T + H - 18} textAnchor="middle">
-                {p.saturated ? 'SAT' : 'n/a'} {p.frame + 1}
-              </text>
-            </g>
-          ),
-        )}
+        {groups.map((g) => {
+          const pts = g.filter((p) => p.phot)
+          return pts.length > 1 && <polyline key={g[0]?.tag} className="series" points={pts.map((p) => `${X(p.x)},${Y(p.phot!.flux)}`).join(' ')} />
+        })}
+        {good.map((p) => (
+          <g key={`${p.tag}${p.frame}`}>
+            <line className="err" x1={X(p.x)} x2={X(p.x)} y1={Y(p.phot!.flux - p.phot!.err)} y2={Y(p.phot!.flux + p.phot!.err)} />
+            <circle className="meas" cx={X(p.x)} cy={Y(p.phot!.flux)} r={4} />
+            {p.frame === index && <circle className="current-ring" cx={X(p.x)} cy={Y(p.phot!.flux)} r={8} />}
+            <text className="label-data" x={X(p.x) + 8} y={Y(p.phot!.flux) - 6}>
+              {pick === 'each' ? p.tag : p.frame + 1}
+            </text>
+          </g>
+        ))}
+        {missing.map((f) => (
+          <g key={`m${f}`}>
+            <path className="sat" d={`M${X(r.frames[f].mjd_mean)} ${T + H - 4}l-5 -9h10z`} />
+            <text className="label-data" x={X(r.frames[f].mjd_mean)} y={T + H - 18} textAnchor="middle">
+              {r.frames[f].saturated ? 'SAT' : 'n/a'} {f + 1}
+            </text>
+          </g>
+        ))}
       </svg>
       <ul className="legend">
-        <li>● measured flux ±1σ, numbered by frame</li>
+        <li>● measured flux ±1σ, labelled by {pick === 'each' ? 'detector' : 'survey'}</li>
         <li>▲ SAT: saturated — not measurable</li>
         <li>▲ n/a: no data at the target</li>
       </ul>
       <p className="summary">
-        {change
-          ? `Change: ${change.pct.toFixed(0)}% (${change.sigmas.toFixed(1)}σ) from ${+change.lo.flux.toPrecision(4)} to ${+change.hi.flux.toPrecision(4)} ${unit}${change.sigmas >= 3 ? ' — larger than the noise' : ' — within the noise'}`
-          : good.length === 1
-            ? `Only one frame is measurable (${+good[0].phot!.flux.toPrecision(4)} ± ${+good[0].phot!.err.toPrecision(2)} ${unit}).`
-            : 'No frame is measurable here.'}
+        {pick === 'each'
+          ? good.length
+            ? `Measured: ${good.map((p) => `${p.tag} ${fmt(p.phot!)} ${unit} (survey ${p.frame + 1})`).join(' · ')}`
+            : 'No detector is measurable here.'
+          : change
+            ? `Change: ${change.pct.toFixed(0)}% (${change.sigmas.toFixed(1)}σ) from ${+change.lo.flux.toPrecision(4)} to ${+change.hi.flux.toPrecision(4)} ${unit}${change.sigmas >= 3 ? ' — larger than the noise' : ' — within the noise'}`
+            : good.length === 1
+              ? `Only survey ${good[0].frame + 1} is measurable (${fmt(good[0].phot!)} ${unit}).`
+              : 'No survey is measurable in this series.'}
         {wl && ` · ${pick} ${um(wl)} µm`}
       </p>
-      {points.some((p) => !p.phot && p.saturated) && (
-        <p className="hint">Saturated — not measurable: the star's core has no data in those frames.</p>
+      {sat.length > 0 && (
+        <p className="note-line">
+          <AlertIcon /> Saturated in survey{sat.length > 1 ? 's' : ''} {spans(sat)}: too bright for SPHEREx to measure here.
+        </p>
+      )}
+      {gap.length > 0 && (
+        <p className="hint">
+          No measurement in survey{gap.length > 1 ? 's' : ''} {spans(gap)}:{' '}
+          {pick === 'stack' ? 'at least one detector has no data in the core.' : 'no data at the target.'}
+        </p>
+      )}
+      <p className="hint mono">Measured surveys per series: {counts.map(([k, n]) => `${k} ${n}`).join(' · ')}</p>
+      {deepLink && (sat.length > 0 || gap.length > 0) && (
+        <p>
+          <a href={deepLink}>See the matched-wavelength brightness check in WANDERERS →</a>
+        </p>
       )}
       <p className="hint">
         Unit: {r.photometry_unit ?? '–'}. A stack mixes detectors (wavelengths), so a fixed star can change a little between

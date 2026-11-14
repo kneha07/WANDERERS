@@ -72,6 +72,14 @@ export const ARTIFACTS: Example[] = [
   },
 ]
 
+export const COLOUR: Example = {
+  id: 'colour',
+  title: 'Infrared colour',
+  images: [{ src: 'colour.png', caption: 'RW Aur, 2025-09' }],
+  text: COLOUR_LINE,
+  tell: 'RW Aur, a young star in dust, looks orange-red; the ordinary stars around it look blue. The Look menu shows this view; measurements always use the raw pixels.',
+}
+
 export function Thumbs({ ex, reduced, large }: { ex: Example; reduced: boolean; large?: boolean }) {
   const figs = ex.images.map((im) => (
     <figure key={im.src}>
@@ -94,7 +102,7 @@ export function FieldGuide({ reduced }: { reduced: boolean }) {
   return (
     <div className="guide">
       <p className="hint">What you see in the flipbook, from real SPHEREx frames.</p>
-      {[...EXAMPLES, ...ARTIFACTS].map((ex) => (
+      {[...EXAMPLES, COLOUR, ...ARTIFACTS].map((ex) => (
         <article className="example" key={ex.id}>
           <Thumbs ex={ex} reduced={reduced} />
           <div>
@@ -104,7 +112,6 @@ export function FieldGuide({ reduced }: { reduced: boolean }) {
           </div>
         </article>
       ))}
-      <p>{COLOUR_LINE}</p>
       <p className="credit">{CREDIT}</p>
     </div>
   )
@@ -123,7 +130,12 @@ export function Tutorial({ reduced, onClose }: { reduced: boolean; onClose: () =
       <Thumbs ex={ex} reduced={reduced} large />
       <p>{ex.text}</p>
       <p className="hint">{ex.tell}</p>
-      {last && <p>Your task: mark what moves or blinks, check it in Gaia and SIMBAD, then report it on Backyard Worlds Talk.</p>}
+      {last && (
+        <>
+          <p>Your task: mark what moves or blinks, check it in Gaia and SIMBAD, then report it on Backyard Worlds Talk.</p>
+          <p className="hint">{COLOUR_LINE}</p>
+        </>
+      )}
       <p className="credit">{CREDIT}</p>
       <div className="dialog-foot">
         <button type="button" onClick={onClose}>

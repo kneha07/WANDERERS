@@ -406,7 +406,7 @@ export default function App() {
   const rgbOk = !!r?.frames.some((f) => f.rgb_png)
   const wl = r?.rgb?.wavelength_um
   const satN = r?.frames.filter((f) => f.saturated).length ?? 0
-  const current = TARGETS.find((t) => t.q === state.q)
+  const current = TARGETS.find((t) => t.q.toLowerCase() === state.q.toLowerCase())
 
   return (
     <>
@@ -660,6 +660,14 @@ export default function App() {
                         ) : (
                           'Infrared colour needs the colour image (rgb_png), which this view does not have (for example a one-detector stack). Showing gray, smoothed.'
                         )}
+                        {rgbOk &&
+                          r?.notes
+                            ?.filter((n) => n.startsWith('Colour'))
+                            .map((n) => (
+                              <span key={n} style={{ display: 'block' }}>
+                                {n}
+                              </span>
+                            ))}
                       </p>
                     )}
                     <Timeline r={r} index={at} diff={showDiff} onPick={pickFrame} />
@@ -772,7 +780,11 @@ export default function App() {
                 {r ? <MotionPanel r={r} index={at} onPick={pickFrame} /> : <Skeleton lines={8} />}
               </Panel>
               <Panel id="brightness" title="Brightness · per frame">
-                {r ? <BrightnessPanel r={r} index={at} /> : <Skeleton lines={8} />}
+                {r ? (
+                  <BrightnessPanel key={key} r={r} index={at} deepLink={current && `/?target=${current.id}`} />
+                ) : (
+                  <Skeleton lines={8} />
+                )}
               </Panel>
               <Panel id="sky-context" title="Sky context">
                 {r ? <SkyContext r={r} reduced={REDUCED_MOTION} /> : <Skeleton lines={8} />}

@@ -86,7 +86,9 @@ export function Stage(p: StageProps) {
           {p.gaia &&
             r.gaia?.stars.map((s) => {
               const xy = s.xy[at]
-              return xy && <circle key={s.source_id} className="ghost" cx={xy[0]} cy={xy[1]} r={1.7} />
+              // Faint Gaia stars fade, so the bright ones that SPHEREx sees stand out (display only).
+              const o = s.gmag == null ? 1 : Math.min(1, Math.max(0.3, (20 - s.gmag) / 5))
+              return xy && <circle key={s.source_id} className="ghost" cx={xy[0]} cy={xy[1]} r={1.4} opacity={o} />
             })}
           {p.ring && ring && <circle className="ring" cx={ring.x} cy={ring.y} r={2.6} />}
           {p.cross && <path className="cross" d={`M${n / 2 - 3} ${n / 2}h2m2 0h2M${n / 2} ${n / 2 - 3}v2m0 2v2`} />}
@@ -174,7 +176,9 @@ export function Timeline({ r, index, diff, onPick }: { r: Result | null; index: 
         {frames.length > 0 && w > 0 && (
           <>
             <line className="axis" x1={4} x2={w - 4} y1={46} y2={46} />
-            {monthTicks(x0, x1, Math.max(2, Math.floor(w / 72))).map((m) => (
+            {monthTicks(x0, x1, Math.max(2, Math.floor(w / 72)))
+              .filter((m) => X(m) > 26 && X(m) < w - 26) // a label never runs off the edge
+              .map((m) => (
               <g key={m}>
                 <line className="axis" x1={X(m)} x2={X(m)} y1={46} y2={52} />
                 <text x={X(m)} y={66} textAnchor="middle">

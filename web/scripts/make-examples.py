@@ -11,7 +11,7 @@ from PIL import Image
 src, out = Path(sys.argv[1]), Path(sys.argv[2])
 out.mkdir(parents=True, exist_ok=True)
 load = lambda name: json.loads((src / f"{name}.json").read_text())
-png = lambda s: Image.open(io.BytesIO(base64.b64decode(s.split(",", 1)[1]))).convert("L")
+png = lambda s, mode="L": Image.open(io.BytesIO(base64.b64decode(s.split(",", 1)[1]))).convert(mode)
 det = lambda r, d, g: next(x["png"] for x in r["detectors"][d] if x["group_index"] == g)
 
 barnard, kapteyn, rwaur = load("Barnards_Star"), load("Kapteyns_Star"), load("RW_Aur")
@@ -26,6 +26,7 @@ crops = {
     "hot-pixel": (png(det(rwaur, "D5", 1)), (28, 12, 49, 33)),
     "saturated-core": (png(barnard["frames"][0]["png"]), (17, 17, 32, 32)),
     "no-data": (png(det(barnard, "D2", 5)), mid),
+    "colour": (png(rwaur["frames"][0]["rgb_png"], "RGB"), (4, 4, 45, 45)),  # needs the rgb_png field (api.md)
 }
 for name, (im, box) in crops.items():
     im.crop(box).save(out / f"{name}.png", optimize=True)
