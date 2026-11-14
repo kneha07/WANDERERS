@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "app" / "data"
+CACHE = ROOT / "data" / "cache"
 TEASER = {
     "barnard": "Fastest star in the sky",
     "eps_indi_b": "Brown dwarf pair",
@@ -86,11 +87,27 @@ def card(t):
                        (f"The spectrum uses the {left} clean ones." if left >= 10 else
                         "No reliable SPHEREx spectrum, so we do not show one.")})
 
+    # Independent facts from Gaia DR3 (pipeline/gaia_facts.py), when available.
+    gf = t.get("gaia_facts") or {}
+    gaia_var = bool(gf.get("vari_class")) or gf.get("variable_flag") == "VARIABLE"
+    if gf.get("distance_ly"):
+        numbers.append({"label": "distance (" + ("Gaia parallax" if gf.get("source_id") else "literature") + ")",
+                        "value": f"{gf['distance_ly']:,.1f} ly" if gf["distance_ly"] < 100 else f"{gf['distance_ly']:,.0f} ly"})
+    if gf.get("teff_k"):
+        numbers.append({"label": "temperature (Gaia estimate)", "value": f"{gf['teff_k']:,.0f} K"})
+    if gaia_var:
+        cls_txt = gf.get("vari_class_text") or "variable"
+        agree = "agrees with" if varies else "while"
+        checks.append({"state": "ok" if varies else "warn",
+                       "text": f"Gaia independently classifies it as a {cls_txt} from about 3 years of its own photometry"
+                               + ("; this agrees with our SPHEREx measurement" if varies else
+                                  "; our two SPHEREx snapshots just did not catch a change")})
+
     # Classification from the checks above, most specific first.
     if red and moved:
         cls, support = "Cold brown dwarf (methane-rich)", [moved, red, matches or not t["target_in_gaia"]]
     elif varies:
-        cls, support = "Variable star", [varies, t["target_in_gaia"], not moved]
+        cls, support = "Variable star", [varies, gaia_var or t["target_in_gaia"], not moved]
     elif moved and t["target_in_gaia"]:
         cls, support = "Nearby star with fast proper motion", [moved, matches, t["target_in_gaia"]]
     elif moved:
@@ -107,7 +124,8 @@ def card(t):
     level = 2 if (n == len(support) and n >= 2) or n >= 3 else 1 if n == 2 else 0
     caveat = None
     saturated = t["spectrum_points"] and t["flagged_points"] > 0.8 * t["spectrum_points"]
-    if saturated and cls in ("Variable star", "Steady star (no change in these snapshots)") and level > 0:
+    confirmed = cls == "Variable star" and gaia_var        # an independent survey agrees: no penalty
+    if saturated and cls in ("Variable star", "Steady star (no change in these snapshots)") and level > 0 and not confirmed:
         level -= 1
         caveat = "lowered because most SPHEREx measurements are saturated"
     return {"status": "known" if known else "candidate", "classification": cls,
@@ -119,6 +137,9 @@ def main():
     index = []
     for d in sorted(DATA.glob("*/target.json")):
         t = json.loads(d.read_text())
+        gf = CACHE / d.parent.name / "gaia_facts.json"
+        if gf.exists():
+            t["gaia_facts"] = json.loads(gf.read_text())
         t["evidence"] = card(t)
         d.write_text(json.dumps(t, indent=1))
         ref = t["reference"]
