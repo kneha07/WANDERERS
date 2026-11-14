@@ -1,4 +1,4 @@
-"""Regression tests for WANDERERS evidence cards. Run: python3 -m unittest discover -s tests -p 'test_evidence.py' -v"""
+"""Regression tests for WANDERERS evidence cards. Run: python3 -m unittest discover -s test -p 'test_evidence.py' -v"""
 import importlib.util
 import unittest
 from pathlib import Path

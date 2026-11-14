@@ -1,10 +1,15 @@
 """Unit tests for pipeline/analyze.py measurement and bad-pixel helpers.
 
 Run from repository root after installing pipeline/requirements.txt:
-    python3 -m unittest discover -s tests -p 'test_data_quality.py' -v
+    python3 -m unittest discover -s test -p 'test_data_quality.py' -v
 These tests use synthetic images, not downloaded NASA observations.
+
+If the pipeline packages are missing the tests are SKIPPED, which a quick local run can accept. Set
+WANDERERS_STRICT=1 (or CI=true) and a missing package makes them FAIL instead, so a machine or CI job
+without the packages can never look green.
 """
 import importlib.util
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -13,6 +18,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 PIPELINE = ROOT / 'pipeline'
+STRICT = os.environ.get('WANDERERS_STRICT') == '1' or os.environ.get('CI') == 'true'
 
 
 def load_analyze():
@@ -30,7 +36,9 @@ class TestDataQuality(unittest.TestCase):
         try:
             cls.analyze = load_analyze()
         except ImportError as exc:
-            raise unittest.SkipTest(f'Install pipeline dependencies first: {exc}')
+            if STRICT:
+                raise   # a missing package is a failure, not a skip
+            raise unittest.SkipTest(f'Install pipeline dependencies first (pip install -r pipeline/requirements.txt): {exc}')
 
     def test_bad_mask_excludes_bad_flags(self):
         from astropy.io import fits
