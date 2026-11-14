@@ -237,11 +237,16 @@ def test_centroid_error_has_a_systematic_floor_larger_for_saturated_cores():
 
 
 def test_centroid_measures_the_star_not_the_predicted_position():
-    img = star(41, 21.2, 15.6, peak=1000.0, sigma=1.5)  # the star sits 1.2 px east and 0.6 px off the prediction
+    img = star(41, 20.7, 15.4, peak=1000.0, sigma=1.5)  # the star sits 0.7 px and 0.4 px off the prediction
     yy, xx = np.mgrid[:41, :41]
-    img[np.hypot(xx - 21.2, yy - 15.6) <= 1.5] = np.nan  # saturated core
+    img[np.hypot(xx - 20.7, yy - 15.4) <= 1.5] = np.nan  # saturated core
     c = centroid(img, 20.0, 15.0)
-    assert (c["x"], c["y"]) == pytest.approx((21.7, 41 - 0.5 - 15.6), abs=0.02)
+    assert (c["x"], c["y"]) == pytest.approx((21.2, 41 - 0.5 - 15.4), abs=0.02)
+
+
+def test_centroid_is_none_when_the_source_is_a_neighbor_over_1_px_away():
+    img = star(41, 21.6, 15.0, peak=1000.0)  # 1.6 px (10") from the prediction: another star, not the target
+    assert centroid(img, 20.0, 15.0) is None
 
 
 def test_frame_centroid_is_the_mean_of_the_detector_centroids_with_the_larger_error():

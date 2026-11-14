@@ -48,11 +48,14 @@ FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
 OVERFLOW, BLOOM = 2, 67108864  # saturated pixel; pixel inside the bloom of a bright star
 CACHE_DIR = Path(__file__).parent / "cache"
-CACHE_VERSION = 4  # bump when the response gains fields, so old cache files are not served
+CACHE_VERSION = 5  # bump when the response gains fields, so old cache files are not served
 # Centroid error floor, px (resampling, WCS, undersampled PSF): (clean core, core with no data). Measured in
 # 2026-11: Gaia stars in the Kapteyn's Star and RW Aur fields sit a median 0.1 px from their fits; per-detector
 # fits of saturated cores (Barnard's, Kapteyn's Star) scatter 0.1 to 0.35 px around the proper-motion track.
 CENTROID_FLOOR_PX = 0.1, 0.3
+# A fit further than this from the predicted position is another source: WISE 0855 sits 1.2 px from a brighter
+# star, which the short-wavelength detectors see alone. (The PSF FWHM is 1.2 px.)
+CENTROID_MAX_SHIFT_PX = 1.0
 # False-colour image: detectors per channel, short wavelengths blue (D1 0.75 um ... D6 5.0 um)
 RGB_CHANNELS = {"blue": ("D1", "D2"), "green": ("D3", "D4"), "red": ("D5", "D6")}
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
@@ -260,7 +263,8 @@ def gaussian(p, a, x0, y0, s, b):
 
 
 def centroid(img, gx, gy, r=4.0):
-    """Position of the source near grid position (gx, gy), or None when no source stands out (peak < 5 sigma).
+    """Position of the source near grid position (gx, gy), or None when no source stands out (peak < 5 sigma),
+    when the fit does not fix the position (error > 1 px), or when it lands more than CENTROID_MAX_SHIFT_PX away.
 
     A round Gaussian is fitted to the pixels within r px. Unlike a flux-weighted mean, a fit is not pulled toward
     the window center, so the predicted position does not bias the result. NaN pixels (a saturated core) are
@@ -277,10 +281,11 @@ def centroid(img, gx, gy, r=4.0):
                            bounds=([0, gx - r, gy - r, 0.3, -np.inf], [np.inf, gx + r, gy + r, 5.0, np.inf]))
     except (RuntimeError, ValueError):  # no convergence: no position
         return None
-    if not np.isfinite(cov[1:3, 1:3]).all():
+    err = np.sqrt(np.diag(cov)[1:3])
+    if not np.isfinite(err).all() or err.max() > 1 or np.hypot(p[1] - gx, p[2] - gy) > CENTROID_MAX_SHIFT_PX:
         return None
     floor = CENTROID_FLOOR_PX[1] if (~np.isfinite(img[d <= r])).any() else CENTROID_FLOOR_PX[0]
-    ex, ey = (float(np.hypot(np.sqrt(max(cov[i, i], 0.0)), floor)) for i in (1, 2))
+    ex, ey = (float(np.hypot(e, floor)) for e in err)
     return {"x": round(float(p[1]) + 0.5, 3), "y": round(img.shape[0] - 0.5 - float(p[2]), 3),
             "ex": round(ex, 3), "ey": round(ey, 3)}
 

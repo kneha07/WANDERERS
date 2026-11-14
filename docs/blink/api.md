@@ -85,8 +85,10 @@ quality: { n_images_used, n_failed, cache_age_s }   // the old top-level n_image
 - `centroid` for a **saturated** frame: the contract says null. The backend fits the unsaturated pixels around the
   core instead, and adds `saturated: true` inside the object. Reason: very bright movers such as
   Barnard's Star are saturated in every frame, but their position stays measurable from the star's wings; a null
-  would hide the motion that the tool exists to show. The UI can draw these points hollow. `centroid` is null only
-  when no source stands out (peak below 5 sigma of the frame noise).
+  would hide the motion that the tool exists to show. The UI can draw these points hollow. `centroid` is null when
+  no source stands out (peak below 5 sigma of the frame noise), and also when no detector fit lands within 1 px
+  (6.15") of the ring: then the source is a neighbor, not the target. Example: in the all-detector view of WISE 0855,
+  a brighter star 1.2 px away is all that D1 to D4 see. Blends closer than about 1 px still pull the centroid.
 - `photometry` is also null when the target's core has no data in **at least one detector** of the frame, even if
   `saturated` is false. (`saturated` looks at the all-detector stack, where the other detectors fill such a core.)
   Reason: the stack would then sum different detectors in the core and in the wings, so the flux would be wrong.
