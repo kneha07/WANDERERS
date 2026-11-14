@@ -1,0 +1,6 @@
+backend/.venv/
+backend/cache/
+__pycache__/
+web/node_modules/
+web/dist/
+.worktrees/
