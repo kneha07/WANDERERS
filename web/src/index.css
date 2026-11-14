@@ -31,12 +31,10 @@ main {
 h1 {
   margin: 0 0 4px;
   font-size: 1.7rem;
-  letter-spacing: 0.02em;
 }
 
 .lead,
 .hint,
-.keys,
 .diff-note,
 footer {
   color: var(--muted);
@@ -51,9 +49,11 @@ input,
 select {
   font: inherit;
   color: inherit;
+  min-height: 44px;
 }
 
 button {
+  min-width: 44px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -124,19 +124,27 @@ select {
   font-size: 0.85em;
 }
 
-.status,
-.error,
-.picked,
+.panel,
 .expert {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 14px;
+  margin: 12px 0;
+}
+
+.panel p {
+  margin: 0 0 8px;
 }
 
 .error {
   color: var(--error);
   border-color: #6b2b2b;
+}
+
+.target {
+  min-height: 3em; /* two lines reserved: no shift when the name lands */
+  margin: 8px 0;
 }
 
 .views {
@@ -145,12 +153,14 @@ select {
   margin-bottom: 8px;
 }
 
+/* One fixed square box for the skeleton and the frames: nothing moves when data lands. */
 .stage {
   position: relative;
-  max-width: 100%;
+  width: min(480px, 100%);
   aspect-ratio: 1;
-  cursor: crosshair;
+  background: var(--panel);
   border: 1px solid var(--line);
+  cursor: crosshair;
 }
 
 .stage img {
@@ -158,6 +168,11 @@ select {
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+  transition: opacity 200ms ease;
+}
+
+.viewer[data-status='loading'] .stage img {
+  opacity: 0.35;
 }
 
 .stage svg {
@@ -166,6 +181,25 @@ select {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.indicator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  opacity: 0;
+  animation: show 150ms ease-out 300ms forwards; /* no spinner flash: appears after 300 ms */
+}
+
+@keyframes show {
+  to {
+    opacity: 1;
+  }
 }
 
 .ring {
@@ -182,8 +216,17 @@ select {
   vector-effect: non-scaling-stroke;
 }
 
+.frame-label {
+  height: 1.5em; /* fixed row: the label changes, the layout does not */
+  margin: 8px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .controls,
-.toggles {
+.toggles,
+.share {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -191,30 +234,70 @@ select {
   margin: 8px 0;
 }
 
+.toggles label,
 .speed {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 44px;
 }
 
-.keys {
-  font-size: 0.85em;
+.toggles input {
+  min-height: auto;
+  width: 20px;
+  height: 20px;
 }
 
-.picked ul {
+.speed input {
+  height: 44px;
+}
+
+.toast {
+  min-width: 12em;
+  color: var(--accent);
+}
+
+.popover {
+  max-width: min(420px, calc(100% - 32px));
+  padding: 0;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.popover::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+.popover-body {
+  padding: 16px;
+}
+
+.popover h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.popover ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
+  gap: 0 16px;
   padding: 0;
-  margin: 0;
+  margin: 0 0 12px;
   list-style: none;
 }
 
-.picked p {
-  margin: 0 0 6px;
+.popover a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .expert summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   cursor: pointer;
 }
 
@@ -234,4 +317,10 @@ select {
 footer {
   margin-top: 32px;
   font-size: 0.85em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }
