@@ -27,13 +27,14 @@ from astropy.time import Time
 
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
+from fov import DEFAULT_FOV, fov_of, clamp_fov, position_id
 
 warnings.simplefilter("ignore")
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "cache"
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap"
 SIA = "https://irsa.ipac.caltech.edu/SIA"
-FIELD_ARCSEC = 300          # side of the square field we analyse
+FIELD_ARCSEC = DEFAULT_FOV  # default side of the square field we analyse; a target can set its own (see fov.py)
 SPX_PIX = 6.15              # SPHEREx pixel scale, arcsec
 KEEP_HDUS = ("IMAGE", "FLAGS", "VARIANCE", "WCS-WAVE")
 MAX_IMAGES = 150            # SPHEREx cutouts per target (see fetch())
@@ -80,13 +81,26 @@ def resolve(tid, t):
                    f"FROM gaiadr3.gaia_source WHERE source_id={t['gaia_source_id']}")[0]
         ref = dict(source="Gaia DR3", epoch=2016.0)
     elif "position" in t:
-        # A user-chosen position: use the brightest Gaia source within 5 arcsec if there is one.
+        # A user-chosen position. Typed coordinates can come from any epoch (J2000, a discovery
+        # paper, ...), and a fast-moving star can be a minute of arc away from them today. So follow
+        # every Gaia star within 2' along its own motion from 1990 to 2026, keep the ones whose
+        # path passes within 5" of the typed spot, and take the brightest of those.
         P = t["position"]
         rows = gaia(f"SELECT source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag FROM gaiadr3.gaia_source "
-                    f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{P['ra']},{P['dec']},{5/3600}))")
-        if len(rows):
-            rows.sort("phot_g_mean_mag"); row = rows[0]
-            ref = dict(source="Gaia DR3", epoch=2016.0)
+                    f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{P['ra']},{P['dec']},{120/3600}))")
+        typed = SkyCoord(P["ra"] * u.deg, P["dec"] * u.deg)
+        years = Time(np.arange(1990.0, 2026.51, 0.5), format="jyear")
+        best, best_d, best_g = None, None, 99.0
+        for r in rows:
+            c = SkyCoord(num(r["ra"]) * u.deg, num(r["dec"]) * u.deg, pm_ra_cosdec=num(r["pmra"]) * u.mas / u.yr,
+                         pm_dec=num(r["pmdec"]) * u.mas / u.yr, obstime=Time(2016.0, format="jyear"))
+            dd = float(np.min(c.apply_space_motion(new_obstime=years).separation(typed).arcsec))
+            g = num(r["phot_g_mean_mag"], 99.0)
+            if dd < 5.0 and g < best_g:
+                best, best_d, best_g = r, dd, g
+        if best is not None:
+            row = best
+            ref = dict(source="Gaia DR3", epoch=2016.0, match_arcsec=round(best_d, 2))
         else:
             row = dict(source_id=None, ra=P["ra"], dec=P["dec"], pmra=0.0, pmdec=0.0, parallax=None, phot_g_mean_mag=None)
             ref = dict(source="position entered by user (no Gaia source within 5\")", epoch=2016.0, catalogued=False)
@@ -118,7 +132,7 @@ def resolve(tid, t):
 
     # Field stars: everything Gaia sees within the analysis field, for the "ghost" overlay.
     centre = predict(ref, 2025.7)
-    rad = FIELD_ARCSEC * 0.75 / 3600
+    rad = fov_of(t) * 0.75 / 3600
     field = gaia(f"SELECT source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag FROM gaiadr3.gaia_source "
                  f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{centre.ra.deg},{centre.dec.deg},{rad})) "
                  f"AND phot_g_mean_mag < 19")
@@ -194,7 +208,8 @@ def fetch(tid):
         pick |= {i for i, r in enumerate(spx) if stem(r) in cached}
         spx = spx[sorted(pick)]
     print(f"   SPHEREx DR1: {n_all} images, using {len(spx)}", flush=True)
-    size_px = int(FIELD_ARCSEC / SPX_PIX) + 4
+    fov = fov_of(t)
+    size_px = int(fov / SPX_PIX) + 4
 
     def one(row):
         f = d / "spherex" / (Path(str(row["access_url"]).split("?")[0]).stem + ".fits")
@@ -212,11 +227,12 @@ def fetch(tid):
         done = 0
         for status in ex.map(one, spx):
             done += 1
-            if done % 40 == 0 or done == len(spx):
+            if done % 6 == 0 or done == len(spx):
                 print(f"   SPHEREx cutouts {done}/{len(spx)}", flush=True)
 
     # --- AllWISE atlas: W1 and W2, epoch ~2010.5 ---------------------------------------------
     c10 = predict(ref, 2010.5)
+    cmid = predict(ref, 2018.4)     # centre the WISE cutout mid-way so a fast mover's 2026 spot is covered
     aw = sia("wise_allwise", c10, d / "allwise_sia.xml")
     for band in ("W1", "W2"):
         f = d / f"allwise_{band}.fits"
@@ -225,15 +241,20 @@ def fetch(tid):
         rows = aw[(aw["energy_bandpassname"] == band) & (aw["dataproduct_subtype"] == "science")]
         if len(rows) == 0:
             print(f"   AllWISE {band}: none"); continue
-        f.write_bytes(get(f"{rows[0]['access_url']}?center={c10.ra.deg},{c10.dec.deg}&size={FIELD_ARCSEC}arcsec"))
+        f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(fov * 1.6)}arcsec"))
     print(f"   AllWISE W1/W2 cached", flush=True)
 
 
-def add_position(ra, dec, name=None):
-    """Register a user-chosen sky position as a target and return its id."""
-    tid = f"pos_{ra:.4f}_{dec:+.4f}".replace(".", "p").replace("+", "n").replace("-", "s")
+def add_position(ra, dec, name=None, fov=None):
+    """Register a user-chosen sky position as a target and return its id.
+
+    fov is the side of the square field in arcseconds (see fov.py). The default field keeps the
+    original id; other sizes get a suffix, so each size is cached separately.
+    """
+    fov = clamp_fov(fov)
+    tid = position_id(ra, dec, fov)
     t = {"name": name or f"RA {ra:.4f}, Dec {dec:+.4f}", "kind": "A sky position entered by a user",
-         "position": {"ra": ra, "dec": dec}, "story": "explore"}
+         "position": {"ra": ra, "dec": dec}, "story": "explore", "fov_arcsec": fov}
     d = CACHE / tid; d.mkdir(parents=True, exist_ok=True)
     (d / "target_def.json").write_text(json.dumps(t, indent=1))
     TARGETS[tid] = t
@@ -241,11 +262,14 @@ def add_position(ra, dec, name=None):
 
 
 if __name__ == "__main__":
+    if "--max" in sys.argv:                 # quick look: fewer SPHEREx cutouts per target
+        MAX_IMAGES = max(12, int(sys.argv[sys.argv.index("--max") + 1]))
     if "--ra" in sys.argv:
         a = sys.argv
         ra, dec = float(a[a.index("--ra") + 1]), float(a[a.index("--dec") + 1])
         name = a[a.index("--name") + 1] if "--name" in a else None
-        tid = add_position(ra, dec, name)
+        fov = float(a[a.index("--fov") + 1]) if "--fov" in a else None      # arcseconds per side
+        tid = add_position(ra, dec, name, fov)
         print(f"target id: {tid}  (next: python pipeline/analyze.py {tid} && python pipeline/evidence.py)")
         fetch(tid)
         sys.exit()
