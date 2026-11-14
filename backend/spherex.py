@@ -636,10 +636,28 @@ def get_frames(q, fov=5.0, per_group=12, det=""):
     return {**result, "query": q, "cached": cached, "gaia": gaia, "notes": notes, "quality": quality}
 
 
-def write_json(path, data):
-    """Write JSON atomically (temp file, then rename), so a reader never sees half a file."""
-    CACHE_DIR.mkdir(exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=CACHE_DIR, suffix=".tmp")
-    with os.fdopen(fd, "w") as f:
-        json.dump(data, f)
-    os.replace(tmp, path)
+def write_json(path, data, tries=5):
+    """Write JSON atomically (unique temp file, then rename), so a reader never sees half a file. True if written.
+
+    Windows refuses the rename while another request reads the file (PermissionError 13), so retry with a short
+    backoff. If it still fails, give up quietly: the caller serves its fresh result, only the cache misses it.
+    """
+    path.parent.mkdir(exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        for attempt in range(tries):
+            try:
+                os.replace(tmp, path)
+                return True
+            except PermissionError:
+                time.sleep(0.05 * 2**attempt)
+        log.warning("cache file %s is locked; result not cached", path.name)
+    except OSError as e:  # disk full, no write access
+        log.warning("could not cache %s: %r", path.name, e)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    return False
