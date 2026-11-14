@@ -10,13 +10,22 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 
 type Ring = { x: number; y: number }
-type Frame = { label: string; mjd_mean: number; date: string; n_images: number; png: string; ring: Ring | null }
+type Frame = {
+  label: string
+  mjd_mean: number
+  date: string
+  n_images: number
+  png: string
+  ring: Ring | null
+  saturated: boolean
+}
 type DetectorFrame = { group_index: number; png: string; n_images: number }
 type Result = {
   query: string
   name: string | null
   center: { ra: number; dec: number }
   pm: { pmra: number; pmdec: number } | null
+  det: string | null
   fov_arcmin: number
   pixel_arcsec: number
   size_px: number
@@ -46,19 +55,34 @@ type Action =
   | { type: 'pick'; ra: number; dec: number }
   | { type: 'unpick' }
 
+// det: the WISE 0855 brown dwarf is bright only near 4.5 um, so its chip opens the D6 stack.
 const TARGETS = [
-  { q: "Barnard's Star", label: "Barnard's Star", note: 'fastest-moving star' },
-  { q: 'eps Ind B', label: 'Epsilon Indi B', note: 'fast brown dwarf pair' },
-  { q: 'WISE J085510.83-071442.5', label: 'WISE 0855', note: 'coldest brown dwarf' },
-  { q: 'RW Aur', label: 'RW Aurigae', note: 'variable star' },
-  { q: 'R Dra', label: 'R Draconis', note: 'variable star, many images' },
+  { q: "Barnard's Star", det: '', label: "Barnard's Star", note: 'fastest-moving star' },
+  { q: 'eps Ind B', det: '', label: 'Epsilon Indi B', note: 'fast brown dwarf pair' },
+  {
+    q: 'WISE J085510.83-071442.5',
+    det: 'D6',
+    label: 'WISE 0855',
+    note: 'cold brown dwarf, D6 stack; uses the 2026 position; the challenge coordinates are from 2010',
+  },
+  { q: 'RW Aur', det: '', label: 'RW Aurigae', note: 'variable star' },
+  { q: 'R Dra', det: '', label: 'R Draconis', note: 'variable star, many images' },
+]
+const DETECTORS = [
+  ['', 'All detectors, stacked'],
+  ['D1', 'D1 only (0.75–1.09 µm)'],
+  ['D2', 'D2 only (1.10–1.62 µm)'],
+  ['D3', 'D3 only (1.63–2.41 µm)'],
+  ['D4', 'D4 only (2.42–3.82 µm)'],
+  ['D5', 'D5 only (3.83–4.41 µm)'],
+  ['D6', 'Long-wavelength stack (D6 only, 4.42–5.00 µm): best for cold brown dwarfs like WISE 0855'],
 ]
 const TIMEOUT_MS = 180_000
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const clampFov = (f: number) => Math.min(15, Math.max(2, Math.round(f) || 5))
 const deg = (v: number, sign = false) => (sign && v >= 0 ? '+' : '') + v.toFixed(5) + '°'
-const keyOf = (p: { q: string; fov: number }) => `${p.q}|${p.fov}`
+const keyOf = (p: { q: string; fov: number; det: string }) => `${p.q}|${p.fov}|${p.det}`
 const placeOf = (s: State): Place => ({ q: s.q, fov: s.fov, view: s.view, det: s.det })
 
 function readUrl(): Place {
@@ -115,12 +139,6 @@ function initState(): State {
   return { ...p, status: p.q ? 'loading' : 'home', result: null, failure: null, attempt: 0, since: Date.now(), pick: null }
 }
 
-function framesOf(r: Result | null, det: string): Frame[] {
-  if (!r) return []
-  const d = det ? r.detectors[det] : undefined
-  return d ? d.map((x) => ({ ...r.frames[x.group_index], png: x.png, n_images: x.n_images })) : r.frames
-}
-
 function lookupLinks(ra: number, dec: number): [string, string][] {
   const r = ra.toFixed(5)
   const d = dec.toFixed(5)
@@ -164,12 +182,12 @@ export default function App() {
     dispatch({ type: 'place', place, cached: cache.current.get(keyOf(place)) ?? null, at: Date.now() })
   }
 
-  const search = (text: string) => {
+  const search = (text: string, det = '') => {
     const q = text.trim()
     if (!q) return
-    if (keyOf({ q, fov: state.fov }) === key && (state.status === 'error' || state.status === 'empty'))
+    if (keyOf({ q, fov: state.fov, det }) === key && (state.status === 'error' || state.status === 'empty'))
       dispatch({ type: 'retry', at: Date.now() })
-    else go({ q, view: 'blink', det: '' }, 'push')
+    else go({ q, view: 'blink', det }, 'push')
   }
 
   // First arrival from outside (shared link): put home under it, so Back stays in the app.
@@ -200,6 +218,7 @@ export default function App() {
     const timer = setTimeout(() => ctrl.abort('timeout'), TIMEOUT_MS)
     const t0 = performance.now()
     const params = new URLSearchParams({ q: state.q, fov: String(state.fov) })
+    if (state.det) params.set('det', state.det)
     ;(async () => {
       let action: Action
       try {
@@ -229,7 +248,7 @@ export default function App() {
       clearTimeout(timer)
       ctrl.abort()
     }
-  }, [need, key, state.q, state.fov])
+  }, [need, key, state.q, state.fov, state.det])
 
   useEffect(() => {
     if (!loading) return
@@ -263,8 +282,7 @@ export default function App() {
     }
   }, [r])
 
-  const det = r && r.detectors[state.det] ? state.det : ''
-  const frames = framesOf(r, det)
+  const frames = r?.frames ?? []
   const count = frames.length
   const frame = count ? frames[index % count] : null
   const canPlay = state.status === 'result' && preloaded === r && state.view === 'blink' && !state.pick && count > 1
@@ -414,7 +432,7 @@ export default function App() {
               data-target={t.q}
               onClick={() => {
                 setInput(t.q)
-                search(t.q)
+                search(t.q, t.det)
               }}
             >
               <strong>{t.label}</strong>
@@ -475,10 +493,16 @@ export default function App() {
 
           <p className="frame-label" aria-live={playing ? 'off' : 'polite'}>
             {!loading && frame && !showDiff
-              ? `${frame.label} · ${frame.date} · ${frame.n_images} images · frame ${(index % count) + 1} of ${count}`
+              ? `${frame.label} · ${frame.n_images} images · frame ${(index % count) + 1} of ${count}`
               : !loading && showDiff
                 ? `${r.difference!.to} minus ${r.difference!.from}`
                 : ' '}
+          </p>
+
+          <p className="saturated-note">
+            {!loading && r?.frames.some((f) => f.saturated)
+              ? 'Saturated: SPHEREx cannot measure this star’s brightness change here. The white core has no data.'
+              : ' '}
           </p>
 
           {state.view === 'diff' && r && !loading ? (
@@ -516,8 +540,8 @@ export default function App() {
             </label>
           </div>
           <p className="hint">
-            Click a pixel to look it up in other catalogs. Black means no data (off the detector, or a saturated star
-            core). Keys: Space plays or pauses, ← and → step.
+            Click a pixel to look it up in other catalogs. Black means no data (off the detector). White in a star core means saturated.
+            Keys: Space plays or pauses, ← and → step.
           </p>
 
           <div className="share">
@@ -546,17 +570,10 @@ export default function App() {
               </form>
               <label>
                 Detector
-                <select
-                  value={det}
-                  onChange={(e) => {
-                    setIndex(0)
-                    go({ det: e.target.value }, 'replace')
-                  }}
-                >
-                  <option value="">All detectors, stacked</option>
-                  {Object.keys(r.detectors).map((d) => (
-                    <option key={d} value={d}>
-                      {d} only ({r.detectors[d].length} surveys)
+                <select value={state.det} onChange={(e) => go({ det: e.target.value }, 'replace')}>
+                  {DETECTORS.map(([value, text]) => (
+                    <option key={value} value={value}>
+                      {text}
                     </option>
                   ))}
                 </select>

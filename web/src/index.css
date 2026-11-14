@@ -324,3 +324,9 @@ footer {
     transition: none !important;
   }
 }
+
+.saturated-note {
+  min-height: 3em; /* reserved: the note never shifts the controls */
+  margin: 0 0 8px;
+  color: var(--ring);
+}
