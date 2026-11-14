@@ -48,7 +48,10 @@ FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
 OVERFLOW, BLOOM = 2, 67108864  # saturated pixel; pixel inside the bloom of a bright star
 CACHE_DIR = Path(__file__).parent / "cache"
-CACHE_VERSION = 5  # bump when the response gains fields, so old cache files are not served
+CACHE_VERSION = 6  # bump when the response gains fields, so old cache files are not served
+DAY_S = 86400
+CACHE_MAX_AGE_S = 7 * DAY_S  # QR3 adds new surveys every week, so an answer is rebuilt after a week
+DEGRADED_MAX_AGE_S = 3600  # an answer with failed images or dropped epochs is rebuilt after an hour
 # Centroid error floor, px (resampling, WCS, undersampled PSF): (clean core, core with no data). Measured in
 # 2026-11: Gaia stars in the Kapteyn's Star and RW Aur fields sit a median 0.1 px from their fits; per-detector
 # fits of saturated cores (Barnard's, Kapteyn's Star) scatter 0.1 to 0.35 px around the proper-motion track.
@@ -507,9 +510,11 @@ def build(q, name, coord, center, pm, fov, per_group, det):
             n_failed += 1
 
     frames, stacks, targets, by_det, planes, all_used = [], [], [], defaultdict(list), [], []
+    dropped = 0
     for e in epochs:
         used = [im for im in e if im["cutout"] is not None and np.isfinite(im["cutout"]).any()]
         if not used:
+            dropped += 1
             continue
         mjd = float(np.mean([im["mjd"] for im in used]))
         target = at_epoch(coord, pm, mjd) if pm else center
@@ -573,8 +578,12 @@ def build(q, name, coord, center, pm, fov, per_group, det):
         if k := sum(bool(filled) for _, filled, _ in planes):
             notes.append(f"Colour image: {k} of {len(frames)} frames lack the detectors of one or two channels; there a"
                          " missing channel shows the mean of the other channels, so the colours are less true.")
+    if dropped:
+        notes.append(f"{dropped} survey epoch{'s' if dropped > 1 else ''} left out: no image of it had data here.")
     if n_failed:
         notes.append(f"{n_failed} image{'s' if n_failed > 1 else ''} failed after retries.")
+    if n_failed or dropped:
+        notes.append("This answer is not kept for more than an hour, so a later load tries again.")
     if stats["retries"]:
         notes.append(f"IRSA or S3 needed {stats['retries']} retr{'ies' if stats['retries'] > 1 else 'y'}.")
     if k := sum(f["saturated"] for f in frames):
@@ -607,11 +616,26 @@ def build(q, name, coord, center, pm, fov, per_group, det):
         "notes": notes,
         "n_images_used": sum(f["n_images"] for f in frames),
         "n_failed": n_failed,
+        "epochs_dropped": dropped,
     }
 
 
+def read_cache(path):
+    """(data, age in seconds) of a cache file, or (None, None) when it is missing or unreadable."""
+    try:
+        age = time.time() - path.stat().st_mtime
+        return json.loads(path.read_text()), age
+    except (OSError, ValueError):  # missing, locked by a writer on Windows, or half-written by an old version
+        return None, None
+
+
+def max_age_s(result):
+    """How long a built answer stays in the cache: a week, or an hour when images failed or epochs were dropped."""
+    return CACHE_MAX_AGE_S if not (result["n_failed"] or result.get("epochs_dropped")) else DEGRADED_MAX_AGE_S
+
+
 def get_frames(q, fov=5.0, per_group=12, det=""):
-    """API response for query q; served from the disk cache when the same view was built before.
+    """API response for query q; served from the disk cache when the same view was built recently (max_age_s).
 
     det: '' stacks all detectors; 'D1'..'D6' stacks only that detector (D6 suits cold brown dwarfs).
     """
@@ -620,11 +644,20 @@ def get_frames(q, fov=5.0, per_group=12, det=""):
     fov, per_group = float(fov), int(per_group)
     key = json.dumps([CACHE_VERSION, round(center.ra.deg, 5), round(center.dec.deg, 5), fov, per_group, det])
     path = CACHE_DIR / (hashlib.sha256(key.encode()).hexdigest() + ".json")
-    cached = path.exists()
-    result = json.loads(path.read_text()) if cached else build(q, name, coord, center, pm, fov, per_group, det)
+    result, age = read_cache(path)
+    cached, stale = result is not None, []
+    if cached and age > max_age_s(result):
+        try:
+            result, cached = build(q, name, coord, center, pm, fov, per_group, det), False
+        except HTTPException as e:  # IRSA or S3 down: an old answer is better than none
+            if e.status_code < 500:
+                raise
+            stale = [f"{e.detail} This is the answer built {age / DAY_S:.0f} days ago."]
+    elif not cached:
+        result = build(q, name, coord, center, pm, fov, per_group, det)
     if not cached:
         write_json(path, result)
-    n, notes = result["size_px"], list(result["notes"])
+    n, notes = result["size_px"], list(result["notes"]) + stale
     try:  # not cached with the frames, so a failed Gaia query is tried again on the next request
         stars = gaia_field(center, fov / 60 / 2 * 1.5)
         gaia = gaia_overlay(stars, output_wcs(center, n), n, [f["mjd_mean"] for f in result["frames"]])
@@ -632,7 +665,7 @@ def get_frames(q, fov=5.0, per_group=12, det=""):
         gaia = None
         notes.append(f"Gaia DR3 query failed; overlay off ({getattr(e, 'detail', e)}).")
     quality = {"n_images_used": result["n_images_used"], "n_failed": result["n_failed"],
-               "cache_age_s": round(time.time() - path.stat().st_mtime) if cached else 0}
+               "epochs_dropped": result.get("epochs_dropped", 0), "cache_age_s": round(age) if cached else 0}
     return {**result, "query": q, "cached": cached, "gaia": gaia, "notes": notes, "quality": quality}
 
 
