@@ -40,8 +40,16 @@ Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `?target=wise08
 Gaia), measures it and plays it as a flipbook in a few minutes. The public static site cannot do this by
 itself because IRSA does not allow direct browser requests (no CORS), so it shows the prepared patches.
 
-**Sky Compass.** On a phone, GPS + time + compass + tilt tell WANDERERS where the camera points; it guides
-you to a target and opens its investigation. Works indoors; objects below the horizon are shown too.
+**Sky Compass** (`app/compass.html`). An intro places you in the universe (galaxy field, Milky Way, the Solar
+System at today's positions, the NASA Blue Marble Earth with the real day/night line, then your region from NASA
+GIBS with your city, time zone and sidereal time). One-step calibration: lay the phone flat for 3 seconds. Then an
+augmented-reality sky: objects drawn where they really are, a compass tape, tilt scale, mini radar and telemetry.
+
+Motion uses sensor fusion (`app/orient.js`): the gyroscope drives every movement and the compass only sets north,
+averaged while the phone lies flat and corrected slowly after. `node tests/orient.sim.js` replays realistic sensor
+streams (gyro drift, compass noise, tilt bias, declination, indoor magnetic distortion, Android spikes) through the
+old and new engines: the new one holds 0.1-0.5° error with 0.1° wobble outdoors, versus 1.5-14° (up to 55° while
+panning) before. Indoors, magnetic distortion is removed with one "North check" tap on a star, the Moon or a landmark.
 
 ## Run it
 
