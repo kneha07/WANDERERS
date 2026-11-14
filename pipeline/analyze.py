@@ -175,6 +175,25 @@ def centroid(img, x0, y0, r=3.5):
     return float((v * xx).sum() / v.sum()), float((v * yy).sum() / v.sum())
 
 
+def saturated_core(img, x0, y0, r):
+    """Centre of the blank (NaN) saturated core touching the predicted position, or None.
+    Archives blank pixels that saturated; for very bright stars that hole is the star."""
+    bad = ~np.isfinite(np.asarray(img, float))
+    if not bad.any():
+        return None
+    lab, n = ndimage.label(bad)
+    yy, xx = np.indices(bad.shape)
+    near = np.unique(lab[(np.hypot(xx - x0, yy - y0) <= r) & bad])
+    near = near[near > 0]
+    if not near.size:
+        return None
+    k = max(near, key=lambda i: (lab == i).sum())
+    m = lab == k
+    if m.sum() < 3 or m.sum() > 400:       # a lone dead pixel or an image edge, not a star
+        return None
+    return float(xx[m].mean()), float(yy[m].mean())
+
+
 def stretch(a):
     """asinh stretch with robust limits, returns 0..1 float image."""
     a = np.array(a, float)
@@ -405,6 +424,9 @@ def analyze(tid):
         f["detected"] = snr >= 5            # only measure a position where the object is clearly there
         f["snr"] = round(snr, 1)
         c = centroid(f["img"], float(px), float(py), r=rad) if f["detected"] else None
+        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if f["mission"] == "WISE" else None
+        if hole is not None:                # very bright star: the archive blanks its saturated core,
+            c, f["detected"], f["saturated_core"] = hole, True, True   # so the hole's centre is its position
         if c is None:
             continue
         meas = gw.pixel_to_world(*c)
