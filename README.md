@@ -58,8 +58,17 @@ several minutes). One field is prepared at a time, up to four can wait, and erro
 It uses `.venv/bin/python` if present, or set `WANDERERS_PYTHON`. The static site does not have this; it
 still shows the message that a teammate can add the field.
 
+**Field of view.** The coordinate box has a size choice: 2′ (close-up), 5′ (standard, what the five test targets
+use) or 10′ (wide). Larger fields can follow faster-moving objects but need more data and take longer. The size
+is stored with the target (`fov_arcsec`, any whole number from 60 to 900 works from the command line), and each
+size is cached separately: the standard size keeps the id `pos_<ra>_<dec>`, other sizes add `_f<arcsec>`.
+Typed coordinates match a cached target only if the sizes agree; without the server, the nearest cached field is
+shown with a note that the other size needs the local server. Links can carry it: `?ra=269.4479&dec=4.7461&fov=600`.
+
 ```bash
+python .venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
 node --test test/fields.test.js     # job handling, validation and HTTP checks (fake pipeline, no network)
+python3 test/test_fov.py            # field-of-view helpers; no packages needed
 ```
 
 ## Data (all public)
