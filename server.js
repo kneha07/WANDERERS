@@ -43,6 +43,27 @@ async function lookup(job, ra, dec) {
   finally { busy = null; }
 }
 
+// ---- star database: learn one star's path with pipeline/star_ml.py (one at a time) ----
+const starJobs = new Map(); let starSeq = 0, starBusy = null, starKeys = null;
+function knownStarKeys() {
+  if (!starKeys) {
+    try { starKeys = new Set(JSON.parse(fs.readFileSync(path.join(ROOT, "data", "stars", "index.json"), "utf8")).stars.map((s) => s.key)); }
+    catch { starKeys = new Set(); }
+  }
+  return starKeys;
+}
+function learnStar(job, key) {
+  const p = spawn(PY, ["-u", "pipeline/star_ml.py", key], { cwd: __dirname });
+  const onData = (d) => d.toString().split("\n").map((l) => l.trim()).filter(Boolean)
+    .forEach((l) => job.log.push(l.replace(/^==\s*/, "").replace(/^!!\s*/, "")));
+  p.stdout.on("data", onData); p.stderr.on("data", () => {});
+  p.on("close", (code) => {
+    job.status = code === 0 && fs.existsSync(path.join(ROOT, "data", "stars", "pred", key + ".json")) ? "done" : "error";
+    if (job.status === "error" && !job.log.length) job.log.push("the model could not be fitted");
+    starBusy = null;
+  });
+}
+
 function slim(t) {
   const keep = ["name", "kind", "reference", "target_in_gaia", "motion", "variability", "ir_color",
     "spectrum_points", "flagged_points", "spherex_visits", "evidence"];
@@ -78,6 +99,22 @@ http.createServer(async (req, res) => {
     const job = jobs.get(url.pathname.slice(9));
     res.writeHead(job ? 200 : 404, { "content-type": "application/json" });
     return res.end(JSON.stringify(job ? { status: job.status, id: job.id, log: job.log.slice(-8), seconds: Math.round((Date.now() - job.started) / 1000) } : { error: "no such job" }));
+  }
+  if (req.method === "POST" && url.pathname === "/api/star-predict") {
+    res.setHeader("content-type", "application/json");
+    try {
+      const { key } = JSON.parse(await body(req, 500));
+      if (!/^[a-z0-9_]{1,40}$/.test(key || "") || !knownStarKeys().has(key)) throw new Error("unknown star");
+      if (starBusy) { res.writeHead(409); return res.end(JSON.stringify({ error: "Another star is being learnt; try again in a minute", job: starBusy })); }
+      const n = String(++starSeq), job = { status: "running", log: [], started: Date.now() };
+      starJobs.set(n, job); starBusy = n; learnStar(job, key);
+      res.writeHead(202); return res.end(JSON.stringify({ job: n }));
+    } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) })); }
+  }
+  if (url.pathname.startsWith("/api/star-job/")) {
+    const job = starJobs.get(url.pathname.slice(14));
+    res.writeHead(job ? 200 : 404, { "content-type": "application/json" });
+    return res.end(JSON.stringify(job ? { status: job.status, log: job.log.slice(-6), seconds: Math.round((Date.now() - job.started) / 1000) } : { error: "no such job" }));
   }
   if (fields.handle(req, res, url)) return;   // /api/field and /api/job: prepare new sky patches on demand
   if (req.method === "POST" && url.pathname === "/api/ask") {
