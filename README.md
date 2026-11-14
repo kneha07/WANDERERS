@@ -58,6 +58,8 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python pipeline/evidence.py
 # 4. plain-language explanations (Claude Code CLI, headless; no API key)
 .venv/bin/python pipeline/explain.py
+# 5. predicted star paths (proper motion + parallax; offline, seconds)
+.venv/bin/python pipeline/star_trajectory.py
 
 # view it
 node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -p
@@ -103,6 +105,92 @@ node --test test/fields.test.js     # job handling, validation and HTTP checks (
 python3 test/test_fov.py            # field-of-view helpers; no packages needed
 ```
 
+### Predicted star path
+
+Tick **Predicted path** under the sky viewer to see where the selected star should be. A green line shows the
+predicted path over the years the frames cover, and a crosshair marks where the star should be in the frame you are
+viewing. A dotted line continues the path to 2030, marked "2030?". The note under the toggles gives the motion rate
+and the size of the parallax loop. It also says how closely the prediction matches the positions measured in the
+frames and where the star should be in 2030.
+
+This is the standard astrometric model, not a fitted or learned one. The catalogue position (Gaia DR3, or Luhman &
+Esplin 2016 for WISE 0855) is moved along its proper motion. Then the yearly parallax shift is added: as Earth goes
+around the Sun, a nearby star traces a small loop on the sky. Earth's position comes from astropy's built-in
+ephemeris. WISE and SPHEREx orbit close to Earth, so Earth's centre stands in for them. Aberration and light bending
+move every star in a small field by the same amount, so they are left out. The parallax formula matches astropy's
+full coordinate transform to within 0.5 mas.
+
+What the measurements show: the prediction matches the measured 4.6 µm positions to within one SPHEREx pixel (6.15″)
+for every target. Barnard's Star matches to 0.9″ rms, Epsilon Indi B to 0.4″. The parallax loops (±0.55″ for
+Barnard's Star, ±0.46″ for WISE 0855) are smaller than the noise of a position measured on 2″ display pixels. So
+these frames show the proper motion clearly but cannot show the parallax itself. The output says so, and it gives
+no error bars because the cached reference has no catalogue uncertainties.
+
+```bash
+.venv/bin/python pipeline/star_trajectory.py barnard --forecast 2027 2030   # writes app/data/barnard/trajectory.json
+.venv/bin/python -m unittest tests/test_star_trajectory.py                 # model vs astropy, grid vs analyze.py
+node --test test/starpath.test.js                                         # page helpers + every committed trajectory
+```
+
+### Star database and learnt trajectories
+
+The **Star database** tab searches about 12,000 stars by proper name, Bayer/Flamsteed (`Alpha Lyrae`, `Alp Lyr`),
+HIP, HD, HR or Gliese number (`Gl 699`). Pick a star to see its details and its path on the sky from 1900 to 2100: the
+past as a solid line, the predicted future dashed, with a 68% uncertainty band, a table of positions and every
+measured position used. Links open straight to a star: `?star=hip87937`.
+
+**Data.** The search list comes from the HYG Database v4.1 (astronexus, CC BY-SA 4.0): every star with a name,
+Bayer/Flamsteed or Gliese designation, or brighter than V = 6.5, plus the WANDERERS targets HYG lacks.
+`pipeline/stardb.py` downloads it once to `data/cache/stars/` and writes `app/data/stars/index.json`.
+
+**Model.** `pipeline/star_ml.py` learns each star's path from its measured positions, using a classical machine-learning
+model: scikit-learn's `HuberRegressor`, a robust linear regression. The positions come from up to 13 catalogues with
+their own observing dates, about 1950 to 2016: photographic plates (GSC 2.3), Hipparcos-2, Tycho-2, UCAC4, PPMXL,
+2MASS, AllWISE, Pan-STARRS1, URAT1, CatWISE2020 and Gaia DR1/DR2/DR3. All are queried from the ESA Gaia archive. The
+WANDERERS targets also use our own SPHEREx centroids. The model is fitted to each star separately; no weights were
+trained beforehand. Four feature sets are compared by BIC: linear motion, plus parallax, plus acceleration, and both.
+A parallax or acceleration term is only kept if it is a 3σ detection and physically possible. Uncertainty comes from a
+parametric bootstrap, plus any acceleration too small to detect.
+
+**Validation** is written into every result and shown on the page:
+- **Gaia hold-out:** the model is retrained with no Gaia data and predicts where Gaia DR3 saw the star in 2016.0.
+  The miss is 36 mas for Groombridge 1830, 108 mas for Groombridge 34 and 176 mas for Barnard's Star.
+- **Learnt values vs Gaia DR3:** the learnt motion and parallax are compared with Gaia DR3's own. Proper motions agree
+  to within a few mas/yr; Proxima's learnt parallax is 761 ± 103 mas against Gaia's 768.
+- **Barnard's Star** gets an acceleration term of +1.33 mas/yr² in Dec. That is its known perspective acceleration.
+- **WISE 0855:** the learnt motion is −8099, +712 mas/yr against Luhman & Esplin's −8123, +673. It uses mid-infrared
+  data only, because the object is too faint for any optical catalogue.
+
+**Known limit:** RW Aurigae is a binary inside nebulosity. Ground-based catalogues measure the blended light of both
+stars, so its learnt motion differs from Gaia's.
+
+```bash
+.venv/bin/python pipeline/stardb.py                      # build the search list (downloads HYG once, 34 MB)
+.venv/bin/python pipeline/star_ml.py --showcase          # the 18 stars shipped with the page
+.venv/bin/python pipeline/star_ml.py "Tau Ceti" hip1475  # any other star, by name or key
+.venv/bin/python -m unittest tests/test_star_ml.py       # synthetic stars: recovers motion, parallax, acceleration
+node --test test/stardb.test.js                          # search, formatting, chart, every shipped prediction
+```
+
+**Over thousands of years.** Below the details, one year slider (±1,000 to ±50,000 years, with Play) drives three linked
+views:
+- **Sky:** a globe of the celestial sphere with a curved RA/Dec grid and real background stars. Switch to an
+  RA/Dec atlas chart to see the curved track star atlases show.
+- **3D map:** the Sun and Earth at the centre, the star's path through space, its closest approach and the nearest
+  stars. Drag to rotate, scroll to zoom.
+- **Distance through time,** with apparent brightness.
+
+The learnt present-day state (position, motion, parallax when resolved) plus Gaia DR3's radial velocity is carried
+through 3D space at constant velocity (`app/starcore.js`). That is the model behind astropy's `apply_space_motion`.
+`test/starcore.test.js` checks it against astropy out to 30,000 CE; the fixture is in `test/fixtures/`.
+
+Barnard's Star comes closest in 11,735 CE at 3.77 light-years. A cloud of 300 runs shows how the starting
+uncertainties grow. The Galaxy's gravity and orbits around companions are not included. Links:
+`?star=hip24186&span=50000&sky=radec&year=20000`.
+
+With `node server.js` running, any star without a stored prediction can be learnt from the page (about a minute):
+`POST /api/star-predict {"key": "hip1475"}`, then poll `GET /api/star-job/<n>`. One star is learnt at a time.
+
 ### Frame details and data flags
 
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
@@ -130,6 +218,9 @@ Setup and details: [docs/blink/README.md](docs/blink/README.md).
 | NASA WISE / AllWISE atlas (IRSA) | 2010 images at 3.4 and 4.6 µm |
 | ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
+| astropy built-in solar-system ephemeris | Earth's position, for the parallax term of the predicted star paths |
+| HYG Database v4.1 (astronexus, CC BY-SA 4.0) | the searchable star list |
+| ESA Gaia archive TAP (Gaia DR1-3, Hipparcos-2, Tycho-2, 2MASS, AllWISE, Pan-STARRS1, URAT1, UCAC4, PPMXL, GSC 2.3, CatWISE2020) | measured positions that train each star's trajectory model |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
 
@@ -147,8 +238,8 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py
-app/        index.html · style.css · app.js · data/<target>/ (generated)
+pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py
+app/        index.html · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
 ```

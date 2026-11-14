@@ -28,6 +28,9 @@ TARGETS = {
                         "pmra": -8123.0, "pmdec": 673.0, "parallax": 449.0,
                         "ref": "Luhman & Esplin 2016, AJ 152, 78"},
         "story": "motion+not-in-gaia",
+        # Far too faint below ~3 um for plates, 2MASS or Gaia: only mid-infrared surveys can have measured it
+        # (used by pipeline/star_ml.py so a background star near its path is never taken for it).
+        "only_catalogues": ["AllWISE", "CatWISE2020"],
     },
     "rw_aur": {
         "name": "RW Aurigae",
