@@ -50,6 +50,17 @@ node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -
 `app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
 appears when `server.js` is running.
 
+### Frame details and data flags
+
+Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
+how many SPHEREx images were stacked, whether the object was seen and how strongly), how many SPHEREx spectrum
+measurements were left out because of flagged pixels, and the SPHEREx visits at that position. It shows only what
+the pipeline recorded: a flagged / not-flagged count, not a count per flag type.
+
+```bash
+node --test test/frameinfo.test.js   # includes checks on every committed target
+```
+
 ## Data (all public)
 
 | Source | Used for |
