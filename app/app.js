@@ -40,6 +40,7 @@
     history.replaceState(null, "", url);
     await preload();
     setupSlider(); draw(); evidence(); spectrum();
+    if (MAP.ready) mapGoTo();
     $("answer").textContent = "";
   }
 
@@ -183,6 +184,28 @@
     const sign = /^-/.test(s) ? -1 : 1, v = Math.abs(m[0]) + (m[1] || 0) / 60 + (m[2] || 0) / 3600;
     return sign * v * (hours ? 15 : 1);
   }
+  async function liveLookup(a, d) {
+    const msg = $("coordMsg"), btn = document.querySelector("#coordForm button");
+    btn.disabled = true;
+    msg.textContent = `Looking up RA ${a.toFixed(4)}°, Dec ${d.toFixed(4)}° in the NASA archive…`;
+    try {
+      const r = await fetch("api/lookup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ra: a, dec: d }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "lookup failed");
+      for (;;) {
+        await new Promise((ok) => setTimeout(ok, 2000));
+        const s = await (await fetch(`api/job/${j.job}`)).json();
+        msg.textContent = `${s.seconds}s · ${s.log[s.log.length - 1] || "starting…"}`;
+        if (s.status === "done") {
+          S.list = await (await fetch("data/index.json", { cache: "no-store" })).json();
+          renderTargets(); msg.textContent = "Done. Showing the new patch."; load(s.id); break;
+        }
+        if (s.status === "error") throw new Error(s.log.slice(-2).join(" "));
+      }
+    } catch (e) { msg.textContent = "Lookup failed: " + e.message; }
+    finally { btn.disabled = false; }
+  }
+
   function coordSearch(ra, dec) {
     const a = parseAngle(ra, /h/i.test(ra) || /:/.test(ra)), d = parseAngle(dec, false);
     if (!isFinite(a) || !isFinite(d)) { $("coordMsg").textContent = "Could not read those coordinates."; return; }
@@ -191,8 +214,84 @@
       const dd = Math.hypot((t.ra - a) * Math.cos((d * Math.PI) / 180), t.dec - d) * 3600;
       if (dd < bd) { bd = dd; best = t; }
     }
-    if (best && bd < 600) { $("coordMsg").textContent = `Matched ${best.name} (${Math.round(bd)}″ away).`; load(best.id); }
-    else $("coordMsg").textContent = `Not in the cached set yet. A teammate can add it in a few minutes: ` +
-      `python pipeline/fetch.py --ra ${a.toFixed(5)} --dec ${d.toFixed(5)}, then analyze.py and evidence.py.`;
+    if (best && bd < 600) { $("coordMsg").textContent = `Matched ${best.name} (${Math.round(bd)}″ away).`; load(best.id); return; }
+    if (!S.live) {
+      $("coordMsg").textContent = "Showing this patch on the live SPHEREx sky map. The full time-lapse and measurements run on " +
+        "the WANDERERS demo server (node server.js), which fetches SPHEREx and WISE images for any coordinates in a few minutes.";
+      showMap(a, d, `RA ${a.toFixed(4)}°, Dec ${d.toFixed(4)}°`);
+      return;
+    }
+    liveLookup(a, d);
   }
+
+  // ---------- live sky map (Aladin Lite + IRSA HiPS; works for any coordinates on the static site) ----------
+  const HIPS = {
+    spherex: "https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube",
+    wise: "https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/RGB-W4-W2-W1",
+  };
+  const MAP = { ready: false, aladin: null, layers: {}, lams: [], overlay: null, cat: null, at: null };
+
+  async function loadAladin() {
+    // Aladin Lite 3.x ships as an ES module with a default export.
+    if (!window.A) window.A = (await import("https://cdn.jsdelivr.net/npm/aladin-lite@3.8.2/dist/aladin.js")).default;
+  }
+  async function initMap() {
+    if (MAP.ready) return;
+    await loadAladin(); await A.init;
+    const t = S.t || {};
+    MAP.aladin = A.aladin("#aladin", { survey: HIPS.spherex, fov: 0.12, cooFrame: "ICRSd", showReticle: true, showLayersControl: false,
+      showGotoControl: false, showFullscreenControl: true, showCooGridControl: false, showSimbadPointerControl: false,
+      showProjectionControl: false, showFrame: true, showZoomControl: true,
+      target: t.grid ? `${t.grid.centre_ra} ${t.grid.centre_dec}` : "0 0" });
+    MAP.layers.spherex = A.imageHiPS(HIPS.spherex, { name: "SPHEREx DR1", imgFormat: "png" });
+    MAP.layers.wise = A.imageHiPS(HIPS.wise, { name: "AllWISE colour", imgFormat: "jpeg" });
+    MAP.aladin.setBaseImageLayer(MAP.layers.spherex);
+    try { MAP.layers.spherex.setColormap("grayscale", { stretch: "asinh" }); } catch {}   // faint sources show better
+    MAP.overlay = A.graphicOverlay({ color: "#ffb547", lineWidth: 2, lineDash: [6, 4] }); MAP.aladin.addOverlay(MAP.overlay);
+    MAP.cat = A.catalog({ name: "target", sourceSize: 22, color: "#ffb547", shape: "circle" }); MAP.aladin.addCatalog(MAP.cat);
+    try {   // wavelength of each of the 102 cube frames, straight from the HiPS description
+      const txt = await (await fetch(HIPS.spherex + "/properties")).text();
+      const m = txt.match(/data_cube_crval3_arr\s*=\s*([\d.\s]+)/);
+      if (m) MAP.lams = m[1].trim().split(/\s+/).map(Number);
+    } catch {}
+    MAP.ready = true;
+    setSlice(+$("lam").value);
+  }
+  function setSlice(n) {
+    const lam = MAP.lams[n - 1];
+    $("lamVal").textContent = lam ? `${lam.toFixed(2)} µm (band ${n} of 102)` : `band ${n} of 102`;
+    try { MAP.layers.spherex.setSliceNumber(n - 1); } catch {}
+  }
+  function mapGoTo(ra, dec, label) {
+    if (!MAP.ready) return;
+    const t = S.t;
+    if (ra == null && t) { ra = t.grid.centre_ra; dec = t.grid.centre_dec; label = t.name; }
+    if (ra == null) return;
+    MAP.aladin.gotoRaDec(ra, dec);
+    MAP.overlay.removeAll(); MAP.cat.removeAll();
+    const pts = t && label === t.name ? t.track.filter((p) => (p.ch || "w2") === "w2").sort((a, b) => a.year - b.year) : [];
+    if (pts.length >= 2) MAP.overlay.add(A.polyline(pts.map((p) => [p.ra, p.dec])));
+    const last = pts.length ? pts[pts.length - 1] : { ra, dec };
+    MAP.cat.addSources([A.source(last.ra, last.dec, { name: label })]);
+  }
+  async function showMap(ra, dec, label) {
+    selectTab("map");
+    try { await initMap(); mapGoTo(ra, dec, label); } catch (e) { $("coordMsg").textContent = "Sky map unavailable: " + e.message; }
+  }
+  function selectTab(which) {
+    const map = which === "map";
+    $("flipView").hidden = map; $("mapView").hidden = !map;
+    $("tabFlip").classList.toggle("on", !map); $("tabMap").classList.toggle("on", map);
+    $("tabFlip").setAttribute("aria-selected", !map); $("tabMap").setAttribute("aria-selected", map);
+    if (map) stop();
+  }
+  $("tabFlip").onclick = () => selectTab("flip");
+  $("tabMap").onclick = async () => { selectTab("map"); try { await initMap(); mapGoTo(); } catch (e) { $("coordMsg").textContent = "Sky map unavailable: " + e.message; } };
+  $("lam").oninput = (e) => setSlice(+e.target.value);
+  $("mapSurvey").onchange = (e) => {
+    if (!MAP.ready) return;
+    MAP.aladin.setBaseImageLayer(MAP.layers[e.target.value]);
+    $("lamWrap").hidden = e.target.value !== "spherex";
+    if (e.target.value === "spherex") setSlice(+$("lam").value);
+  };
 })();

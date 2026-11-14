@@ -29,6 +29,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.wcs import WCS
 from reproject import reproject_interp
+from scipy import ndimage
 
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
@@ -38,6 +39,7 @@ warnings.simplefilter("ignore")
 from astropy import log as _astropy_log
 _astropy_log.setLevel("WARNING")   # the spectral WCS triggers an expected SIP notice; SIP is turned off right after
 OUT = ROOT / "app" / "data"
+RECENTRE_ON_MOVERS = False         # experimental mover search; see find_movers()
 GRID_PIX = 2.0                      # arcsec per display pixel
 NPIX = int(FIELD_ARCSEC / GRID_PIX)
 
@@ -181,6 +183,87 @@ def save_png(a, path):
     plt.imsave(path, stretch(a), cmap="gray", origin="lower", vmin=0, vmax=1)
 
 
+def find_sources(img, nsig=4.5):
+    """Peaks above nsig x robust noise on the display grid. Returns [(x, y, peak/noise)]."""
+    a = np.array(img, float)
+    fin = a[np.isfinite(a)]
+    if fin.size < 100:
+        return []
+    bg = np.median(fin); noise = 1.4826 * np.median(np.abs(fin - bg)) or 1e-9
+    z = np.nan_to_num((ndimage.uniform_filter(np.nan_to_num(a, nan=bg), 3) - bg) / noise)
+    peaks = (z == ndimage.maximum_filter(z, size=5)) & (z > nsig)
+    out = []
+    for y, x in zip(*np.nonzero(peaks)):
+        c = centroid(a, float(x), float(y), r=2.5)
+        if c:
+            out.append((c[0], c[1], float(z[y, x])))
+    return out
+
+
+def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=()):
+    """Sources present in one epoch but not the other, paired into movers.
+
+    Static sources sit at the same place in both images and are ignored. A source that is only in
+    the old image, paired with one that is only in the new image a plausible distance away, is a
+    mover. Each mover is then checked against Gaia DR3: if a Gaia star's own motion carries it from
+    the old to the new position, Gaia explains it; otherwise it is unexplained (a candidate)."""
+    A, B = find_sources(img_old), find_sources(img_new)
+    if not A or not B:
+        return []
+    dt = y_new - y_old
+    # "Same static source" = close in position AND similar in brightness (a faint background
+    # source should not hide a bright mover that happens to land next to it).
+    near = lambda p, L, r: any(np.hypot(p[0] - q[0], p[1] - q[1]) < r and abs(np.log(p[2] / q[2])) < np.log(4) for q in L)
+    a_only = [p for p in A if not near(p, B, 4) and np.isfinite(img_new[int(round(p[1])) % npix, int(round(p[0])) % npix])]
+    b_only = [p for p in B if not near(p, A, 4) and np.isfinite(img_old[int(round(p[1])) % npix, int(round(p[0])) % npix])]
+    a_only = [p for p in a_only if p[2] >= 6]; b_only = [p for p in b_only if p[2] >= 6]
+    # Gaia positions at both epochs, for stars that move enough to matter
+    gaia_paths = []
+    for st in stars:
+        if np.hypot(st["pmra"], st["pmdec"]) < 50:
+            continue
+        c = SkyCoord(st["ra"] * u.deg, st["dec"] * u.deg, pm_ra_cosdec=st["pmra"] * u.mas / u.yr,
+                     pm_dec=st["pmdec"] * u.mas / u.yr, obstime=Time(2016.0, format="jyear"))
+        p0 = gw.world_to_pixel(c.apply_space_motion(new_obstime=Time(y_old, format="jyear")))
+        p1 = gw.world_to_pixel(c.apply_space_motion(new_obstime=Time(y_new, format="jyear")))
+        gaia_paths.append((st["source_id"], float(p0[0]), float(p0[1]), float(p1[0]), float(p1[1])))
+    pairs = []
+    for i, a in enumerate(a_only):
+        for j, b in enumerate(b_only):
+            d = np.hypot(b[0] - a[0], b[1] - a[1])
+            if 4 <= d <= 95:                    # 8" to 190": 0.5 to ~12 arcsec/yr over 16 years
+                pairs.append((abs(np.log(b[2] / a[2])), d, i, j))
+    pairs.sort()                                 # most similar brightness first
+    used_a, used_b, movers = set(), set(), []
+    for score, d, i, j in pairs:
+        if i in used_a or j in used_b or score > np.log(4):
+            continue
+        a, b = a_only[i], b_only[j]
+        # Linking test used in asteroid searches: a real mover must also be at the interpolated
+        # position in every intermediate epoch we have. Chance pairings fail this.
+        ok = True
+        for img_mid, y_mid in middles:
+            f = (y_mid - y_old) / (y_new - y_old)
+            px, py = a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])
+            if not (0 <= px < npix and 0 <= py < npix) or not np.isfinite(img_mid[int(py), int(px)]):
+                continue
+            if detection_snr(img_mid, px, py, 2.5) < 4:
+                ok = False; break
+        if not ok:
+            continue
+        used_a.add(i); used_b.add(j)
+        ca, cb = gw.pixel_to_world(a[0], a[1]), gw.pixel_to_world(b[0], b[1])
+        gid = next((g for g, x0, y0, x1, y1 in gaia_paths
+                    if np.hypot(x0 - a[0], y0 - a[1]) < 4 and np.hypot(x1 - b[0], y1 - b[1]) < 4), None)
+        movers.append({"x0": a[0], "y0": a[1], "x1": b[0], "y1": b[1], "snr": round(min(a[2], b[2]), 1),
+                       "arcsec_per_yr": float(ca.separation(cb).arcsec / dt),
+                       "ra": float(cb.ra.deg), "dec": float(cb.dec.deg), "year": y_new,
+                       "pmra": float((cb.ra - ca.ra).to(u.mas).value * np.cos(np.radians(cb.dec.deg)) / dt),
+                       "pmdec": float((cb.dec - ca.dec).to(u.mas).value / dt),
+                       "gaia_source_id": gid, "explained_by_gaia": gid is not None})
+    return movers
+
+
 def analyze(tid):
     t = TARGETS[tid]
     meta = json.loads((CACHE / tid / "gaia.json").read_text())
@@ -213,18 +296,19 @@ def analyze(tid):
         "w2": {"label": "4.6 µm", "wise": "allwise_W2.fits", "spx": lambda s: 4.40 <= s["lam"] <= 5.01},
         "w1": {"label": "3.4 µm", "wise": "allwise_W1.fits", "spx": lambda s: 3.00 <= s["lam"] <= 3.80},
     }
-    frames = {}
+    frames = {}      # one frame per epoch (WISE, each SPHEREx survey): used for measurements
+    flip = {}        # what the flipbook plays: WISE, then short time slices inside each survey
     for ch, spec in channels.items():
-        frames[ch] = []
+        frames[ch], flip[ch] = [], []
         wf = CACHE / tid / spec["wise"]
         if wf.exists():
             h = fits.open(wf)[0]
             img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(NPIX, NPIX))
             name = f"{ch}_wise2010.png"; save_png(img, out / name)
-            frames[ch].append({"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name,
-                               "img": img})
+            fr = {"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name, "img": img}
+            frames[ch].append(fr); flip[ch].append(fr)
         for i, v in enumerate(visits):
-            sel = [s for s in spx if visit_of(s["year"]) == i and spec["spx"](s)]
+            sel = sorted([s for s in spx if visit_of(s["year"]) == i and spec["spx"](s)], key=lambda s: s["year"])
             if not sel:
                 continue
             stack = []
@@ -237,8 +321,23 @@ def analyze(tid):
             img = np.nanmedian(np.array(stack), axis=0)
             yr = float(np.mean([s["year"] for s in sel]))
             name = f"{ch}_spherex_v{i + 1}.png"; save_png(img, out / name)
-            frames[ch].append({"year": yr, "label": f"SPHEREx {Time(yr, format='jyear').datetime:%b %Y}",
-                               "mission": "SPHEREx", "png": name, "img": img, "n_images": len(sel)})
+            vf = {"year": yr, "label": f"SPHEREx {Time(yr, format='jyear').datetime:%b %Y}",
+                  "mission": "SPHEREx", "png": name, "img": img, "n_images": len(sel)}
+            frames[ch].append(vf)
+            # Time slices: images taken within ~1.5 days of each other become one flipbook frame.
+            groups, g = [], [0]
+            for k in range(1, len(sel)):
+                (groups.append(g), g := [k]) if (sel[k]["year"] - sel[k - 1]["year"]) * 365.25 > 1.5 else g.append(k)
+            groups.append(g)
+            if len(groups) < 2:
+                flip[ch].append(vf); continue
+            for j, gi in enumerate(groups):
+                sub = np.nanmedian(np.array([stack[k] for k in gi]), axis=0)
+                sy = float(np.mean([sel[k]["year"] for k in gi]))
+                sname = f"{ch}_spherex_v{i + 1}_{j + 1}.png"; save_png(sub, out / sname)
+                flip[ch].append({"year": sy, "label": f"SPHEREx {Time(sy, format='jyear').datetime:%d %b %Y}",
+                                 "mission": "SPHEREx", "png": sname, "img": None, "n_images": len(gi),
+                                 "survey": i + 1})
 
     # ---- difference image between the two SPHEREx visits (same instrument, same band) ----
     for ch in list(frames):
@@ -248,6 +347,37 @@ def analyze(tid):
             lim = np.nanpercentile(np.abs(d), 99.5) or 1
             plt.imsave(out / f"{ch}_diff.png", np.nan_to_num(d), cmap="PiYG", vmin=-lim, vmax=lim, origin="lower")
             frames[ch + "_diff"] = f"{ch}_diff.png"
+
+    # ---- automatic mover search: WISE 2010 vs the fullest SPHEREx survey, same 4.6 um channel ----
+    movers = []
+    w2 = frames.get("w2", [])
+    old = next((f for f in w2 if f["mission"] == "WISE"), None)
+    news = [f for f in w2 if f["mission"] == "SPHEREx"]
+    if old is not None and news:
+        new = max(news, key=lambda f: (f.get("n_images", 0), f["year"]))
+        mids = [(f["img"], f["year"]) for f in news if f is not new and f.get("n_images", 0) >= 3]
+        movers = find_movers(old["img"], new["img"], old["year"], new["year"], gw, stars, NPIX, mids)
+    # For a typed-in position, an unexplained mover whose path passes within 10" of the spot is
+    # almost certainly what the user meant (fast, cold objects are often missing from Gaia).
+    # Experimental: chance pairings still slip through on noisy fields, so re-centring on an
+    # unexplained mover is switched off until the linking test is stricter.
+    if RECENTRE_ON_MOVERS and "position" in t:
+        typed = gw.world_to_pixel(SkyCoord(t["position"]["ra"] * u.deg, t["position"]["dec"] * u.deg))
+        tx, ty = float(typed[0]), float(typed[1])
+        def path_dist(m):
+            vx, vy = m["x1"] - m["x0"], m["y1"] - m["y0"]
+            k = max(0.0, min(1.0, ((tx - m["x0"]) * vx + (ty - m["y0"]) * vy) / (vx * vx + vy * vy or 1)))
+            return np.hypot(m["x0"] + k * vx - tx, m["y0"] + k * vy - ty) * GRID_PIX
+        close = sorted([m for m in movers if not m["explained_by_gaia"] and path_dist(m) < 10], key=path_dist)
+        if close:
+            m = close[0]
+            m["is_target"] = True
+            ref = {"source": "measured by WANDERERS (WISE 2010 → SPHEREx), not in Gaia DR3", "catalogued": False,
+                   "epoch": m["year"], "ra": m["ra"], "dec": m["dec"], "pmra": m["pmra"], "pmdec": m["pmdec"],
+                   "parallax": None, "source_id": None, "phot_g_mean_mag": None, "from_movers": True}
+            spx = load_spherex(tid, ref)
+            print(f"   typed position matches an unexplained mover: {m['arcsec_per_yr']:.2f} arcsec/yr, re-centred on it", flush=True)
+    print(f"   movers found: {len(movers)} ({sum(not m['explained_by_gaia'] for m in movers)} not explained by Gaia)", flush=True)
 
     # ---- measured positions vs Gaia prediction --------------------------------------------
     track = []
@@ -267,6 +397,13 @@ def analyze(tid):
                       "pred_x": float(px), "pred_y": float(py),
                       "offset_arcsec": float(meas.separation(pred).arcsec),
                       "ra": float(meas.ra.deg), "dec": float(meas.dec.deg)})
+    for ch_name in ("w2", "w1"):
+        surveys = [f for f in frames.get(ch_name, []) if f["mission"] == "SPHEREx"]
+        for f in flip.get(ch_name, []):
+            if f.get("survey") and f["survey"] - 1 < len(surveys) + 5:
+                st = next((x for x in surveys if x["png"].endswith(f"_v{f['survey']}.png")), None)
+                if st is not None:
+                    f["detected"] = st.get("detected")
     motion = None
     first = [p for p in track if p["mission"] == "WISE"]
     last = [p for p in track if p["mission"] == "SPHEREx"]
@@ -347,7 +484,7 @@ def analyze(tid):
     # ---- Gaia ghosts: where every catalogued star should be in each frame -----------------
     ghosts = {}
     for ch in ("w2", "w1"):
-        for f in frames.get(ch, []):
+        for f in flip.get(ch, []):
             pos = []
             for st in stars:
                 if st["g"] > 17:      # keep the overlay readable: brighter Gaia stars only
@@ -360,21 +497,23 @@ def analyze(tid):
                     pos.append([round(float(x), 1), round(float(y), 1), round(st["g"], 1)])
             ghosts[f["png"]] = pos
 
-    target_in_gaia = ref.get("source_id") is not None
+    target_in_gaia = ref.get("source_id") is not None and not ref.get("from_movers")
     result = {
         "id": tid, "name": t["name"], "kind": t["kind"], "story": t["story"],
         "reference": ref, "target_in_gaia": target_in_gaia,
         "grid": {"npix": NPIX, "arcsec_per_pix": GRID_PIX, "centre_ra": mid.ra.deg, "centre_dec": mid.dec.deg},
-        "frames": {ch: [{k: v for k, v in f.items() if k != "img"} for f in frames[ch]]
+        "frames": {ch: [{k: v for k, v in f.items() if k != "img"} for f in flip[ch]]
+                   for ch in ("w2", "w1") if ch in flip},
+        "stacks": {ch: [{k: v for k, v in f.items() if k != "img"} for f in frames[ch]]
                    for ch in ("w2", "w1") if ch in frames},
         "diff": {ch: frames.get(ch + "_diff") for ch in ("w2", "w1")},
-        "ghosts": ghosts, "track": track, "motion": motion,
+        "ghosts": ghosts, "track": track, "motion": motion, "movers_experimental": movers,
         "spectrum": spectrum, "spectrum_points": len(pts), "flagged_points": len(pts) - len(good),
         "variability": variability, "ir_color": color, "bands": BANDS,
         "spherex_visits": [{"year": y, "n_images": len(v)} for y, v in zip(vyear, visits)],
     }
     (out / "target.json").write_text(json.dumps(result, indent=1, default=float))
-    print(f"   frames: {[ (ch, len(frames.get(ch, []))) for ch in ('w2','w1')]}  spectrum bins: {len(spectrum)} "
+    print(f"   flipbook frames: {[ (ch, len(flip.get(ch, []))) for ch in ("w2","w1")]}  spectrum bins: {len(spectrum)} "
           f"(points {len(pts)}, flagged {len(pts) - len(good)})", flush=True)
     if motion:
         print(f"   motion: measured {motion['measured_arcsec_per_yr']:.2f}\"/yr vs expected "
