@@ -43,11 +43,21 @@ The brief asks for a public tool that helps "as many people as possible pitch in
 - `app/`: "What this tells us", "What this view cannot show", and "Check it yourself" links (SIMBAD, Gaia, Backyard Worlds) at the latest measured position.
 - Tests: 7 new cases in `tests/test_evidence.py`. Screenshots: `artifacts/insights/`.
 
+### Vetted mover list (second commit)
+
+- `pipeline/vet.py` grades every pair from the automatic mover search: `target`, `known`, `rejected` or `candidate`, first matching rule wins, each with its reason. Rules: both ends on the target's path; one end on it (wrong pairing); Gaia explains the path; SIMBAD has a matching mover; an end at the field edge; an end on a Gaia star that does not move; an end on a static SIMBAD object. SIMBAD answers are stored in `target.json → changes`, so the static site needs no network. `evidence.py` grades without SIMBAD when `changes` is missing, so on-demand fields get a list too.
+- `app/`: "What else moved in this field?" under the viewer. **Show** draws the pair on the image; `?target=wise0855&pick=2` shares it.
+- Result on the five fields: 6 pairs proposed, 0 left unexplained. Epsilon Indi B: the target found, one edge artefact. WISE 0855: one wrong pairing of the target, two static Gaia stars, one edge artefact.
+- **What this exposed:** the search recovers its own target in 1 of the 3 fields where the target moves (not Barnard's Star, not WISE 0855). The page says so. Until `find_movers` is fixed, an empty list means "nothing found", not "nothing there".
+- Tests: `tests/test_vet.py` (12 cases).
+
+Still open for this feature: fix `find_movers` itself (needs the FITS cache, which is not in this checkout); an asteroid check (needs per-image times, which `target.json` does not keep); the same list in `/explore/`.
+
 Not regenerated: `explain.json` (needs the Claude CLI). The five texts still agree with the new cards.
 
 ## Next, in order of value
 
-1. **Vetted "what changed in this field" list.** Fix the pairing in `find_movers`, check each mover against Gaia, SIMBAD and the IMCCE SkyBoT asteroid service, and show the survivors as candidates with a report link. This is the feature the challenge is about.
+1. **Make the mover search recover its own targets.** Fix the pairing in `find_movers` (try the Gaia-predicted and target paths first, then similar brightness), run it on SPHEREx-only pairs as well, and add the IMCCE SkyBoT asteroid check per image. The vetting and the list are done.
 2. **One product.** Port the insight and evidence panels to the live explorer, or call the live API from the missions page, and close #6 and #9.
 3. **Host it.** Static `app/` on GitHub Pages with the five missions, and the live API on a small host with its disk cache and a rate limit.
 4. **Time line.** NEOWISE epochs between 2010 and 2025, plus a brightness-against-time chart per target.

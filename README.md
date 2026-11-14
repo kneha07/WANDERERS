@@ -56,6 +56,8 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 # 3. independent Gaia facts, then evidence cards + target list
 .venv/bin/python pipeline/gaia_facts.py
 .venv/bin/python pipeline/evidence.py
+# 3b. check the automatic mover search against SIMBAD ("What else moved in this field?")
+.venv/bin/python pipeline/vet.py
 # 4. plain-language explanations (Claude Code CLI, headless; no API key)
 .venv/bin/python pipeline/explain.py
 
@@ -147,7 +149,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py
+pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py
 app/        index.html · style.css · app.js · data/<target>/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
