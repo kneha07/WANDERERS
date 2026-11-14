@@ -13,7 +13,7 @@ A person under clouds or city lights points the phone at the sky and sees the st
 | **Eye** (default) | What a human eye sees on a clear night: stars to a chosen faintness, the planets, Moon and Sun | Star catalogue and computed positions, drawn on the phone | "Drawn from measured star positions. Not a photograph." |
 | **Deep** | Far more stars than an eye can see, plus the Milky Way and nebulae | Real survey photographs, loaded as tiles from the archive | "Survey photographs taken decades ago. Not a live view." |
 
-Nothing is stored on our server. Deep tiles go from the archive straight to the phone and are kept there for a limited time.
+Nothing is stored on our server. Deep tiles go from the archive straight to the phone and are kept there for a limited time. Before a trip, the user can also save the Deep sky for a place in advance (step 5).
 
 ## Two facts that shape the design
 
@@ -107,14 +107,65 @@ The sign and zero point of `setRotation`, and whether `setFoV` means the full wi
 Add `app/sw.js` and register it from `compass.html` only. The site is served from a sub-path on GitHub Pages (`/wanderers/`), so register with a relative URL.
 
 - Handle `fetch` only for URLs that start with the HiPS base URL. Let every other request pass through untouched, so a new deploy of the app is never served stale.
-- Strategy: cache first, then network; store successful CORS responses in the cache `wanderers-sky-v1`.
-- Limits: 40 MB or 1,200 entries, whichever comes first; delete the oldest entries first (`cache.keys()` is in insertion order). Delete the whole cache when it is older than 7 days (keep the creation time in a small `meta` entry).
+- Strategy: look in the saved cache of step 5 (`wanderers-sky-saved-v1`), then in `wanderers-sky-v1`, then the network; store successful CORS responses from the network in `wanderers-sky-v1`.
+- Limits for `wanderers-sky-v1` only: 40 MB or 1,200 entries, whichever comes first; delete the oldest entries first (`cache.keys()` is in insertion order). Delete the whole cache when it is older than 7 days (keep the creation time in a small `meta` entry).
 - In the info sheet (`#info`), add a row "Saved sky: 12 MB, 310 pictures" with a **Clear** button. Read the numbers by messaging the service worker.
 - Eye view needs no network after the first load: also cache `data/stars.json`, `data/index.json` and `data/declination.json` in the same worker, network first with a cache fallback.
 
 **Done when:** load Deep, look around, go offline, reload: the same directions still show photographs; Clear empties the cache and the row reads "Saved sky: none"; a `node --test` case covers the eviction function (oldest first, both limits).
 
-## Step 5. Honesty and failure states
+## Step 5. Save the sky for a place, in advance
+
+For a trip to somewhere with poor signal. The user saves the Deep photographs at home, then uses them at the place with no network.
+
+**What a place needs.** Which stars can ever be seen depends only on the latitude of the place. Longitude and date change *when* a star is up, not *whether*. So a saved sky is a band of declination, and it works on any night:
+
+```
+latitude φ ≥ 0:  declination from φ − 90 to +90        latitude φ < 0:  declination from −90 to φ + 90
+share of the whole sky = (1 + cos φ) / 2                 Seattle (47.6°): 84%      equator: 100%
+```
+
+Say this on screen in one line: "Saved for latitude 48° N. It also works anywhere near this latitude, on any night."
+
+**Sizes.** Measured on 2026-11-14 from samples of 8 tiles per order (whole sky; multiply by the share above):
+
+| Choice | Tile orders | Tiles, whole sky | Size, whole sky | Stays sharp for |
+|---|---|---|---|---|
+| Basic | 0–1 | 60 | about 2.5 MB | the default 120° view, down to about 40° |
+| Standard (default) | 0–2 | 252 | about 9.5 MB | the closest zoom (20°) on a 720 px radar |
+| Sharp | 0–3 | 1,020 | about 38 MB | the closest zoom on the sharpest screens |
+
+**Which tiles.** A HiPS tile at order `k` is HEALPix pixel `n` in the NESTED scheme with `nside = 2^k`, at `Norder{k}/Dir{floor(n/10000)*10000}/Npix{n}.jpg`. Add a small pure module `app/hips.js` (browser global `Hips`, plus the Node export, like `sky.js`):
+
+- `Hips.pixel(order, ra, dec) → n` (HEALPix `ang2pix`, nested) and `Hips.centre(order, n) → { ra, dec }` (`pix2ang`).
+  One tile pixel covers `58.6° / (512 · 2^k)`, which is where the "stays sharp" column comes from.
+- `Hips.tilesForLatitude(lat, order) → [n, ...]`, sorted: sample the band on a grid with a step of one quarter of a tile side (`58.6° / 2^k / 4`), widen the band by one step towards the horizon, and collect the distinct pixels.
+- `Hips.url(base, order, n)` and `Hips.plan(lat, maxOrder) → { urls, tiles }`, which also lists `properties` and `Moc.fits`.
+
+**Flow.** In the info sheet, under "Saved sky", a button **Save the sky for a place**:
+
+1. Place: "Where I am now" (GPS) or typed coordinates, using the same parser as the landmark box (`#lmCoords`). Only the latitude is used; show the place back as "48° N".
+2. Detail: Basic, Standard or Sharp, each with its size for this latitude from `Hips.plan`, and the free space from `navigator.storage.estimate()`.
+3. If `navigator.connection?.saveData` is true or the connection type is `cellular`, ask once: "This uses about 8 MB of mobile data. Continue?"
+4. Download in the page, not in the worker: 4 requests at a time, low orders first, skipping URLs already in `wanderers-sky-saved-v1`, `cache.put` for each. Show "132 of 212 pictures", with **Pause** and **Cancel**. Three failures in a row pause the download with "The archive is not answering. Your saved pictures are kept. Try again later." A second run resumes where the first stopped.
+5. When it ends, call `navigator.storage.persist()` and record `{ lat, maxOrder, tiles, bytes, savedAt }` in `localStorage` (`wanderers.skySaved`).
+
+**Keeping and removing.** The saved cache is separate from the automatic one: no size cap, no 7-day rule. The "Saved sky" row lists it ("Latitude 48° N, Standard, 8 MB, saved 14 Nov") with **Remove**. Saving a second place adds its missing tiles to the same cache and records both places; Remove for one place deletes only the tiles no other saved place needs. Note in the sheet: "On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit."
+
+Eye view needs no download. Say so beside the button: "The Eye view already works without a connection."
+
+**Done when:**
+- `test/hips.test.js` passes with `node --test`:
+  - order 0 has 12 pixels whose centres are at declination +41.81° (pixels 0–3, RA 45°, 135°, 225°, 315°), 0° (pixels 4–7, RA 0°, 90°, 180°, 270°) and −41.81° (pixels 8–11);
+  - for 200 fixed sky positions and orders 1 to 3, `pixel(k, …) >> 2 === pixel(k − 1, …)` (a child lies inside its parent);
+  - `tilesForLatitude(0, k)` returns all `12 · 4^k` pixels; for orders 2 and 3, `tilesForLatitude(90, k)` returns no pixel whose centre is below declination −20°; `tilesForLatitude(47.6, 2)` returns between 150 and 190 of 192;
+  - the north pole is in pixel `b · 4^k + 4^k − 1` for a base pixel `b` in 0–3 (expected from the nested layout; if it fails, check against the next item before changing the test).
+- **Ground truth:** in the browser, record every tile URL Aladin requests while the view sweeps the whole visible sky at the default zoom for latitude 47.6°. Every one of them is in `Hips.plan(47.6, 1).urls`. Save the two lists to `artifacts/real-sky/`.
+- Save Standard for latitude 47.6°, switch the network off, reload, sweep the sky: no failed tile request, and no grey squares in a screenshot.
+- Cancel half-way, save again: the count starts from the tiles already saved, not from zero.
+- Remove leaves "Saved sky: none" and `navigator.storage.estimate()` drops.
+
+## Step 6. Honesty and failure states
 
 - The view label from the table in **Goal** is always visible under the switch, in the `.small` style.
 - Next to it, the pointing quality: "Direction good to about ±N°", where N is `webkitCompassAccuracy` on iOS, 3 after a star or landmark calibration, 10 otherwise. When N is 10, the text is a button that opens the calibration sheet.
@@ -126,6 +177,7 @@ Add `app/sw.js` and register it from `compass.html` only. The site is served fro
 ## Out of scope
 
 - Pixel-exact overlay on the camera image (needs a per-phone field-of-view calibration).
+- Saving "tonight only" (a smaller download for one date), background downloads with the page closed, and a preview of the sky "as if I were there".
 - A photographic Eye view. A wide-angle all-sky photograph (Mellinger) would suit it, but its tiles could not be reached or checked on 2026-11-14.
 - More Deep layers. IRSA also serves `CDS/2MASS/Color`, `CDS/AllWISE/RGB-W4-W2-W1` and `SPHEREx/spherex_allsky_cube` in the same format, so an "Infrared" choice is a small follow-up once this works.
 - Constellation lines and star names beyond the 16 already drawn.
