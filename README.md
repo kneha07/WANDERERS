@@ -50,6 +50,13 @@ node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -
 `app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
 appears when `server.js` is running.
 
+## Explore any patch (live mode)
+
+Open <http://localhost:8000/explore/>, type any star name or sky position, and see its SPHEREx images as a blink
+video, fetched live from IRSA. It needs the live API (`backend/`, port 8001) next to `node server.js`, and a build
+of `web/`. The coordinate box links to it for positions outside the five missions.
+Setup and details: [docs/blink/README.md](docs/blink/README.md).
+
 ## Data (all public)
 
 | Source | Used for |
