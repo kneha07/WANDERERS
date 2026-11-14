@@ -50,6 +50,18 @@ node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -
 `app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
 appears when `server.js` is running.
 
+### Any coordinates, on demand (needs `server.js`)
+
+With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
+`evidence.py` for that patch, shows progress in the coordinate box, and opens it when ready (first time:
+several minutes). One field is prepared at a time, up to four can wait, and errors never show server paths.
+It uses `.venv/bin/python` if present, or set `WANDERERS_PYTHON`. The static site does not have this; it
+still shows the message that a teammate can add the field.
+
+```bash
+node --test test/fields.test.js     # job handling, validation and HTTP checks (fake pipeline, no network)
+```
+
 ## Data (all public)
 
 | Source | Used for |
