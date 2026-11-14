@@ -118,6 +118,14 @@ def load_spherex(tid, ref):
     return out
 
 
+def flags_at(flags_hdu, x, y, r=3.0):
+    """Names of the SPHEREx flag planes set anywhere in the photometry aperture (contamination metadata)."""
+    h, d = flags_hdu.header, flags_hdu.data
+    yy, xx = np.indices(d.shape)
+    v = int(np.bitwise_or.reduce(d[np.hypot(xx - x, yy - y) <= r].astype(np.int64))) if d.size else 0
+    return [str(h[k]).strip() for k in h if k.startswith("MSKN") and v & int(h[k.replace("MSKN", "MSKM")]) and str(h[k]).strip() != "SOURCE"]
+
+
 def photometry(img, bad, x, y, r=3.0, r_in=5.0, r_out=8.0):
     """Aperture sum minus local background. Returns (flux in image units * pix, n_bad)."""
     yy, xx = np.indices(img.shape)
@@ -265,7 +273,9 @@ def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=()):
 
 
 def analyze(tid):
+    global NPIX
     t = TARGETS[tid]
+    NPIX = int(t.get("fov", FIELD_ARCSEC) / GRID_PIX)     # field of view chosen at lookup time (default 300")
     meta = json.loads((CACHE / tid / "gaia.json").read_text())
     ref, stars = meta["ref"], meta["field_stars"]
     out = OUT / tid; out.mkdir(parents=True, exist_ok=True)
@@ -296,12 +306,17 @@ def analyze(tid):
         "w2": {"label": "4.6 µm", "wise": "allwise_W2.fits", "spx": lambda s: 4.40 <= s["lam"] <= 5.01},
         "w1": {"label": "3.4 µm", "wise": "allwise_W1.fits", "spx": lambda s: 3.00 <= s["lam"] <= 3.80},
     }
+    # Each SPHEREx detector covers one slice of the spectrum; adding all of a detector's images from a survey
+    # together raises the signal-to-noise (suggested in the challenge brief).
+    for k, (lo, hi) in enumerate([(0.75, 1.09), (1.10, 1.62), (1.63, 2.41), (2.42, 3.82), (3.83, 4.41), (4.42, 5.00)], 1):
+        channels[f"d{k}"] = {"label": f"Detector {k} · {lo}–{hi} µm co-add", "wise": None, "slices": False,
+                             "spx": (lambda kk: (lambda s: s["det"] == kk))(k)}
     frames = {}      # one frame per epoch (WISE, each SPHEREx survey): used for measurements
     flip = {}        # what the flipbook plays: WISE, then short time slices inside each survey
     for ch, spec in channels.items():
         frames[ch], flip[ch] = [], []
-        wf = CACHE / tid / spec["wise"]
-        if wf.exists():
+        wf = CACHE / tid / spec["wise"] if spec["wise"] else None
+        if wf is not None and wf.exists():
             h = fits.open(wf)[0]
             img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(NPIX, NPIX))
             name = f"{ch}_wise2010.png"; save_png(img, out / name)
@@ -329,7 +344,7 @@ def analyze(tid):
             for k in range(1, len(sel)):
                 (groups.append(g), g := [k]) if (sel[k]["year"] - sel[k - 1]["year"]) * 365.25 > 1.5 else g.append(k)
             groups.append(g)
-            if len(groups) < 2:
+            if len(groups) < 2 or not spec.get("slices", True):
                 flip[ch].append(vf); continue
             for j, gi in enumerate(groups):
                 sub = np.nanmedian(np.array([stack[k] for k in gi]), axis=0)
@@ -421,11 +436,14 @@ def analyze(tid):
                   "shift_spherex_pixels": float(np.hypot(dra, ddec) / 6.15)}
 
     # ---- spectrum + brightness change from every SPHEREx image ----------------------------
-    pts = []
+    pts, images_meta = [], []
     for s in spx:
         h = fits.open(s["file"])
         im_, bad_ = h["IMAGE"].data.astype(float), bad_mask(h["FLAGS"])
         flux, nbad = photometry(im_, bad_, s["x"], s["y"])
+        images_meta.append({"image": s["file"].stem, "date": Time(s["mjd"], format="mjd").iso[:16], "detector": s["det"],
+                            "lam_um": round(s["lam"], 3) if np.isfinite(s["lam"]) else None,
+                            "flags_at_target": flags_at(h["FLAGS"], s["x"], s["y"]), "used_in_spectrum": nbad == 0})
         if np.isfinite(flux) and np.isfinite(s["lam"]):
             # MJy/sr summed over pixels -> mJy
             pts.append({"lam": round(s["lam"], 4), "flux_mjy": flux * s["sr"] * 1e9, "year": s["year"],
@@ -483,7 +501,7 @@ def analyze(tid):
 
     # ---- Gaia ghosts: where every catalogued star should be in each frame -----------------
     ghosts = {}
-    for ch in ("w2", "w1"):
+    for ch in flip:
         for f in flip.get(ch, []):
             pos = []
             for st in stars:
@@ -502,11 +520,13 @@ def analyze(tid):
         "id": tid, "name": t["name"], "kind": t["kind"], "story": t["story"],
         "reference": ref, "target_in_gaia": target_in_gaia,
         "grid": {"npix": NPIX, "arcsec_per_pix": GRID_PIX, "centre_ra": mid.ra.deg, "centre_dec": mid.dec.deg},
-        "frames": {ch: [{k: v for k, v in f.items() if k != "img"} for f in flip[ch]]
-                   for ch in ("w2", "w1") if ch in flip},
+        "frames": {ch: [{k: v for k, v in f.items() if k != "img"} for f in flip[ch]] for ch in flip if flip[ch]},
+        "channels": {ch: channels[ch]["label"] for ch in flip if flip[ch]},
         "stacks": {ch: [{k: v for k, v in f.items() if k != "img"} for f in frames[ch]]
                    for ch in ("w2", "w1") if ch in frames},
-        "diff": {ch: frames.get(ch + "_diff") for ch in ("w2", "w1")},
+        "diff": {ch: frames.get(ch + "_diff") for ch in flip},
+        "fov_arcsec": NPIX * GRID_PIX,
+        "metadata": images_meta,
         "ghosts": ghosts, "track": track, "motion": motion, "movers_experimental": movers,
         "spectrum": spectrum, "spectrum_points": len(pts), "flagged_points": len(pts) - len(good),
         "variability": variability, "ir_color": color, "bands": BANDS,

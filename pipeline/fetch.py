@@ -37,6 +37,10 @@ FIELD_ARCSEC = 300          # side of the square field we analyse
 SPX_PIX = 6.15              # SPHEREx pixel scale, arcsec
 KEEP_HDUS = ("IMAGE", "FLAGS", "VARIANCE", "WCS-WAVE")
 MAX_IMAGES = 150            # SPHEREx cutouts per target (see fetch())
+# SPHEREx releases to search, oldest first. New data: add the newest collection name here (IRSA lists them with
+# Irsa.list_collections(servicetype="SIA", filter="spherex")) and re-run fetch + analyze. Duplicate images of the
+# same exposure are kept once (the first release listed wins).
+RELEASES = ["spherex_dr1", "spherex_qr3"]
 
 session = requests.Session()
 session.headers["User-Agent"] = "wanderers-spaceapps/0.1"
@@ -181,8 +185,22 @@ def fetch(tid):
 
     # --- SPHEREx DR1: one cutout per spectral image covering the target -------------------
     c25 = predict(ref, 2025.9)
-    spx = sia("spherex_dr1", c25, d / "spherex_sia.xml")
-    spx = spx[spx["dataproduct_subtype"] == "science"]
+    from astropy.table import vstack
+    tabs, seen = [], set()
+    for rel in RELEASES:
+        try:
+            tb = sia(rel, c25, d / ("spherex_sia.xml" if rel == "spherex_dr1" else f"{rel}_sia.xml"))
+        except Exception as e:
+            print(f"   {rel}: not available ({e})"); continue
+        if len(tb) == 0:
+            continue
+        tb = tb[tb["dataproduct_subtype"] == "science"]
+        keep = [i for i, r in enumerate(tb) if (str(r["obs_id"]), str(r["energy_bandpassname"])) not in seen]
+        for i in keep:
+            seen.add((str(tb[i]["obs_id"]), str(tb[i]["energy_bandpassname"])))
+        if keep:
+            tabs.append(tb[keep]); print(f"   {rel}: {len(keep)} images")
+    spx = vstack(tabs, metadata_conflicts="silent")
     spx.sort(["energy_bandpassname", "t_min"])
     n_all = len(spx)
     # Every cutout carries ~4 MB of PSF tables, so cap the count. Picking evenly through the list
@@ -207,7 +225,8 @@ def fetch(tid):
         pick |= {i for i, r in enumerate(spx) if stem(r) in cached}
         spx = spx[sorted(pick)]
     print(f"   SPHEREx DR1: {n_all} images, using {len(spx)}", flush=True)
-    size_px = int(FIELD_ARCSEC / SPX_PIX) + 4
+    fov = t.get("fov", FIELD_ARCSEC)
+    size_px = int(fov / SPX_PIX) + 4
 
     def one(row):
         f = d / "spherex" / (Path(str(row["access_url"]).split("?")[0]).stem + ".fits")
@@ -239,15 +258,15 @@ def fetch(tid):
         rows = aw[(aw["energy_bandpassname"] == band) & (aw["dataproduct_subtype"] == "science")]
         if len(rows) == 0:
             print(f"   AllWISE {band}: none"); continue
-        f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(FIELD_ARCSEC * 1.6)}arcsec"))
+        f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(t.get("fov", FIELD_ARCSEC) * 1.6)}arcsec"))
     print(f"   AllWISE W1/W2 cached", flush=True)
 
 
-def add_position(ra, dec, name=None):
+def add_position(ra, dec, name=None, fov=None):
     """Register a user-chosen sky position as a target and return its id."""
-    tid = f"pos_{ra:.4f}_{dec:+.4f}".replace(".", "p").replace("+", "n").replace("-", "s")
+    tid = f"pos_{ra:.4f}_{dec:+.4f}".replace(".", "p").replace("+", "n").replace("-", "s") + (f"_f{fov}" if fov and fov != FIELD_ARCSEC else "")
     t = {"name": name or f"RA {ra:.4f}, Dec {dec:+.4f}", "kind": "A sky position entered by a user",
-         "position": {"ra": ra, "dec": dec}, "story": "explore"}
+         "position": {"ra": ra, "dec": dec}, "story": "explore", **({"fov": fov} if fov else {})}
     d = CACHE / tid; d.mkdir(parents=True, exist_ok=True)
     (d / "target_def.json").write_text(json.dumps(t, indent=1))
     TARGETS[tid] = t
@@ -261,7 +280,8 @@ if __name__ == "__main__":
         a = sys.argv
         ra, dec = float(a[a.index("--ra") + 1]), float(a[a.index("--dec") + 1])
         name = a[a.index("--name") + 1] if "--name" in a else None
-        tid = add_position(ra, dec, name)
+        fov = int(a[a.index("--fov") + 1]) if "--fov" in a else None       # field of view in arcsec (e.g. 300, 600)
+        tid = add_position(ra, dec, name, fov)
         print(f"target id: {tid}  (next: python pipeline/analyze.py {tid} && python pipeline/evidence.py)")
         fetch(tid)
         sys.exit()

@@ -89,6 +89,7 @@ appears when `server.js` is running.
 | ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
+| HYG database v4.0 (astronexus; Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0 | the 9,265-star name search (`app/data/stars.json`, same licence) |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
 
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP

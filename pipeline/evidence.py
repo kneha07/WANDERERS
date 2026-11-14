@@ -143,7 +143,7 @@ def main():
         t["evidence"] = card(t)
         d.write_text(json.dumps(t, indent=1))
         ref = t["reference"]
-        index.append({"id": t["id"], "name": t["name"], "teaser": TEASER.get(t["id"], t["kind"]),
+        index.append({"id": t["id"], "name": t["name"], "teaser": TEASER.get(t["id"], t.get("teaser", t["kind"])),
                       "ra": t["grid"]["centre_ra"], "dec": t["grid"]["centre_dec"]})
         print(f"{t['name']:<18} {t['evidence']['status']:<9} {t['evidence']['classification']:<38} "
               f"confidence {t['evidence']['confidence']}")
