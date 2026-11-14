@@ -1,5 +1,6 @@
 """SPHEREx blink pipeline: resolve a target, find images, align cutouts, make PNG frames."""
 import re
+from collections import defaultdict
 from itertools import groupby
 
 import numpy as np
@@ -45,3 +46,21 @@ def group_epochs(mjds):
     if len(epochs) > 12:  # keep 12, evenly spaced; first and last stay for the longest baseline
         epochs = [epochs[k] for k in np.linspace(0, len(epochs) - 1, 12).round().astype(int)]
     return epochs
+
+
+def choose_images(images, n):
+    """Pick up to n images, in time order: detectors take turns, and each detector's picks spread in time."""
+    by_det = defaultdict(list)
+    for img in sorted(images, key=lambda r: r["mjd"]):
+        by_det[img["detector"]].append(img)
+    take = dict.fromkeys(by_det, 0)
+    left = min(n, len(images))
+    while left:
+        for d in sorted(by_det):
+            if left and take[d] < len(by_det[d]):
+                take[d] += 1
+                left -= 1
+    chosen = []
+    for d, imgs in by_det.items():
+        chosen += [imgs[i] for i in np.linspace(0, len(imgs) - 1, take[d]).round().astype(int)]
+    return sorted(chosen, key=lambda r: r["mjd"])

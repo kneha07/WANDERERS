@@ -1,7 +1,9 @@
 """Pure-logic tests for the SPHEREx blink pipeline. No network."""
+from collections import Counter
+
 import pytest
 
-from backend.spherex import group_epochs, parse_coords
+from backend.spherex import choose_images, group_epochs, parse_coords
 
 
 def test_sexagesimal_with_hms_letters():
@@ -52,3 +54,26 @@ def test_more_than_12_epochs_keeps_12_evenly_spaced_with_first_and_last():
     mjds = [100.0 * k for k in range(23)]  # 23 epochs, 100 days apart
     kept = [g[0] for g in group_epochs(mjds)]
     assert kept == [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
+
+
+def rows(times_by_detector):
+    return [{"detector": d, "mjd": t} for d, ts in times_by_detector.items() for t in ts]
+
+
+def test_choice_takes_detectors_round_robin():
+    images = rows({f"D{k}": [k + 10.0 * i for i in range(5)] for k in range(1, 7)})  # 6 x 5 images
+    assert Counter(r["detector"] for r in choose_images(images, 12)) == {f"D{k}": 2 for k in range(1, 7)}
+
+
+def test_choice_spreads_picks_in_time_within_a_detector():
+    chosen = choose_images(rows({"D5": [float(t) for t in range(9)]}), 3)
+    assert [r["mjd"] for r in chosen] == [0.0, 4.0, 8.0]
+
+
+def test_choice_gives_spare_slots_to_detectors_with_more_images():
+    chosen = choose_images(rows({"D1": [1.0, 2.0, 3.0, 4.0, 5.0], "D2": [6.0]}), 4)
+    assert [r["mjd"] for r in chosen] == [1.0, 3.0, 5.0, 6.0]
+
+
+def test_choice_returns_all_images_when_fewer_than_asked():
+    assert [r["mjd"] for r in choose_images(rows({"D3": [2.0], "D1": [1.0]}), 12)] == [1.0, 2.0]
