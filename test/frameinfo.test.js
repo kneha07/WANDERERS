@@ -58,19 +58,19 @@ test("visits are numbered and their images added up", () => {
 
 test("real data: WISE 0855 (faint, partly flagged)", real, () => {
   const d = FI.describe(load("wise0855"), "w2");
-  assert.equal(d.rows.length, 4);
+  assert.equal(d.rows.length, 11);                        // flipbook frames after the wanderers data refresh
   assert.equal(d.rows[0].source, "AllWISE atlas");
   assert.equal(d.rows[1].seen, "not detected");           // May 2025, one image, 2.8 sigma
   assert.equal(d.rows[1].images, 1);
   assert.ok(d.rows.slice(2).every((r) => r.seen === "seen"));
-  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.pct, d.quality.level], [39, 150, 26, "warn"]);
+  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.pct, d.quality.level], [41, 158, 26, "warn"]);
   assert.equal(d.visits.length, 3);
 });
 
 test("real data: Barnard's Star (too bright: every measurement flagged, no detection data)", real, () => {
   const d = FI.describe(load("barnard"), "w2");
-  assert.ok(d.rows.every((r) => r.seen === "not measured"));
-  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.level], [176, 176, "bad"]);
+  assert.equal(d.rows.length, 9);                         // flipbook frames carry their own detection check now
+  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.level], [188, 188, "bad"]);
   assert.match(d.quality.text, /None were usable/);
 });
 
