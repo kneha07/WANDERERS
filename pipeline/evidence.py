@@ -53,12 +53,15 @@ def card(t):
 
     if col.get("ratio"):
         r = col["ratio"]
+        lim = col.get("lower_limit")
         red = r >= 2
         checks.append({"state": "ok" if red else "no",
-                       "text": (f"{r:.1f}× brighter at 4.0 µm than in the 3.3 µm methane band: the methane dip of a cold brown dwarf "
-                                "(a normal star would be about 0.7×)") if red else
-                               f"4.0 µm / 3.3 µm ratio {r:.1f}: no strong methane dip (a normal star is about 0.7)"})
-        numbers.append({"label": "methane test (4.0 / 3.3 µm)", "value": f"{r:.1f}×"})
+                       "text": ((f"Bright at 4–4.75 µm but not detected in the 3.3 µm methane band: at least {r:.0f}× brighter, "
+                                 "a deep methane dip of a very cold brown dwarf (a normal star would be below 1×)") if lim else
+                                (f"{r:.1f}× brighter at 4–4.75 µm than in the 3.3 µm methane band: the methane dip of a cold brown dwarf "
+                                "(a normal star would be below 1×)")) if red else
+                               f"4–4.75 µm / 3.3 µm ratio {r:.1f}: no strong methane dip (a normal star is below 1)"})
+        numbers.append({"label": "methane test (4–4.75 / 3.3 µm)", "value": (f"> {r:.0f}×" if lim else f"{r:.1f}×")})
 
     if v:
         sig = abs(v["delta_mag"]) > max(0.1, 3 * v["uncertainty_mag"])
@@ -96,7 +99,7 @@ def card(t):
     known = t["target_in_gaia"] or bool(t["reference"].get("catalogued", True))
     return {"status": "known" if known else "candidate", "classification": cls,
             "confidence": "high" if n >= 3 else "medium" if n == 2 else "low",
-            "checks_passed": n, "checks": checks, "numbers": numbers}
+            "checks_passed": n, "checks_needed": len(support), "checks": checks, "numbers": numbers}
 
 
 def main():

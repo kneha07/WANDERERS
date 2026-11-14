@@ -79,6 +79,17 @@ def resolve(tid, t):
         row = gaia(f"SELECT source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag "
                    f"FROM gaiadr3.gaia_source WHERE source_id={t['gaia_source_id']}")[0]
         ref = dict(source="Gaia DR3", epoch=2016.0)
+    elif "position" in t:
+        # A user-chosen position: use the brightest Gaia source within 5 arcsec if there is one.
+        P = t["position"]
+        rows = gaia(f"SELECT source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag FROM gaiadr3.gaia_source "
+                    f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{P['ra']},{P['dec']},{5/3600}))")
+        if len(rows):
+            rows.sort("phot_g_mean_mag"); row = rows[0]
+            ref = dict(source="Gaia DR3", epoch=2016.0)
+        else:
+            row = dict(source_id=None, ra=P["ra"], dec=P["dec"], pmra=0.0, pmdec=0.0, parallax=None, phot_g_mean_mag=None)
+            ref = dict(source="position entered by user (no Gaia source within 5\")", epoch=2016.0, catalogued=False)
     elif "seed" in t:
         s = t["seed"]
         c = SkyCoord(s["ra"] * u.deg, s["dec"] * u.deg, pm_ra_cosdec=s["pmra"] * u.mas / u.yr,
@@ -218,7 +229,26 @@ def fetch(tid):
     print(f"   AllWISE W1/W2 cached", flush=True)
 
 
+def add_position(ra, dec, name=None):
+    """Register a user-chosen sky position as a target and return its id."""
+    tid = f"pos_{ra:.4f}_{dec:+.4f}".replace(".", "p").replace("+", "n").replace("-", "s")
+    t = {"name": name or f"RA {ra:.4f}, Dec {dec:+.4f}", "kind": "A sky position entered by a user",
+         "position": {"ra": ra, "dec": dec}, "story": "explore"}
+    d = CACHE / tid; d.mkdir(parents=True, exist_ok=True)
+    (d / "target_def.json").write_text(json.dumps(t, indent=1))
+    TARGETS[tid] = t
+    return tid
+
+
 if __name__ == "__main__":
+    if "--ra" in sys.argv:
+        a = sys.argv
+        ra, dec = float(a[a.index("--ra") + 1]), float(a[a.index("--dec") + 1])
+        name = a[a.index("--name") + 1] if "--name" in a else None
+        tid = add_position(ra, dec, name)
+        print(f"target id: {tid}  (next: python pipeline/analyze.py {tid} && python pipeline/evidence.py)")
+        fetch(tid)
+        sys.exit()
     ids = list(TARGETS) if sys.argv[1:] in ([], ["all"]) else sys.argv[1:]
     for tid in ids:
         try:

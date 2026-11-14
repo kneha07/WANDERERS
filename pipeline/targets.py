@@ -42,3 +42,12 @@ TARGETS = {
         "story": "variability",
     },
 }
+
+
+# Targets added from the command line (pipeline/fetch.py --ra .. --dec ..) are stored next to their
+# cached data so every pipeline step sees them.
+import json as _json
+from pathlib import Path as _Path
+_CACHE = _Path(__file__).resolve().parent.parent / "data" / "cache"
+for _f in sorted(_CACHE.glob("*/target_def.json")):
+    TARGETS.setdefault(_f.parent.name, _json.loads(_f.read_text()))

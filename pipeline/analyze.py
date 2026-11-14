@@ -143,6 +143,18 @@ def wing_flux(img, bad, x, y, r_in=4.0, r_out=8.0, b_in=11.0, b_out=15.0):
     return float(np.mean(img[wing]) - np.median(img[bgr]))
 
 
+def detection_snr(img, x0, y0, r=3.5):
+    """Peak above the local background, in units of the image's robust noise."""
+    yy, xx = np.indices(img.shape)
+    d = np.hypot(xx - x0, yy - y0)
+    ring = img[(d > 3 * r) & (d < 6 * r) & np.isfinite(img)]
+    core = img[(d <= r) & np.isfinite(img)]
+    if ring.size < 20 or core.size == 0:
+        return 0.0
+    noise = 1.4826 * np.median(np.abs(ring - np.median(ring))) or 1e-9
+    return float((core.max() - np.median(ring)) / noise)
+
+
 def centroid(img, x0, y0, r=3.5):
     yy, xx = np.indices(img.shape)
     m = np.hypot(xx - x0, yy - y0) <= r
@@ -243,7 +255,11 @@ def analyze(tid):
       for f in frames.get(ch_name, []):
         pred = predict(ref, f["year"])
         px, py = gw.world_to_pixel(pred)
-        c = centroid(f["img"], float(px), float(py), r=4.0 if f["mission"] == "SPHEREx" else 3.0)
+        rad = 4.0 if f["mission"] == "SPHEREx" else 3.0
+        snr = detection_snr(f["img"], float(px), float(py), rad)
+        f["detected"] = snr >= 5            # only measure a position where the object is clearly there
+        f["snr"] = round(snr, 1)
+        c = centroid(f["img"], float(px), float(py), r=rad) if f["detected"] else None
         if c is None:
             continue
         meas = gw.pixel_to_world(*c)
@@ -307,15 +323,26 @@ def analyze(tid):
                            "from": Time(vyear[0], format="jyear").datetime.strftime("%b %Y"),
                            "to": Time(vyear[last], format="jyear").datetime.strftime("%b %Y")}
 
-    # Methane test: flux at the 4.0 um peak vs the 3.3 um methane trough. A normal star is simply
-    # fainter at longer wavelengths (ratio ~0.7); a methane-bearing brown dwarf is far brighter at
-    # 4.0 um than in the 3.3 um band (ratio well above 2). 4.5 um is avoided: CO/CO2 absorb there.
-    def band_med(lo, hi):
-        v = [p["flux_mjy"] for p in good if lo <= p["lam"] < hi]
-        return float(np.median(v)) if v else None
-    f40, f33 = band_med(3.85, 4.20), band_med(3.20, 3.45)
-    color = {"f4p0_mjy": f40, "f3p3_mjy": f33,
-             "ratio": (f40 / f33) if (f40 and f33 and f33 > 0) else None}
+    # Methane test: flux in the 4-4.75 um window vs the 3.3 um methane trough. A normal star is
+    # simply fainter at longer wavelengths (ratio below 1); a methane-bearing brown dwarf is far
+    # brighter in the 4 um window than in the 3.3 um band (ratio well above 2).
+    def band_stats(lo, hi):
+        v = np.array([p["flux_mjy"] for p in good if lo <= p["lam"] < hi])
+        if v.size < 2:
+            return None, None
+        err = 1.2533 * np.std(v) / np.sqrt(v.size)      # standard error of a median
+        return float(np.median(v)), float(err)
+    # 3.85-4.75 um is the window where brown dwarfs shine between the CH4 (3.3) and CO (4.6+) bands.
+    f40, e40 = band_stats(3.85, 4.75)
+    f33, e33 = band_stats(3.20, 3.45)
+    color = {"f4p0_mjy": f40, "f3p3_mjy": f33, "f3p3_err": e33, "ratio": None, "lower_limit": False}
+    if f40 and f33 is not None and f40 > 3 * (e40 or 0):
+        if f33 > 3 * e33:
+            color["ratio"] = f40 / f33
+        else:
+            # 3.3 um not detected: only a lower limit on the ratio is honest.
+            color["ratio"] = f40 / max(3 * e33, 1e-6)
+            color["lower_limit"] = True
 
     # ---- Gaia ghosts: where every catalogued star should be in each frame -----------------
     ghosts = {}
