@@ -40,8 +40,9 @@ SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
 FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
 # FLAGS bits that mark bad pixels (cosmic rays, hot/dead pixels, persistence). These show up as false blinkers.
-# Not masked: OVERFLOW (saturated star cores) and OUTLIER (could hide a real mover).
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
+# Saturated star cores also carry TRANSIENT and SUR_ERROR, so pixels with these bits are kept.
+SATURATED = 2 | 67108864  # OVERFLOW BLOOM. OUTLIER is not masked either: it could hide a real mover.
 CACHE_DIR = Path(__file__).parent / "cache"
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
@@ -231,7 +232,8 @@ def read_cutout(url, ra, dec):
         if x0 >= x1 or y0 >= y1:
             return None
         data = hdu.section[y0:y1, x0:x1].astype(float)
-        data[(hdul["FLAGS"].section[y0:y1, x0:x1] & BAD_FLAGS) != 0] = np.nan  # row-tiled RICE: small read
+        flags = hdul["FLAGS"].section[y0:y1, x0:x1]  # row-tiled RICE: a small read
+        data[((flags & BAD_FLAGS) != 0) & ((flags & SATURATED) == 0)] = np.nan
     return subtract_background(map_coordinates(data, [y - y0, x - x0], order=1, cval=np.nan))
 
 
