@@ -87,7 +87,8 @@ node --test test/framemath.test.js   # includes checks on the real WISE 0855 and
 With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
 `evidence.py` for that patch, shows progress in the coordinate box, and opens it when ready (first time:
 several minutes). One field is prepared at a time, up to four can wait, and errors never show server paths.
-It uses `.venv/bin/python` if present, or set `WANDERERS_PYTHON`. The static site does not have this; it
+It uses `WANDERERS_PYTHON` if set, else the project's `.venv` (`.venv/bin/python`, or `.venv\Scripts\python.exe` on Windows),
+else `python3` (`python` on Windows). The static site does not have this; it
 still shows the message that a teammate can add the field.
 
 **Field of view.** The coordinate box has a size choice: 2′ (close-up), 5′ (standard, what the five test targets
