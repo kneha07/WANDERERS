@@ -45,7 +45,11 @@ def card(t):
                                         f"{m['expected_arcsec_per_yr']:.2f}″/yr (difference {pct})") if matches else
                                        f"Measured speed differs from the catalogue by {pct}; check the images"})
 
-    if t["target_in_gaia"]:
+    if t["target_in_gaia"] and t["reference"].get("match_arcsec", 0) > 2:
+        checks.append({"state": "warn", "text": f"Nearest Gaia DR3 star is {t['reference']['match_arcsec']:.1f}″ from the typed "
+                       "position, so it may not be the object you meant. Very cold or fast objects (like WISE 0855 and "
+                       "Luhman 16) are often missing from Gaia."})
+    elif t["target_in_gaia"]:
         checks.append({"state": "ok", "text": f"Gaia DR3 has this object (source {t['reference']['source_id']})"})
     else:
         checks.append({"state": "warn", "text": "No Gaia DR3 counterpart: too faint or too cold for Gaia's visible-light camera. "

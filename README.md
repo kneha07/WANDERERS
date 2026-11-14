@@ -4,6 +4,8 @@
 
 **NASA Space Apps 2026 · Challenge: Planet X and SPHEREx · Team Hello Universe (Seattle)**
 
+**Live:** https://rajryadav4.github.io/wanderers/ · **Sky Compass (phone):** https://rajryadav4.github.io/wanderers/compass.html
+
 Pluto was found by flipping between two photos of the sky and spotting the dot that moved. WANDERERS does
 that with real infrared data spanning 2010 to 2026, then goes one step further: it uses SPHEREx's
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
@@ -26,6 +28,14 @@ evidence on screen. Unmatched objects are called **candidates, never discoveries
 
 The five challenge test targets are the five "missions": Barnard's Star, R Draconis, RW Aurigae,
 Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `?target=wise0855&ch=w2`.
+
+**Any coordinates.** Type an RA/Dec (degrees or `08h55m10.83s` / `-07d14m42.5s`). On the demo server
+(`node server.js`) WANDERERS fetches a quick look of that patch (about 36 SPHEREx cutouts plus WISE and
+Gaia), measures it and plays it as a flipbook in a few minutes. The public static site cannot do this by
+itself because IRSA does not allow direct browser requests (no CORS), so it shows the prepared patches.
+
+**Sky Compass.** On a phone, GPS + time + compass + tilt tell WANDERERS where the camera points; it guides
+you to a target and opens its investigation. Works indoors; objects below the horizon are shown too.
 
 ## Run it
 
