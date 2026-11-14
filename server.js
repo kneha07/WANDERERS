@@ -6,6 +6,10 @@
 const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
 const ROOT = path.join(__dirname, "app"), PORT = process.env.PORT || 8000;
 const fields = require("./fields").createFieldService();
+// "Explore any patch" live mode: the React app (web/, built to web/dist) and its FastAPI server (backend/, port 8001).
+const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = "http://127.0.0.1:8001";
+const LIVE_DOWN = "The live SPHEREx server is not running. Start it with: node start.js " +
+  "(or: backend/.venv/bin/python -m uvicorn backend.app:app --port 8001).";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
   ".png": "image/png", ".svg": "image/svg+xml" };
 const RULES = `You are the analyst inside WANDERERS, a public tool built on real NASA SPHEREx and WISE images and ESA Gaia data.
@@ -93,6 +97,26 @@ http.createServer(async (req, res) => {
       res.writeHead(400); res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) }));
     }
     return;
+  }
+  // live mode API: proxy to the FastAPI server; /api/live-health maps to its /api/health
+  if (req.method === "GET" && (url.pathname === "/api/frames" || url.pathname === "/api/live-health")) {
+    const target = LIVE + (url.pathname === "/api/frames" ? url.pathname + url.search : "/api/health");
+    http.get(target, (r) => { res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" }); r.pipe(res); })
+      .on("error", () => { res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN })); });
+    return;
+  }
+  // live mode app: web/dist under /explore/, no directory traversal, unknown routes fall back to index.html
+  if (url.pathname === "/explore") { res.writeHead(301, { location: "/explore/" + url.search }); return res.end(); }
+  if (url.pathname.startsWith("/explore/")) {
+    let rel; try { rel = decodeURIComponent(url.pathname.slice("/explore".length)); } catch { res.writeHead(400); return res.end("bad url"); }
+    const f = path.normalize(path.join(EXPLORE, rel));
+    if (f !== EXPLORE && !f.startsWith(EXPLORE + path.sep)) { res.writeHead(403); return res.end(); }
+    const send = (file, fallback) => fs.readFile(file, (err, data) => {
+      if (!err) { res.writeHead(200, { "content-type": TYPES[path.extname(file)] || "application/octet-stream" }); return res.end(data); }
+      if (fallback) return send(path.join(EXPLORE, "index.html"), false);
+      res.writeHead(404); res.end("not found (build the live explorer first: npm run build in web/, or node start.js)");
+    });
+    return send(f, !path.extname(f) || f === EXPLORE);
   }
   // static files, no directory traversal
   let p;

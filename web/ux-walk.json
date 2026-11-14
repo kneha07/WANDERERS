@@ -1,6 +1,6 @@
 {
   "baseUrl": "http://localhost:5173",
-  "home": { "path": "/", "ready": "#home-hint" },
+  "home": { "path": "/explore/", "ready": "#home-hint" },
   "screens": [
     {
       "name": "Result (chip)",
@@ -25,7 +25,7 @@
     }
   ],
   "lists": [
-    { "name": "Frames (deep link)", "path": "/?q=RW%20Aur&fov=5", "api": "/api/frames", "empty": "#empty-state" }
+    { "name": "Frames (deep link)", "path": "/explore/?q=RW%20Aur&fov=5", "api": "/api/frames", "empty": "#empty-state" }
   ],
   "sends": [
     {

@@ -57,16 +57,17 @@ type Action =
 
 // det: the WISE 0855 brown dwarf is bright only near 4.5 um, so its chip opens the D6 stack.
 const TARGETS = [
-  { q: "Barnard's Star", det: '', label: "Barnard's Star", note: 'fastest-moving star' },
-  { q: 'eps Ind B', det: '', label: 'Epsilon Indi B', note: 'fast brown dwarf pair' },
+  { id: 'barnard', q: "Barnard's Star", det: '', label: "Barnard's Star", note: 'fastest-moving star' },
+  { id: 'eps_indi_b', q: 'eps Ind B', det: '', label: 'Epsilon Indi B', note: 'fast brown dwarf pair' },
   {
+    id: 'wise0855',
     q: 'WISE J085510.83-071442.5',
     det: 'D6',
     label: 'WISE 0855',
     note: 'cold brown dwarf, D6 stack; uses the 2026 position; the challenge coordinates are from 2010',
   },
-  { q: 'RW Aur', det: '', label: 'RW Aurigae', note: 'variable star' },
-  { q: 'R Dra', det: '', label: 'R Draconis', note: 'variable star, many images' },
+  { id: 'rw_aur', q: 'RW Aur', det: '', label: 'RW Aurigae', note: 'variable star' },
+  { id: 'r_dra', q: 'R Dra', det: '', label: 'R Draconis', note: 'variable star, many images' },
 ]
 const DETECTORS = [
   ['', 'All detectors, stacked'],
@@ -108,7 +109,10 @@ function failureOf(status: number, detail: unknown): Failure {
   if (status === 404) return { kind: 'empty', message: 'No SPHEREx images cover this position yet.' }
   if (status === 400)
     return { kind: 'input', message: typeof detail === 'string' ? detail : 'The server could not read this target.' }
-  if (status >= 502 && status <= 504) return { kind: 'busy', message: 'IRSA, the SPHEREx archive, is busy. Try again.' }
+  if (status >= 502 && status <= 504) {
+    if (typeof detail === 'string' && detail.startsWith('The live SPHEREx server')) return { kind: 'offline', message: detail }
+    return { kind: 'busy', message: 'IRSA, the SPHEREx archive, is busy. Try again.' }
+  }
   return { kind: 'server', message: `The server failed (HTTP ${status}). Try again.` }
 }
 
@@ -377,6 +381,9 @@ export default function App() {
   return (
     <main>
       <header>
+        <a className="back-link" href="/">
+          ← WANDERERS missions
+        </a>
         <h1>SPHEREx Blink</h1>
         <p className="lead">
           Watch one patch of sky change over SPHEREx's surveys. A <strong>mover</strong> is an object whose position
@@ -438,6 +445,9 @@ export default function App() {
               <strong>{t.label}</strong>
               <span>{t.note}</span>
             </button>
+            <a className="deep-link" href={`/?target=${t.id}`}>
+              Deep dive in WANDERERS
+            </a>
           </li>
         ))}
       </ul>
