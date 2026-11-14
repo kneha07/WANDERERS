@@ -92,13 +92,22 @@ def card(t):
     elif moved:
         cls, support = "Unexplained mover", [moved]
     else:
-        cls, support = "Stationary source", [t["target_in_gaia"], not moved]
+        cls, support = "Steady star (no change in these snapshots)", [t["target_in_gaia"], not moved]
     n = sum(bool(s) for s in support)
     # Known = the object is in Gaia or in a published catalogue we resolved it from. A position
     # typed in by a user with nothing catalogued there would be a candidate.
     known = t["target_in_gaia"] or bool(t["reference"].get("catalogued", True))
+    # Confidence: high when every key check passes (and there are at least two), medium when two
+    # pass, low otherwise. One step down, with the reason shown, when most SPHEREx data is saturated
+    # and the class depends on SPHEREx photometry rather than on motion.
+    level = 2 if (n == len(support) and n >= 2) or n >= 3 else 1 if n == 2 else 0
+    caveat = None
+    saturated = t["spectrum_points"] and t["flagged_points"] > 0.8 * t["spectrum_points"]
+    if saturated and cls in ("Variable star", "Steady star (no change in these snapshots)") and level > 0:
+        level -= 1
+        caveat = "lowered because most SPHEREx measurements are saturated"
     return {"status": "known" if known else "candidate", "classification": cls,
-            "confidence": "high" if n >= 3 else "medium" if n == 2 else "low",
+            "confidence": ["low", "medium", "high"][level], "confidence_note": caveat,
             "checks_passed": n, "checks_needed": len(support), "checks": checks, "numbers": numbers}
 
 
