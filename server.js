@@ -5,6 +5,7 @@
 // Bound to 127.0.0.1 only. The deployed static site works without this server (pre-written answers).
 const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
 const ROOT = path.join(__dirname, "app"), PORT = process.env.PORT || 8000;
+const fields = require("./fields").createFieldService();
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
   ".png": "image/png", ".svg": "image/svg+xml" };
 const RULES = `You are the analyst inside WANDERERS, a public tool built on real NASA SPHEREx and WISE images and ESA Gaia data.
@@ -74,6 +75,7 @@ http.createServer(async (req, res) => {
     res.writeHead(job ? 200 : 404, { "content-type": "application/json" });
     return res.end(JSON.stringify(job ? { status: job.status, id: job.id, log: job.log.slice(-8), seconds: Math.round((Date.now() - job.started) / 1000) } : { error: "no such job" }));
   }
+  if (fields.handle(req, res, url)) return;   // /api/field and /api/job: prepare new sky patches on demand
   if (req.method === "POST" && url.pathname === "/api/ask") {
     res.setHeader("content-type", "application/json");
     try {
