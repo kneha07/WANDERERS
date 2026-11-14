@@ -5,22 +5,42 @@ import type { Result } from './data'
 import { pixelToSky } from './sky'
 import { AlertIcon } from './panels'
 
-const SURVEYS = [
-  { id: 'spherex', label: 'SPHEREx all-sky', url: 'https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube', credit: 'SPHEREx DR1 all-sky cube HiPS (IRSA)' },
-  { id: '2mass', label: '2MASS', url: 'P/2MASS/color', credit: '2MASS colour HiPS (CDS)' },
-  { id: 'dss', label: 'DSS2', url: 'P/DSS2/color', credit: 'DSS2 colour HiPS (CDS)' },
+const SURVEYS: { id: string; label: string; url: string; credit: string; slice?: number }[] = [
+  // The SPHEREx HiPS is a cube of 102 wavelength slices; slice 46 is 2.19 um (like 2MASS K). Slices 50 and 51 are blank.
+  { id: 'spherex', label: 'SPHEREx 2.2 µm', url: 'https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube', credit: 'SPHEREx DR1 all-sky cube HiPS, slice 46 = 2.19 µm (IRSA)', slice: 46 },
+  // CDS HiPS from the IRSA mirrors (CORS open). The CDS primary host answered 404 on 2026-11-14.
+  { id: '2mass', label: '2MASS', url: 'https://irsa.ipac.caltech.edu/data/hips/CDS/2MASS/Color', credit: '2MASS colour HiPS (CDS, IRSA mirror)' },
+  { id: 'dss', label: 'DSS2', url: 'https://irsa.ipac.caltech.edu/data/hips/CDS/DSS2/color', credit: 'DSS2 colour HiPS (CDS, IRSA mirror)' },
 ]
 const WIDE_DEG = 60
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 
 type Any = any
+type Survey = (typeof SURVEYS)[number]
+
+// ponytail: Aladin 3.8.2 turns a slice number into a frequency linearly in wavelength, and its renderer turns the
+// frequency back into a frame linearly in frequency, so setSliceNumber(k) shows another frame. This inverts that
+// mapping (checked against the tile names it requests). Drop it when Aladin selects cube frames by index.
+const sliceArg = (h: Any, k: number) => {
+  const lo = 1 / h.emMax
+  const f = lo + ((k + 0.5) / h.cubeDepth) * (1 / h.emMin - lo)
+  return ((1 / f - h.emMin) / (h.emMax - h.emMin)) * h.cubeDepth
+}
+
+// A HiPS layer; a cube (SPHEREx) starts on its chosen wavelength frame.
+const hipsOf = (A: Any, s: Survey) =>
+  A.imageHiPS(s.url, {
+    name: s.label,
+    successCallback: (h: Any) => s.slice !== undefined && h.cubeDepth && h.setSliceNumber(sliceArg(h, s.slice)),
+  })
 
 export default function SkyContext({ r, reduced }: { r: Result; reduced: boolean }) {
   const box = useRef<HTMLDivElement>(null)
   const lib = useRef<Any>(null)
   const view = useRef<Any>(null)
   const seq = useRef(0)
+  const shown = useRef<Survey>(SURVEYS[0])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState('')
   const [survey, setSurvey] = useState(SURVEYS[0])
@@ -36,7 +56,7 @@ export default function SkyContext({ r, reduced }: { r: Result; reduced: boolean
         if (!live || !box.current) return
         lib.current = A
         view.current = A.aladin(box.current, {
-          survey: SURVEYS[0].url,
+          survey: hipsOf(A, SURVEYS[0]),
           fov: WIDE_DEG * 2,
           target: `${ra} ${dec}`,
           projection: 'SIN',
@@ -50,6 +70,8 @@ export default function SkyContext({ r, reduced }: { r: Result; reduced: boolean
           showShareControl: false,
           showSimbadPointerControl: false,
           showContextMenu: false,
+          log: false, // no startup ping to CDS
+          showCooLocation: false, // the flipbook panels show the coordinates
         })
         setStatus('ready')
       })
@@ -102,8 +124,9 @@ export default function SkyContext({ r, reduced }: { r: Result; reduced: boolean
 
   useEffect(() => {
     const a = view.current
-    if (status !== 'ready' || !a) return
-    a.setImageSurvey(a.newImageSurvey(survey.url, { name: survey.label }))
+    if (status !== 'ready' || !a || shown.current === survey) return
+    shown.current = survey
+    a.setImageSurvey(hipsOf(lib.current, survey))
   }, [status, survey])
 
   return (
@@ -120,8 +143,8 @@ export default function SkyContext({ r, reduced }: { r: Result; reduced: boolean
           ))}
         </div>
       </div>
-      <div className="aladin-box">
-        <div className="aladin-host" ref={box} aria-label={`Sky map around ${r.name ?? r.query}`} />
+      <div className="skymap">
+        <div className="skymap-host" ref={box} aria-label={`Sky map around ${r.name ?? r.query}`} />
         {status === 'loading' && (
           <div className="state" role="status">
             <p className="muted">Loading the sky map…</p>

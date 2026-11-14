@@ -1027,19 +1027,20 @@ tr[aria-current='true'] td:first-child {
 }
 
 /* ---------- sky panels ---------- */
-.aladin-box {
+.skymap {
   position: relative;
   height: 360px;
   background: var(--raised);
   border: 1px solid var(--line);
 }
 
-.aladin-host {
-  position: absolute;
-  inset: 0;
+/* Aladin adds .aladin-container (position: relative) to the host, so size it in flow. */
+.skymap-host {
+  width: 100%;
+  height: 100%;
 }
 
-.aladin-box > .state {
+.skymap > .state {
   position: absolute;
   inset: 0;
   border: 0;

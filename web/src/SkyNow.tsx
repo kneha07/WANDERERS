@@ -115,7 +115,7 @@ export default function SkyNow({ star, here, setHere, reduced, say }: Props) {
     )
   }
 
-  const ang = Math.max(-90, Math.min(90, pos.alt)) * (Math.PI / 180)
+  const ang = Math.max(-35, Math.min(90, pos.alt)) * (Math.PI / 180) // below -35 deg the drawing stops; the number does not
   return (
     <>
       <div className="place-row">
@@ -209,27 +209,30 @@ export default function SkyNow({ star, here, setHere, reduced, say }: Props) {
           ))}
           <circle className={dot.alt >= 0 ? 'star' : 'star below'} cx={d.x} cy={d.y} r={7} />
         </svg>
-        <svg className="dome" viewBox="0 0 220 150" role="img" aria-label={`Altitude ${pos.alt.toFixed(1)} degrees`}>
-          <path className="arc" d="M30 110 A90 90 0 0 0 120 20" />
+        <svg className="dome" viewBox="0 0 240 200" role="img" aria-label={`Side view: altitude ${pos.alt.toFixed(1)} degrees`}>
+          <path className="arc" d="M140 140 A100 100 0 0 0 40 40" />
           {[0, 15, 30, 45, 60, 75, 90].map((a) => {
             const r = (a * Math.PI) / 180
             return (
               <g key={a}>
-                <line className="arc" x1={30 + 90 * Math.cos(r)} y1={110 - 90 * Math.sin(r)} x2={30 + 98 * Math.cos(r)} y2={110 - 98 * Math.sin(r)} />
-                <text x={30 + 110 * Math.cos(r)} y={114 - 110 * Math.sin(r)} textAnchor="middle">
+                <line className="arc" x1={40 + 100 * Math.cos(r)} y1={140 - 100 * Math.sin(r)} x2={40 + 107 * Math.cos(r)} y2={140 - 107 * Math.sin(r)} />
+                <text x={40 + 120 * Math.cos(r)} y={144 - 120 * Math.sin(r)} textAnchor="middle">
                   {a}°
                 </text>
               </g>
             )
           })}
-          <line className="ground" x1={10} x2={200} y1={110} y2={110} />
-          <text x={196} y={126} textAnchor="end">
-            horizon, towards the {compass(pos.az)}
+          <line className="ground" x1={8} x2={236} y1={140} y2={140} />
+          <text x={236} y={134} textAnchor="end">
+            horizon
           </text>
-          <line className={up ? 'sight' : 'sight below'} x1={30} y1={110} x2={30 + 84 * Math.cos(ang)} y2={110 - 84 * Math.sin(ang)} />
-          <circle className={up ? 'star' : 'star below'} cx={30 + 84 * Math.cos(ang)} cy={110 - 84 * Math.sin(ang)} r={6} />
-          <text className="compass" x={30} y={142} textAnchor="middle">
+          <line className={up ? 'sight' : 'sight below'} x1={40} y1={140} x2={40 + 90 * Math.cos(ang)} y2={140 - 90 * Math.sin(ang)} />
+          <circle className={up ? 'star' : 'star below'} cx={40 + 90 * Math.cos(ang)} cy={140 - 90 * Math.sin(ang)} r={6} />
+          <text className="compass" x={40} y={158} textAnchor="middle">
             you
+          </text>
+          <text x={8} y={194}>
+            side view, facing {compass(pos.az)}
           </text>
         </svg>
       </div>
