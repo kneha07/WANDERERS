@@ -172,6 +172,22 @@ stars, so its learnt motion differs from Gaia's.
 node --test test/stardb.test.js                          # search, formatting, chart, every shipped prediction
 ```
 
+**Over thousands of years.** Below the details, one year slider (±1,000 to ±50,000 years, with Play) drives three linked
+views:
+- **Sky:** a globe of the celestial sphere with a curved RA/Dec grid and real background stars. Switch to an
+  RA/Dec atlas chart to see the curved track star atlases show.
+- **3D map:** the Sun and Earth at the centre, the star's path through space, its closest approach and the nearest
+  stars. Drag to rotate, scroll to zoom.
+- **Distance through time,** with apparent brightness.
+
+The learnt present-day state (position, motion, parallax when resolved) plus Gaia DR3's radial velocity is carried
+through 3D space at constant velocity (`app/starcore.js`). That is the model behind astropy's `apply_space_motion`.
+`test/starcore.test.js` checks it against astropy out to 30,000 CE; the fixture is in `test/fixtures/`.
+
+Barnard's Star comes closest in 11,735 CE at 3.77 light-years. A cloud of 300 runs shows how the starting
+uncertainties grow. The Galaxy's gravity and orbits around companions are not included. Links:
+`?star=hip24186&span=50000&sky=radec&year=20000`.
+
 With `node server.js` running, any star without a stored prediction can be learnt from the page (about a minute):
 `POST /api/star-predict {"key": "hip1475"}`, then poll `GET /api/star-job/<n>`. One star is learnt at a time.
 
@@ -223,7 +239,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
 
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py
-app/        index.html · style.css · app.js · starpath.js · stardb.js · stars.js · data/<target>/ · data/stars/ (generated)
+app/        index.html · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
 ```
