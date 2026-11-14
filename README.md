@@ -58,6 +58,8 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python pipeline/evidence.py
 # 4. plain-language explanations (Claude Code CLI, headless; no API key)
 .venv/bin/python pipeline/explain.py
+# 5. predicted star paths (proper motion + parallax; offline, seconds)
+.venv/bin/python pipeline/star_trajectory.py
 
 # view it
 node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -p
@@ -103,6 +105,33 @@ node --test test/fields.test.js     # job handling, validation and HTTP checks (
 python3 test/test_fov.py            # field-of-view helpers; no packages needed
 ```
 
+### Predicted star path
+
+Tick **Predicted path** under the sky viewer to see where the selected star should be. A green line shows the
+predicted path over the years the frames cover, and a crosshair marks where the star should be in the frame you are
+viewing. A dotted line continues the path to 2030, marked "2030?". The note under the toggles gives the motion rate
+and the size of the parallax loop. It also says how closely the prediction matches the positions measured in the
+frames and where the star should be in 2030.
+
+This is the standard astrometric model, not a fitted or learned one. The catalogue position (Gaia DR3, or Luhman &
+Esplin 2016 for WISE 0855) is moved along its proper motion. Then the yearly parallax shift is added: as Earth goes
+around the Sun, a nearby star traces a small loop on the sky. Earth's position comes from astropy's built-in
+ephemeris. WISE and SPHEREx orbit close to Earth, so Earth's centre stands in for them. Aberration and light bending
+move every star in a small field by the same amount, so they are left out. The parallax formula matches astropy's
+full coordinate transform to within 0.5 mas.
+
+What the measurements show: the prediction matches the measured 4.6 µm positions to within one SPHEREx pixel (6.15″)
+for every target. Barnard's Star matches to 0.9″ rms, Epsilon Indi B to 0.4″. The parallax loops (±0.55″ for
+Barnard's Star, ±0.46″ for WISE 0855) are smaller than the noise of a position measured on 2″ display pixels. So
+these frames show the proper motion clearly but cannot show the parallax itself. The output says so, and it gives
+no error bars because the cached reference has no catalogue uncertainties.
+
+```bash
+.venv/bin/python pipeline/star_trajectory.py barnard --forecast 2027 2030   # writes app/data/barnard/trajectory.json
+.venv/bin/python -m unittest tests/test_star_trajectory.py                 # model vs astropy, grid vs analyze.py
+node --test test/starpath.test.js                                         # page helpers + every committed trajectory
+```
+
 ### Frame details and data flags
 
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
@@ -130,6 +159,7 @@ Setup and details: [docs/blink/README.md](docs/blink/README.md).
 | NASA WISE / AllWISE atlas (IRSA) | 2010 images at 3.4 and 4.6 µm |
 | ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
+| astropy built-in solar-system ephemeris | Earth's position, for the parallax term of the predicted star paths |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
 
@@ -147,8 +177,8 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py
-app/        index.html · style.css · app.js · data/<target>/ (generated)
+pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py
+app/        index.html · style.css · app.js · starpath.js · data/<target>/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
 ```
