@@ -219,7 +219,7 @@ def insights(t):
     if t.get("spectrum_points") and t.get("flagged_points", 0) > 0.5 * t["spectrum_points"]:
         limits.append("Bright stars: this one overflows SPHEREx pixels, so its spectrum and exact brightness are not reliable here.")
     limits.append("Solar System: the page checks against Gaia stars only. It does not check asteroids or comets, "
-"so a moving dot without a Gaia circle may be a known asteroid.")
+                  "so a moving dot without a Gaia circle may be a known asteroid.")
     limits.append(f"Crowding: one SPHEREx pixel is {SPHEREX_PIXEL}″ wide, so two close objects can blend into one dot and one spectrum.")
     return {"facts": facts, "limits": limits}
 
