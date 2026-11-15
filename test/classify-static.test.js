@@ -33,7 +33,11 @@ test("survey: classify.css after survey.css, a card in the candidate drawer, cla
   const drawer = sv.slice(sv.indexOf('<aside class="sv-drawer"'), sv.indexOf("</aside>"));
   assert.match(drawer, /<section aria-labelledby="dClsH">\s*<h3 id="dClsH">Classify this candidate<\/h3>\s*<div id="dClassify" class="cls-card"><\/div>\s*<\/section>/);
   assert.ok(drawer.indexOf('id="dSkyH"') < drawer.indexOf('id="dClsH"') && drawer.indexOf('id="dClsH"') < drawer.indexOf('id="dNumH"'), "after the sky view");
-  assert.match(sv, /<script src="classify\.js\?v=\d{8}\w*"><\/script>\s*<script src="theme\.js"><\/script>\s*<script src="survey\.js\?v=\d{8}\w*"><\/script>/);
+  // classify.js must be loaded before survey.js mounts the card (other helpers may sit in between)
+  const at = (re) => sv.search(re);
+  assert.ok(at(/<script src="classify\.js\?v=\d{8}\w*"><\/script>/) > 0);
+  assert.ok(at(/<script src="classify\.js/) < at(/<script src="theme\.js"><\/script>/));
+  assert.match(sv, /<script src="theme\.js"><\/script>\s*<script src="survey\.js\?v=\d{8}\w*"><\/script>/);
   assert.notEqual(sv.match(/survey\.js\?v=(\w+)/)[1], "20261115a", "survey.js changed, so its version did too");
   assert.equal(obs.match(/classify\.js\?v=(\w+)/)[1], sv.match(/classify\.js\?v=(\w+)/)[1], "one classify.js version on both pages");
   assert.equal(obs.match(/classify\.css\?v=(\w+)/)[1], sv.match(/classify\.css\?v=(\w+)/)[1]);
