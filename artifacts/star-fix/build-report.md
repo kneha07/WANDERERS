@@ -81,6 +81,8 @@ The spec now matches the code: sections 6, 8, 10.1, 10.2 (words, lines, map) and
 
 ## 5. Leftovers (not fixed in round 1)
 
+Tracked in kneha07/WANDERERS#58 (with the round-2 low findings). Sample-photo GPS privacy: kneha07/WANDERERS#57.
+
 - Orientation 3 and 8 have no photo test (TL M2). A2 covers orientation 1; A3, A17 and the other portrait photos cover 6. A1 checks the table for all four.
 - No automatic test for the 60 s kill (504); the tech lead checked it by hand.
 - The Undo line ends after 8 s (WCAG 2.2.1 asks for a way to extend it).
@@ -104,4 +106,6 @@ f41e46a build report
 10ff89b fix round 1 M1, M3, M4, L-a to L-e
 5db6315 fix round 1 M2: doors in one row from 1024 px
 5d74369 fix round 1: new A11 screenshots
+bcc72d0 build report after fix round 1
+b62b108 map: minimum window 16 x 8 degrees
 ```

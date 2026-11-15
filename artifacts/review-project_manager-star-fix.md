@@ -81,3 +81,68 @@ Spec: `docs/specs/star-fix-build.md`. Builder report: `artifacts/star-fix/build-
 
 No high finding. All required criteria are met by tests that this reviewer ran, or by code plus a direct browser check.
 Open items are evidence coverage and one layout choice for the owner.
+
+## Round 2
+
+Scope: fix commits `3e3e6d3..HEAD` (7 commits, 19 files). This reviewer did not write them.
+
+**Verdict: PASS.** No high finding. F1, F2 and F5 are closed. Two new low findings do not block the merge.
+
+### Commands run by this reviewer
+
+| Command | Result |
+|---|---|
+| `.venv/Scripts/python.exe -m unittest discover -s tests -p "test_star_fix.py"` | exit 0, `Ran 10 tests in 41.2s OK` (new: 64 MP refusal) |
+| `node --test test/*.test.js` | exit 0, 319 tests, 318 pass, 0 fail, 1 skip (`fields.test.js`, same as base) |
+| PIL size of the screenshots | `home-1280` 1280x720; `page-light`/`page-dark` 1265x1254; `page-phone-light`/`page-phone-dark` 390x1099 |
+| `gh issue view 57 -R kneha07/WANDERERS` | OPEN, "Privacy: star_image/ photos on public main hold exact GPS", names 3 owner options and the force-push approval |
+
+### Round-1 findings
+
+| ID | Status | Evidence |
+|---|---|---|
+| F1 doors | Closed | `app/home.css`: 3 columns, stack only at `@container (max-width: 469px)`; row moved under the lede (`app/index.html`, test regex `test/compass-cta.test.js:39`). `home-1280.png` (viewed): three doors in one row, bottom about 671 of 720 px, all above the fold. Spec 10.1 records the rule and the measurement. |
+| F2 A11 shots | Closed | Four shots exist. `page-phone-light.png` (viewed) is 390 px wide: one block, headline with place, "Usually right to about 65 km.", check line 61 km, map with two marks and a legend, "4 photos used" closed. Names differ from the brief (`page.png`); the build report A11 row names them. Accepted. |
+| F3 map scale | Improved | Window from the data (spec 10.2 map paragraph); circle visibly bigger than the reticle in `page-phone-light.png`. |
+| F4 not automated | Unchanged, named | Build report section 5 names the 60 s kill. 75 s abort named under U3. |
+| F5 stale report | Closed | `build-report.md` A11/A12 rows list the files that exist; F5 row in section 3. |
+
+### Spec and code agreement (sections 6, 8, 10.1, 10.2, 10.4)
+
+| Spec item | Code | Agree |
+|---|---|---|
+| 6: two 500 answers, "No module named" separates them | `server.js` `STAR_FIX_CRASH`, `/No module named/.test(err)`; test `starfix-server.test.js` "a crash after the start..." | Yes |
+| 6: `bad_file` above 60 MP before decoding | `pipeline/star_fix.py` `MAX_PIXELS = 60_000_000`, check before `im.load()`; `tests/test_star_fix.py` 64 MP test | Yes |
+| 6: `warnings` in fix/sky_only/no_solve, 180-degree wrap, `small_photo` | Matches round-1 builder deviations, now written in the spec | Yes |
+| 8: `headline(..., example, pending)`, `night(rows)`, `add()` returns names | `app/starfixcore.js` `headline`, `night`, `photoQueue.add` `again` | Yes |
+| 10.2 words table | `TEXT` in `starfixcore.js`; exact-text test `starfixcore.test.js:84-86` | Yes |
+| 10.2 "No place found from these photos." / "yet" only while pending | `headline` and tests `starfixcore.test.js:134-135` | Yes |
+| 10.2 / U2 "Already added: {name}" | `app/starfix.html:58` `dupBox`; test list includes "Already added:" | Yes |
+| 10.4 U4 touched rule, U5 drop hint own line + CLS | Code per build report U4/U5 (Playwright, not re-run here) | Yes (code + builder evidence) |
+
+### A14 on the changed words
+
+All new strings checked against `/plate|solve|zenith|session|outlier|exif|makernote|gravity|fix/i` (after removing "Star Fix"):
+"Could not read this photo.", "This file is not a photo. Choose a .heic or .jpg file.", "This file is too large (30 MB limit). Use the original photo.",
+"No place found from these photos." (and "... yet."), "Already added:". None hits. The core test (`starfixcore.test.js:151`) and the page test (`:276`) run them and pass.
+The `{name}` after "Already added:" is the person's own file name; it is not app text and is outside A14.
+
+### Leftovers in `build-report.md` section 5
+
+| Leftover | Listed |
+|---|---|
+| Orientation 3 and 8 without a photo test | Yes |
+| 60 s kill (504) without an automatic test | Yes |
+| Undo fixed at 8 s (WCAG 2.2.1) | Yes |
+| Nearest-city choice with a large radius | Yes |
+| star_image GPS privacy | Not in section 5, but issue #57 owns it (OPEN, owner decision, force-push needs approval) |
+
+### New findings
+
+| ID | Severity | Finding | Action |
+|---|---|---|---|
+| R2-1 | low | `build-report.md` section 6 commit list stops at `5d74369`; `b62b108` (16-degree map minimum) and `bcc72d0` are missing. Section 3 M1 row does name "then the 16 degree minimum". | Add the two lines when the report is next touched. |
+| R2-2 | low | Spec `docs/specs/star-fix-build.md:491` A14 status column still says "not yet built" (other A rows probably too). Stale status, not a gap. | Update the status column or drop it. |
+| R2-3 | low | Build report section 5 does not point at issue #57. The issue exists, so nothing is hidden. | Optional: add one line "GPS in star_image/: issue #57". |
+
+ack: no high and no medium finding remains. All required criteria are met by tests run here (both suites exit 0) or by code plus viewed screenshots.

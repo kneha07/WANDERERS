@@ -105,3 +105,53 @@ Line-by-line match with the verified maths:
 - XSS: file names via `textContent` (`starfix.js:78`); all other text via `setText`/`setKm` (text nodes); `aria-label` via `setAttribute`; OSM link built from numbers, `rel="noopener noreferrer"`. No `innerHTML` in the page script.
 - `start.js`: import check now includes `pillow_heif, tetra3`; `import tetra3` works with numpy 2.5 (verified, rc 0), so the check does not loop into a reinstall on every start.
 - Tests are real: A1 uses an independent AltAz zenith; A17 reproduces the actual false solve; A14 forbidden-word check proves itself (`!clean("Fixed")`); server tests use real servers and a real missing interpreter.
+
+## Round 2
+
+Scope: `git diff 3e3e6d3..HEAD` (fix round 1 and the 16 degree map minimum). Build report: `artifacts/star-fix/build-report.md` section 3 and 5.
+
+### Verdict: PASS
+
+No high finding. No regression found. Two new low findings.
+
+### What I ran
+
+```
+.venv/Scripts/python.exe -m unittest discover -s tests -p "test_star_fix.py"   -> 10 tests OK (39 s)
+node --test test/*.test.js                                                    -> 319 tests, 318 pass, 1 skip (fields.test.js, python3 absent; on base too)
+```
+
+### Round-1 findings
+
+| Finding | State | Evidence |
+|---|---|---|
+| M1 map scale | Fixed | `app/starfix.js:136-139`: `span = clamp(16 * max(radius, GPS distance) / 111.19, 16, 40)`. Half-height = span/4 deg = 4 x max(km), as spec 10.2 line 397 says. `paint` (`:192-199`) uses `span` for x, y and the `day.jpg` source rect, 2:1 matches the canvas, so the x and y scales are equal. 4 photos (65.5 km, GPS 61 km) give 9.4 -> clamped 16 deg: 38 px/deg at 608 px, circle radius about 22 px. The `ponytail:` note now says about 20 km per image pixel (2048 px / 360 deg = 19.5 km/px): correct. `draw` interpolates `span` too and the early return compares it. |
+| M2 orientation 3/8 | Accepted leftover | Build report section 5, first item. |
+| L1 headline count | Fixed | `C.night()` (`app/starfixcore.js:258-264`): `used = fixes - outliers`; `headline(..., used, ..., pending)` in `starfix.js:124`. Unit test "night" checks 2 of 4 with one outlier and two refused files. |
+| L2 60 s kill test | Accepted leftover | Build report section 5, second item. |
+| L3 crash reads as setup message | Fixed (message) | `server.js:116,124`: stderr is read (capped at 100 kB) only to match `No module named`; else `STAR_FIX_CRASH`. stderr is never sent. Test: node as the interpreter (crash) and a shadowed `pillow_heif` on `PYTHONPATH` (missing package); `PATHLIKE` check on both. `read_meta` is still outside a `try` in Python, but the person now sees "Could not read this photo." instead of the wrong start.cmd text. |
+| L4 decompression bomb | Fixed | `pipeline/star_fix.py:316-317`: `width * height > 60 MP` checked after `Image.open` (header only) and before `load()`. Above 179 MP Pillow raises `DecompressionBombError` inside the same `try` -> `bad_file`. Test with a 64 MP PNG (below Pillow's own 89 MP warning, so the new check is what refuses it). |
+| L5, L6, L7 | Unchanged, not blocking | L7 phone gutter was for user_advocate. |
+
+### Other fixes checked
+
+- U4 toggle ownership (`starfix.js:112,154-155`): a `click` on `summary` sets `touched` (Enter and Space on a `summary` also fire `click`). The old `toggle` listener is gone, so the async `toggle` event from a programmatic `open` change can no longer be read as the person's choice. Correct.
+- Duplicate names (`starfixcore.js:273-286`, `starfix.js:208-209`): written with `textContent`, no XSS. Hidden on Remove.
+- Doors (`app/home.css`, `app/index.html`): CSS only; the hero test regex now pins the doors directly under the lede. No logic risk.
+
+### New findings
+
+#### N1 (low) - only refused files gives "0 photos used"
+
+- Where: `app/starfixcore.js:263-268` (`night().total`, `photosLine`), `sessions` (`:27-28`).
+- Scenario: the first file is `notes.txt` (or a 31 MB file). It has no time, so `sessions` makes a block for it alone. `total` = 0, `used` = 0, so the summary reads "0 photos used" under "No place found from these photos." Verified: `night([{result:{status:"bad_file"}}])` -> `photosLine` = "0 photos used".
+- Cosmetic.
+
+#### N2 (low) - any non-module crash, including a broken install, shows "Could not read this photo." with Try again
+
+- Where: `server.js:124`.
+- Scenario: a DLL load failure or a numpy ABI error is an `ImportError` without "No module named". The person sees the photo message and Try again, which fails each time. Rare; the old text was wrong in the other direction.
+
+### Debate note
+
+M2 and L2 are leftovers I accept. They are named in the build report. No round-1 high existed.

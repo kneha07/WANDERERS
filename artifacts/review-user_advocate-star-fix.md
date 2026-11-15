@@ -140,3 +140,66 @@ No send button exists (upload is a file input), so A1/A2/N3 were not configured.
 ## Screenshots
 
 `artifacts/star-fix/ux-review/`: `home-1280.png`, `home-1000.png`, `home-1366x768.png`, `home-390-doors.png`, `starfix-1280-first.png`, `starfix-1280-done.png`, `map-zoom-1280.png`, `starfix-1280-nonphoto.png`, `starfix-1280-removed.png`, `starfix-1280-errors.png`, `starfix-1280-retry.png`, `starfix-1280-noserver.png`, `focus-upload-1280.png`, `starfix-390-dark-first.png`, `starfix-390-dark-reading.png`, `starfix-390-light-done.png`.
+
+---
+
+## Round 2 (fix commits `3e3e6d3..HEAD`)
+
+Reviewer: user_advocate. Date: 2026-11-15.
+Live build: this branch on `http://localhost:8011` (fresh `node server.js`, stopped after). Browser: Playwright 1.64.1 Chromium.
+Screenshots: `artifacts/star-fix/ux-review/round2/`. Stress walk: `artifacts/star-fix/ux-review/round2/stress-walk/stress-walk.md`.
+
+### Verdict: PASS
+
+No high finding. All four round-1 medium findings are fixed live. L1 to L5 are fixed. Two new low findings.
+
+### Round-1 findings, live re-check
+
+| # | Live result (round 2) | Evidence |
+|---|---|---|
+| M1 doors / fold | FIXED. Three doors in one row at 1000, 1024, 1280 and 1366 px. At 1280 x 720 the Star Fix door is at y 606-671, above the fold. No clipped text. Stacked (one column, 358 px wide) at 390 px. | `home-1280x720-dark.png`, `home-1280x720-light.png`, `home-1000x700-dark.png`, `home-390x844-*.png` |
+| M2 map circle | FIXED. Window is 16 degrees across for the 65 km answer. Circle radius about 30 px at 1280 px and 18 px at 390 px. Victoria coast, Port Phillip and Tasmania are readable. GPS ring sits clearly outside the reticle, on the circle edge. No scale bar (acceptable). | `map-1280-dark.png`, `map-1280-light.png`, `map-390-*.png`; `app/starfix.js:55` |
+| M3 U4 toggle | FIXED. Repro A: all used, list closed, open it, add a duplicate: stays open. Close it, add `notes.txt`: stays closed. Untouched list still opens by itself when a file is refused. | Script log; `app/starfix.js:37`, `:66-68` |
+| M4 CLS 390 | FIXED. First visit, no cache: CLS 0.0025 (dark), 0.0031 (light). Stress walk M1 PASS (0.002). The hint is on its own line. | `starfix-390-*-first.png` |
+| L1 duplicate | FIXED. Status line "Already added: 20260614_081050893_iOS.heic". Clears on the next add and on Remove. | `starfix-1280-dup.png` |
+| L2 counts | FIXED. Refused files are not counted: 4 photos + `notes.txt` gives "4 photos used". | `starfix-1280-nonphoto.png` |
+| L3 error wording | FIXED. "Could not read this photo." plus "Try again" button. | `starfix-1280-error.png` |
+| L4 next step | FIXED. "This file is not a photo. Choose a .heic or .jpg file." and "...(30 MB limit). Use the original photo." | `starfix-1280-only-refused.png` |
+| L5 "yet" | FIXED. Only refused files: "No place found from these photos." | `starfix-1280-only-refused.png` |
+| L6-L8 | Not in this fix round. Unchanged. | - |
+
+Upload of the four `20260614_*.heic` at 1280 and 390 px, both themes: same headline, "Usually right to about 65 km.", "✓ Your phone's GPS recorded a spot 61 km from here.", "4 photos used", list closed. Time to result was 18.8-19.7 s per run (round 1 noted ~5 s). Progress text and bar showed the whole time. Not a finding; noted for the team (solver speed on this machine).
+
+### New findings (low)
+
+| # | Screen and step | What happens | Concrete fix |
+|---|---|---|---|
+| L9 | Result done, person closed the photo list, then adds a refused file (drop or "All files") | The new row is inside the closed list. Summary stays "4 photos used" (refused files are not counted, by the L2 fix). Status line says nothing. The person sees no change: a silent refusal. Comes from M3 + L2 fixes together. Low because the file chooser filters to .heic/.jpg. | Show refused files in the status line, like "Already added": "Not added: notes.txt (not a photo)." |
+| L10 | Only refused files in the list | Summary reads "0 photos used" above a list that holds one file. Correct by the new rule, but odd. | For total 0, use "No photos used" or "Files". |
+
+### Stress walk (`stress-walk.mjs`, 390 px)
+
+| # | Check | Target | Result | Detail |
+|---|---|---|---|---|
+| N2 | Back (system) reaches home within 2 presses | Star Fix (door 3) | PASS | 1 press(es) |
+| D1 | No empty state before the first answer | Star Fix health / example | PASS | skeleton, cache or loading shown |
+| M1 | No layout shift when data lands (CLS ≤ 0.1) | Star Fix health / example | PASS | CLS 0.002 |
+| L1 | At most one layer over a screen | all walked steps | PASS | never more than one |
+
+### Manual checklist changes since round 1
+
+| # | Result | Reason |
+|---|---|---|
+| D3 | PASS | CLS 0.0025-0.0031 at 390 px first visit (was FAIL). |
+| M4 | PASS | Circle now visible; map and circle glide together (`app/starfix.js:110-120`). Glide not timed frame by frame. |
+| Others | Unchanged | As in round 1. |
+
+### Shneiderman notes that changed
+
+| Rule | Note |
+|---|---|
+| Consistency | One verb for one action: "Try again" only. |
+| Informative feedback | Duplicate add now says so. Refused add into a closed list is still silent (L9). |
+| Simple error handling | Every refusal text now gives the next step. |
+| Internal locus of control | The person's open or close of the list now wins. |
+| Clarity and hierarchy | Map now shows how exact the answer is, with coast context. |

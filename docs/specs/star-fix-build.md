@@ -475,22 +475,22 @@ Do not write a GPS coordinate of a sample photo into the repo. Only Phillip Isla
 
 | # | Criterion | Measured now |
 |---|---|---|
-| A1 | Maths round trip, no photo: for a known place and time, build the zenith, a random camera rotation and `g` for each orientation 1, 3, 6, 8. `position()` returns the place within 2 km. | not yet built |
+| A1 | Maths round trip, no photo: for a known place and time, build the zenith, a random camera rotation and `g` for each orientation 1, 3, 6, 8. `position()` returns the place within 2 km. | built: PASS (build-report.md) |
 | A2 | `star_image/20260614_082051102_iOS.heic`: `status` is `fix`, within 100 km of (-38.5, 145.2), `sky.constellation` is `Carina` | 34 km |
 | A3 | `star_image/20231125_204326416_iOS.heic` (held past the zenith): `fix`, less than 150 km from the file's own `gps` | 55 km |
 | A4 | `star_image/20231125_211246181_iOS.heic` (twilight): `no_solve` | 11 spots |
-| A5 | Random bytes: `bad_file`. A sample photo saved again as JPEG without EXIF: `sky_only`, `missing` holds `gravity` and `time`. | not yet built |
+| A5 | Random bytes: `bad_file`. A sample photo saved again as JPEG without EXIF: `sky_only`, `missing` holds `gravity` and `time`. | built: PASS (build-report.md) |
 | A6 | The four `20260614_*` results through `sessions()` and `combine()`: one session, fix within 120 km of (-38.5, 145.2), radius between 50 and 150 km | 61 km, radius 65 km |
-| A7 | `combine()` unit tests: one far photo among four does not move the fix by more than 50 km and is in `outliers`; 1 photo gives radius 150; photos 2 h apart give two sessions; every `circle()` point is `km` from the centre within 1 % | not yet built |
-| A8 | Server: empty body gives 400; a 31 MB body gives 413 or a closed connection, and `/api/health` answers after it; random bytes give 200 `bad_file` (skip when the packages are absent); no response text holds a file path | not yet built |
+| A7 | `combine()` unit tests: one far photo among four does not move the fix by more than 50 km and is in `outliers`; 1 photo gives radius 150; photos 2 h apart give two sessions; every `circle()` point is `km` from the centre within 1 % | built: PASS (build-report.md) |
+| A8 | Server: empty body gives 400; a 31 MB body gives 413 or a closed connection, and `/api/health` answers after it; random bytes give 200 `bad_file` (skip when the packages are absent); no response text holds a file path | built: PASS (build-report.md) |
 | A9 | `server.js` holds no `python3` literal; `/api/star-predict` uses the same lookup as `fields.js` | #27 open |
 | A10 | Every test file that passed before still passes | run the full list |
-| A11 | In a browser at `http://localhost:8000/starfix.html`: upload the four `20260614_*` files. The page shows one answer block: headline with a place name, "Usually right to about N km", the GPS check line, the map with two marks. The answer is above the photo list and the list is closed. Save `artifacts/star-fix/page.png` (wide) and `page-phone.png` (390 px wide), in both themes. | not yet built |
-| A12 | The home hero row holds exactly three links, in this order: `observatory.html`, `compass.html`, `starfix.html`. "How It Works" is still in the top navigation. Each door opens its page. | not yet built |
-| A13 | First visit: the example block is visible and has the word "Example". After the first result it is gone; "Remove my photos" brings it back. With `/api/health` unreachable (open `app/starfix.html` from a static server): the example shows, the upload is disabled, and the one-line reason is visible. | not yet built |
-| A14 | `describe()` returns the exact text of section 10.2 for every case. No text from `describe()`, `headline()` or `starfix.html` holds one of: plate, solve, zenith, session, outlier, EXIF, MakerNote, gravity, or "fix" outside "Star Fix" (case-insensitive test). | not yet built |
-| A15 | `app/data/starfix-sample.json`: four entries, every `gps` is exactly `{"lat": -38.5, "lon": 145.2}`, and `combine()` of them is within 120 km of that point | not yet built |
-| A16 | `starfix.html` before upload has one primary button; the page has no horizontal scroll at 390 px; every control is reachable by Tab and shows focus | not yet built |
+| A11 | In a browser at `http://localhost:8000/starfix.html`: upload the four `20260614_*` files. The page shows one answer block: headline with a place name, "Usually right to about N km", the GPS check line, the map with two marks. The answer is above the photo list and the list is closed. Save `artifacts/star-fix/page.png` (wide) and `page-phone.png` (390 px wide), in both themes. | built: PASS (build-report.md) |
+| A12 | The home hero row holds exactly three links, in this order: `observatory.html`, `compass.html`, `starfix.html`. "How It Works" is still in the top navigation. Each door opens its page. | built: PASS (build-report.md) |
+| A13 | First visit: the example block is visible and has the word "Example". After the first result it is gone; "Remove my photos" brings it back. With `/api/health` unreachable (open `app/starfix.html` from a static server): the example shows, the upload is disabled, and the one-line reason is visible. | built: PASS (build-report.md) |
+| A14 | `describe()` returns the exact text of section 10.2 for every case. No text from `describe()`, `headline()` or `starfix.html` holds one of: plate, solve, zenith, session, outlier, EXIF, MakerNote, gravity, or "fix" outside "Star Fix" (case-insensitive test). | built: PASS (build-report.md) |
+| A15 | `app/data/starfix-sample.json`: four entries, every `gps` is exactly `{"lat": -38.5, "lon": 145.2}`, and `combine()` of them is within 120 km of that point | built: PASS (build-report.md) |
+| A16 | `starfix.html` before upload has one primary button; the page has no horizontal scroll at 390 px; every control is reachable by Tab and shows focus | built: PASS (build-report.md) |
 
 ## 12. Build order
 
