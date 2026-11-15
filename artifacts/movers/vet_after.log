@@ -1,0 +1,12 @@
+Barnard's Star     movers 1, unconfirmed 0, target recovered: True
+   #1 target     9.96″/yr  This is the mission target itself: both ends lie on its measured path.
+Epsilon Indi B     movers 1, unconfirmed 0, target recovered: True
+   #1 target     4.71″/yr  This is the mission target itself: both ends lie on its measured path.
+R Draconis         movers 0, unconfirmed 0, target recovered: None
+RW Aurigae         movers 0, unconfirmed 0, target recovered: None
+WISE 0855-0714     movers 5, unconfirmed 0, target recovered: True
+   #1 target     8.12″/yr  This is the mission target itself: both ends lie on its measured path.
+   #3 rejected   8.99″/yr  The SPHEREx end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.
+   #5 rejected   9.40″/yr  The 2010 end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.
+   #2 rejected   4.59″/yr  An end is at the edge of the picture, where a dot can appear or vanish without moving.
+   #4 rejected   8.60″/yr  An end is at the edge of the picture, where a dot can appear or vanish without moving.

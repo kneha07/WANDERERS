@@ -1,0 +1,21 @@
+== Barnard's Star
+   movers found: 0 (0 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 6)]  spectrum bins: 0 (points 150, flagged 150)
+   motion: measured 10.39"/yr vs expected 10.39"/yr over 15.7 yr
+   brightness change: -0.042 ± 0.031 mag
+   methane test 4.0/3.3 um: None
+predicted target path px [71.35077777918617, 33.787480949492846] -> [77.65876166276746, 115.33584305942206] years 2010.5 2026.2392908322101 n mids 1
+track w2 [('WISE', 2010.5, 71.4, 33.9), ('SPHEREx', 2025.64, 77.4, 112.3), ('SPHEREx', 2026.24, 77.5, 115.4)]
+  A(2010) source near target end: (71.0,37.0) z=1237.0
+  B(new) source near target end: (77.9,115.1) z=15263.7
+len A,B 16 7 a_only 5 b_only 1
+  a_only source near target end: (71.0,37.0) z=1237.0
+  b_only source near target end: (77.9,115.1) z=15263.7
+  a end (71.0,37.0) z=1237.0: other-epoch sources within 4 px []; other img finite=True
+  b end (77.9,115.1) z=15263.7: other-epoch sources within 4 px []; other img finite=True
+target a idx [0] [(71.00800173845042, 37.0051195476226, 1236.9866618922317)] target b idx [0] [(77.88676063062746, 115.11325414827328, 15263.706915719747)]
+  rank 0: score 2.513 (ratio 12.34) d=78.4 a=(71.0, 37.0, 1237.0) b=(77.9, 115.1, 15263.7)
+  rank 1: score 7.156 (ratio 1281.35) d=15.5 a=(66.8, 126.0, 11.9) b=(77.9, 115.1, 15263.7)
+  rank 2: score 7.723 (ratio 2260.20) d=61.1 a=(134.0, 90.9, 6.8) b=(77.9, 115.1, 15263.7)
+  rank 3: score 7.770 (ratio 2369.26) d=72.7 a=(6.0, 104.0, 6.4) b=(77.9, 115.1, 15263.7)
+movers []

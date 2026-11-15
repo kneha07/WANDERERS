@@ -1,0 +1,18 @@
+== WISE 0855-0714
+   movers found: 4 (4 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 5)]  spectrum bins: 69 (points 150, flagged 41)
+   motion: measured 8.24"/yr vs expected 8.15"/yr over 15.8 yr
+   methane test 4.0/3.3 um: 3.7753498672737393
+predicted target path px [42.35062373360404, 71.8351040709833] -> [106.60240436767481, 77.16100237842541] years 2010.5 2026.3197705048658 n mids 1
+track w2 [('WISE', 2010.5, 42.6, 71.8), ('SPHEREx', 2025.87, 105.0, 77.3), ('SPHEREx', 2026.32, 107.0, 77.5)]
+  A(2010) source near target end: (43.0,71.9) z=25.7
+  B(new) source near target end: (107.1,77.2) z=6.3
+len A,B 29 8 a_only 22 b_only 7
+  a_only source near target end: (43.0,71.9) z=25.7
+  a end (43.0,71.9) z=25.7: other-epoch sources within 4 px []; other img finite=True
+  b end (107.1,77.2) z=6.3: other-epoch sources within 4 px [(108.1, 79.0, 6.6)]; other img finite=True
+target a idx [7] [(43.000160900735345, 71.9493701401951, 25.728356648419183)] target b idx [] []
+  rank 0: score 0.066 (ratio 1.07) d=84.6 a=(43.0, 71.9, 25.7) b=(115.9, 28.9, 27.5)
+  rank 1: score 0.084 (ratio 1.09) d=23.3 a=(43.0, 71.9, 25.7) b=(39.1, 49.0, 28.0)
+  rank 32: score 1.170 (ratio 3.22) d=64.7 a=(43.0, 71.9, 25.7) b=(9.0, 127.0, 8.0)
+movers [(43.0, 71.9, 115.9, 28.9, 25.7), (95.1, 6.1, 127.2, 23.1, 8.4), (52.8, 61.9, 39.1, 49.0, 23.8), (46.0, 113.1, 106.0, 145.0, 6.8)]

@@ -1,0 +1,29 @@
+== Barnard's Star
+   movers found: 1 (0 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 6)]  spectrum bins: 0 (points 150, flagged 150)
+   motion: measured 10.39"/yr vs expected 10.39"/yr over 15.7 yr
+   brightness change: -0.042 ± 0.031 mag
+   methane test 4.0/3.3 um: None
+== Epsilon Indi B
+   movers found: 1 (0 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 9)]  spectrum bins: 49 (points 149, flagged 59)
+   motion: measured 4.72"/yr vs expected 4.68"/yr over 15.8 yr
+   brightness change: -0.009 ± 0.075 mag
+   methane test 4.0/3.3 um: 2.4186525499610565
+== WISE 0855-0714
+   movers found: 5 (5 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 5)]  spectrum bins: 69 (points 150, flagged 41)
+   motion: measured 8.24"/yr vs expected 8.15"/yr over 15.8 yr
+   methane test 4.0/3.3 um: 3.7753498672737393
+== RW Aurigae
+   movers found: 0 (0 not explained by Gaia)
+   flipbook frames: [('w2', 6), ('w1', 6)]  spectrum bins: 6 (points 150, flagged 141)
+   motion: measured 0.04"/yr vs expected 0.03"/yr over 15.7 yr
+   brightness change: +0.003 ± 0.068 mag
+   methane test 4.0/3.3 um: None
+== R Draconis
+   movers found: 0 (0 not explained by Gaia)
+   flipbook frames: [('w2', 15), ('w1', 7)]  spectrum bins: 0 (points 150, flagged 150)
+   motion: measured 0.19"/yr vs expected 0.02"/yr over 15.8 yr
+   brightness change: +0.322 ± 0.070 mag
+   methane test 4.0/3.3 um: None
