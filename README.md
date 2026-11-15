@@ -40,8 +40,39 @@ Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `observatory.ht
 Gaia), measures it and plays it as a flipbook in a few minutes. The public static site cannot do this by
 itself because IRSA does not allow direct browser requests (no CORS), so it shows the prepared patches.
 
-**Sky Compass.** On a phone, GPS + time + compass + tilt tell WANDERERS where the camera points; it guides
-you to a target and opens its investigation. Works indoors; objects below the horizon are shown too.
+**Sky Compass** (`app/compass.html`, an extra for phones). The intro uses only real imagery: the NASA Blue Marble /
+Black Marble Earth with the real day/night line swings in to your location, then NASA GIBS imagery of your region
+with your city, time zone and sidereal time. Calibration takes ~10 s: lay the phone flat, hold, and give it three
+quarter turns. The gyroscope measures the turns, so if the compass disagrees the app reports magnetic interference
+(magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
+landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
+
+**Path taken and path ahead** (console and Sky Compass). Every result (a prepared target, a star found by name,
+a star picked on the phone) shows where it has been and where it is going: 1900 to 2100 from the scikit-learn path
+model (`pipeline/star_ml.py`, learnt from every catalogue position since about 1950, with its 68% band) when the
+star has been learnt, else its catalogue motion; and thousands of years either way with `app/starcore.js` (straight
+line through 3D space, closest approach to the Sun). In the Sky Compass the selected star's path is drawn across
+the sky, blue behind it and green ahead. `pipeline/link_paths.py` joins the motion data to the name search
+(9,165 of 9,265 stars) and maps each target to its model (10 of 11 learnt; Luhman 16 uses its published motion).
+
+**Through Webb** (console tab and Sky Compass). WANDERERS matches any coordinates against the outlines of every
+public JWST imaging frame in NASA's MAST archive (22,049 frames merged into ~5,500 pointings, `pipeline/make_webb.py`)
+and shows the real Webb pixels there, with the frame outline on top: a MAST preview placed with its own WCS for our
+targets and every catalogue star inside a Webb frame (`pipeline/make_webb_previews.py`), otherwise ESA ESASky's live
+JWST maps where their coverage map says they have data, otherwise the outline alone with links to the full image and
+the STScI programme page. In the Sky Compass, Webb pointings near where you aim appear as gold squares, and a chip
+offers "Webb looked here" when one is inside the crosshair. Picking a star tells you whether Webb has imaged it
+(WISE 0855, Fomalhaut, Vega, the Trapezium and 60+ others) or how far its nearest Webb frame is. For what Webb is
+observing right now, the app links to Space Telescope Live (STScI), which has no public API.
+
+Motion uses sensor fusion (`app/orient.js`): the gyroscope drives every movement and the compass only sets north,
+averaged while the phone lies flat and corrected slowly after. `node tests/orient.sim.js` replays realistic sensor
+streams (gyro drift, compass noise, tilt bias, declination, indoor magnetic distortion, Android spikes) through the
+old and new engines, including the iPhone heading flip seen in a real test recording (the compass switches from the
+phone's top to its camera at 45° tilt, so pointing above 45° flipped the old version by 180°). The new engine holds
+0.1-0.5° error with 0.1° wobble; with a 12° magnetic case, four-direction calibration gives 0.1-0.8° (one direction:
+5-9°) and flags the interference. A uniform bias from a steel building cannot be seen by any calibration on a table;
+one sight check removes it.
 
 ## Run it
 
@@ -60,6 +91,11 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python pipeline/explain.py
 # 5. predicted star paths (proper motion + parallax; offline, seconds)
 .venv/bin/python pipeline/star_trajectory.py
+# 6. star names and Webb frames for the name search and "Through Webb"
+.venv/bin/python pipeline/make_stars.py hygdata_v40.csv.gz
+.venv/bin/python pipeline/make_webb.py
+.venv/bin/python pipeline/make_webb_previews.py
+.venv/bin/python pipeline/link_paths.py
 
 # view it
 node server.js        # http://localhost:8000 (home), /observatory.html (workspace), live "Ask WANDERERS" via claude -p
@@ -272,6 +308,10 @@ Setup and details: [docs/blink/README.md](docs/blink/README.md).
 | NASA Kepler short-cadence light curves (MAST) | real starquakes of four Kepler LEGACY stars |
 | ESA Gaia archive TAP (Gaia DR1-3, Hipparcos-2, Tycho-2, 2MASS, AllWISE, Pan-STARRS1, URAT1, UCAC4, PPMXL, GSC 2.3, CatWISE2020) | measured positions that train each star's trajectory model |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
+| HYG database v4.0 (astronexus; Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0 | the 9,265-star name search (`app/data/stars.json`, same licence) |
+| MAST (STScI), JWST public level-3 images | Webb frame outlines (`s_region`) and previews for "Through Webb" |
+| ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
+| IRSA HiPS mirrors of 2MASS and DSS colour | sky underneath the Webb view |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
 
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
@@ -284,12 +324,21 @@ photometry with local background, and per-pixel solid angle from each image's WC
 - AllWISE is a 2010–2011 coadd; we treat it as epoch 2010.5.
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
 - Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py`.
+- Through Webb: ESASky's Webb maps hold a subset of the data (to mid-2024), and MAST full previews are too large for
+  phones, so many frames show the outline only, with a link to the full image. Frames are matched with the
+  catalogue (J2000) position; a fast-moving star can sit a few arcseconds from where Webb saw it.
+- Kapteyn's Star and Luhman 16 were first added with hand-typed coordinates that were 17-30″ off; they now use the
+  Gaia DR3 position (Luhman 16: Gaia position with the published motion from Bedin et al. 2017).
 
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py · starquake.py
-app/        index.html (home) · observatory.html · brand.css · theme.js · home.css · home.js · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
+pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · fov.py · gaia_facts.py · star_trajectory.py · stardb.py · star_ml.py · starquake.py
+            make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+app/        index.html (home) · observatory.html (console) · compass.html (phone) · brand.css · theme.js · home.css · home.js
+            style.css · app.js · search.js · telescope.js · starpath.js · stardb.js · stars.js · starquake.js · starquake-ui.js · starcore.js · longrange.js
+            compass.js · orient.js · sky.js · intro.js
+            data/<target>/ · data/stars/ · data/starquake/ · stars.json · webb.json · webb/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
 ```

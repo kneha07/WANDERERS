@@ -30,10 +30,10 @@ function runStep(job, args) {
   });
 }
 
-async function lookup(job, ra, dec) {
+async function lookup(job, ra, dec, fov = 300) {
   try {
     job.log.push(`Finding SPHEREx, WISE and Gaia data at RA ${ra.toFixed(4)}, Dec ${dec.toFixed(4)}…`);
-    await runStep(job, ["-u", "pipeline/fetch.py", "--ra", String(ra), "--dec", String(dec), "--max", "36"]);
+    await runStep(job, ["-u", "pipeline/fetch.py", "--ra", String(ra), "--dec", String(dec), "--max", "36", "--fov", String(fov)]);
     if (!job.id) throw new Error("no target id");
     job.log.push("Measuring motion, spectrum and brightness…");
     await runStep(job, ["-u", "pipeline/analyze.py", job.id]);
@@ -86,12 +86,13 @@ http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/api/lookup") {
     res.setHeader("content-type", "application/json");
     try {
-      const { ra, dec } = JSON.parse(await body(req));
+      const { ra, dec, fov } = JSON.parse(await body(req));
+      const f = [300, 600, 900].includes(Number(fov)) ? Number(fov) : 300;
       const a = Number(ra), d = Number(dec);
       if (!Number.isFinite(a) || !Number.isFinite(d) || a < 0 || a >= 360 || d < -90 || d > 90) throw new Error("RA must be 0-360 and Dec -90 to 90 degrees");
       if (busy) { res.writeHead(409); return res.end(JSON.stringify({ error: "Another lookup is running", job: busy })); }
       const n = String(++jobSeq), job = { status: "running", log: [], id: null, started: Date.now() };
-      jobs.set(n, job); busy = n; lookup(job, a, d);
+      jobs.set(n, job); busy = n; lookup(job, a, d, f);
       res.writeHead(202); return res.end(JSON.stringify({ job: n }));
     } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: String(e.message || e) })); }
   }

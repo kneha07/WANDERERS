@@ -110,6 +110,9 @@ def card(t):
         cls, support = "Variable star", [varies, gaia_var or t["target_in_gaia"], not moved]
     elif moved and t["target_in_gaia"]:
         cls, support = "Nearby star with fast proper motion", [moved, matches, t["target_in_gaia"]]
+    elif moved and matches and t["reference"].get("catalogued", True):
+        # not in Gaia with a motion, but the measured speed matches a published one (e.g. Luhman 16)
+        cls, support = "Nearby object with fast proper motion (published motion)", [moved, matches, True]
     elif moved:
         cls, support = "Unexplained mover", [moved]
     else:
@@ -143,7 +146,7 @@ def main():
         t["evidence"] = card(t)
         d.write_text(json.dumps(t, indent=1))
         ref = t["reference"]
-        index.append({"id": t["id"], "name": t["name"], "teaser": TEASER.get(t["id"], t["kind"]),
+        index.append({"id": t["id"], "name": t["name"], "teaser": TEASER.get(t["id"], t.get("teaser", t["kind"])),
                       "ra": t["grid"]["centre_ra"], "dec": t["grid"]["centre_dec"],
                       "fov": round(t["grid"]["npix"] * t["grid"]["arcsec_per_pix"])})   # side of the field, arcsec
         print(f"{t['name']:<18} {t['evidence']['status']:<9} {t['evidence']['classification']:<38} "

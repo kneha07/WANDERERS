@@ -24,7 +24,7 @@ def clamp_fov(value=None):
 
 def fov_of(target):
     """Field of view of a target definition (a dict), with the default when it has none."""
-    return clamp_fov(target.get("fov_arcsec"))
+    return clamp_fov(target.get("fov_arcsec", target.get("fov")))   # "fov" = the key WANDERERS lookups wrote before
 
 
 def position_id(ra, dec, fov=None):
