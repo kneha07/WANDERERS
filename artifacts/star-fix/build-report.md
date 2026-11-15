@@ -79,16 +79,27 @@ The spec now matches the code: sections 6, 8, 10.1, 10.2 (words, lines, map) and
 - A new night goes on top; blocks are not sorted again.
 - The OpenStreetMap link opens a new tab, so the results stay.
 
-## 5. Leftovers (not fixed in round 1)
+## 5. Architecture pass
+
+Source: `artifacts/architecture/star-fix.html` (two candidates). Both are built. Behaviour, words and API answers are unchanged.
+
+| Candidate | What moved | Tests added | Commit |
+|---|---|---|---|
+| 1. Deepen the night module (Strong) | `night(rows, {cities, example})` in `app/starfixcore.js` now returns the whole answer block: date, headline (empty before the first answer), position, radius, check and hint lines, the map window (`span` 16 to 40 degrees, half-height 4 x max(radius, GPS distance)), the OpenStreetMap link, per row `used`, mark, text and Try again, the summary and the list default. `fill()` in `app/starfix.js` only writes this view; the `isUsed` copy of the outlier rule is gone. `RETICLE_PX` (9 px) is shared by the canvas and the test. | `test/starfixcore.test.js`: the example block as one call; the window rule (16 degrees at 65 km, 16 x 150 / 111.2 for one photo, 40 for a GPS thousands of km away, no map without a place); the circle radius at 608 px is 22.4 px, at least 2 x the 9 px reticle (3 x does not hold at the 16 degree minimum: 2.5 x); row marks, used and Try again with an outlier, an error, waiting, reading and a refused file; the list default and the headline gate. | `7e2616c` |
+| 2. Solver seam (Worth exploring) | `star-fix-solver.js`: `solvePhoto(buf, {python, script, cwd, timeoutMs})` -> `{code, body, gone}` holds the spawn, stdin write, time limit, kill tree, last JSON line and the two 500 answers. The `/api/star-fix` route keeps the size limit, the busy flag (freed when the process has ended, also after a 504) and the replies. On POSIX the solver runs in its own process group, so the kill takes the tree (CI is Linux). | `test/starfix-server.test.js`: a fake solver with a child process sleeps past a 1.5 s limit -> 504 in under 5 s, and both processes are gone (with a parent-only kill this test fails: checked, then the orphan was stopped); the last JSON line of a clean exit, a crash, a missing package and no Python. | `43b5a79` |
+
+Check after the pass: both test commands exit 0 (Python 10 tests; Node 325 tests, 324 pass, 1 skip that is also on base).
+Playwright, four 14 June photos: the same block (about 130 km south-east of Geelong, 65 km, 61 km, list closed) and the circle drawn.
+
+## 6. Leftovers
 
 Tracked in kneha07/WANDERERS#58 (with the round-2 low findings). Sample-photo GPS privacy: kneha07/WANDERERS#57.
 
 - Orientation 3 and 8 have no photo test (TL M2). A2 covers orientation 1; A3, A17 and the other portrait photos cover 6. A1 checks the table for all four.
-- No automatic test for the 60 s kill (504); the tech lead checked it by hand.
 - The Undo line ends after 8 s (WCAG 2.2.1 asks for a way to extend it).
 - With a large radius the nearest city can be a small place ("near San Tung Chung Hang"); a better rule would prefer the largest city inside the circle.
 
-## 6. Commits
+## 7. Commits
 
 ```
 e191f88 step 1: pipeline/star_fix.py and tests A1-A5
@@ -108,4 +119,6 @@ f41e46a build report
 5d74369 fix round 1: new A11 screenshots
 bcc72d0 build report after fix round 1
 b62b108 map: minimum window 16 x 8 degrees
+7e2616c architecture pass 1: night(rows, {cities, example})
+43b5a79 architecture pass 2: solvePhoto seam (star-fix-solver.js)
 ```
