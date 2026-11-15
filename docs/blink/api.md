@@ -140,6 +140,7 @@ candidate), not both; else HTTP 400. No language model writes these facts.
 | `papers` | number or null | Papers about the object in SIMBAD (Sesame `nrefs`) |
 | `sources` | [`{label, url}`] | Every source used, for the card's sources line |
 | `notes` | [string] | What is missing and why, e.g. "Wikipedia did not answer, so the history is missing." |
+| `fast_movers` | [`{name, pm_arcsec_yr, sep_arcsec}`] or null | Position answers only (`[]` for a name). SIMBAD stars faster than 1″/yr within 300″ whose straight path (1990-2030) passes within 60″ of the position, nearest path first; `sep_arcsec` is the distance in 2026.0. A star now within 5″ of the position is left out (the position is right). `null`: the search failed or took more than 6 s |
 
 Sources: CDS Sesame `-oxpI` (CDS, then the CfA mirror) for a name. For a position, SIMBAD TAP (CDS, then CfA)
 names the object within 5″ first: the nearest one, but a planet only when nothing else is there, and among objects
@@ -149,7 +150,14 @@ J2000, where SIMBAD lists the star. The web app sends them for a mark on a Gaia 
 DR3 position, epoch 2016.0). A Wikipedia page is used only when it is about the object: its title is one of the
 object's names, or its text has one, or it places the object in its constellation (astropy). Requests send the
 User-Agent `WANDERERS-hackathon/0.1 (https://github.com/kneha07/WANDERERS)`. Each source fails soft; an answer is
-cached 30 days, but not when a source failed.
+cached 30 days, but not when a source failed, and only 1 hour when `fast_movers` is `null`. The fast-mover search
+runs next to the other lookups and gets at most 6 s, so it does not hold the answer past the web client's 20 s.
+Cache version 2 (`ABOUT_VERSION`): older position answers without `fast_movers` are rebuilt.
+
+For typed coordinates (no proper motion) the web app shows the first `fast_movers` entry under the image: "A
+fast-moving star (<name>, <pm>″/yr) is <sep>″ from here. Typed coordinates from an old catalogue may miss it —
+search it by name." Without one, it uses a Gaia DR3 star of the frames answer that is faster than 1″/yr and whose
+path passes within 60″ (and that is not within 5″ now).
 
 The web card shows exactly three sentences: `facts_sentence` (for a position that SIMBAD does not name: the nearest
 Gaia DR3 star of the frames answer), a sentence from our own SPHEREx measurements (motion per year and direction,

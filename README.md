@@ -439,7 +439,9 @@ node --test test/frameinfo.test.js   # includes checks on every committed target
 Open <http://localhost:8000/explore/>, type any star name or sky position, and see its SPHEREx images as a blink
 video, fetched live from IRSA. The Data tab starts with "About this star": three sentences from the catalogs (CDS
 Sesame, SIMBAD), our own SPHEREx measurement and one quoted Wikipedia sentence. The coordinate box links to the
-explorer for positions outside the five missions.
+explorer for positions outside the five missions. For typed coordinates, a note names a fast-moving star whose
+path passed nearby (old coordinates can miss it). A brightness change counts only when the brightest survey shows a
+source; else the panel says "No source at this position — the brightness numbers are sky noise."
 
 ```
 backend/   FastAPI live API (port 8001): spherex.py (frames), about.py (About this star), app.py (routes)

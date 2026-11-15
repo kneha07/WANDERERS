@@ -174,7 +174,12 @@ Research notes: [docs/research/spherex-data-access.md](../research/spherex-data-
   (issue #5), not "larger than the noise".
 - **Typed coordinates** have no proper motion: no ring, and frames without a source at the typed position say "no
   proper motion known: no predicted position". The WISE 0855 challenge coordinates are from 2010; its chip uses the
-  2026 position.
+  2026 position. When a fast mover (over 1″/yr) passed near the typed position, the note under the image names it
+  ("A fast-moving star … is 127″ from here … search it by name"), from SIMBAD, else from Gaia.
+- **No source, no change.** A brightness change counts only when the brightest survey shows a source (a centroid in
+  that frame, or a flux of 5σ or more). Else the panel says "No source at this position — the brightness numbers
+  are sky noise." It is judged at the brightest survey, because a weak fit in one faint survey (WISE 0855's 2010
+  coordinates) let a false "10.8× … larger than the noise" through when any survey could count.
 - **About this star** depends on CDS and Wikipedia. On 2026-11-14 SIMBAD at CDS was down and the CfA mirror answered. Many
   Wikipedia summaries have no dated history sentence (Barnard's Star); then the card counts the SIMBAD papers.
 - **Undersampled PSF.** Bright fixed stars can leave small dark and bright pairs in the difference image.
