@@ -22,3 +22,7 @@ Handoff: `docs/HANDOFF.md` (tasks 1-4).
 
 ## Branches left (not merged, kept for reference)
 `feature/real-sky`, `feature/real-sky-core` (worktree `.worktrees/real-sky-2`), `feature/real-sky-finish` (`.worktrees/real-sky-finish`), `fix/mover-pairing`, `fix/mover-pairing-data` (`.worktrees/movers`).
+
+## Snapshot before risky changes
+Tag `snapshot-2026-11-15-before-real-sky` (pushed) = `origin/main` at `2ce8067`, before PR #40 and the mover-search data (#41).
+Go back with `git checkout snapshot-2026-11-15-before-real-sky`, or open a branch from it.
