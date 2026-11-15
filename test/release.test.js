@@ -229,10 +229,15 @@ test("the committed status file renders", { skip: !fs.existsSync(REAL) && "no st
 // ---------------------------------------------------------------- style
 
 test("CSS: theme colours only, reduced motion respected, wraps at phone width", () => {
-  const css = fs.readFileSync(path.join(APP, "brand.css"), "utf8");
-  const start = css.indexOf("/* ---------- SPHEREx data status line");
-  assert.ok(start > 0);
-  const block = css.slice(start);
+  const brand = fs.readFileSync(path.join(APP, "brand.css"), "utf8");
+  const block = fs.readFileSync(path.join(APP, "release.css"), "utf8");
+  assert.ok(block.startsWith("/* ---------- SPHEREx data status line"));
+  assert.doesNotMatch(brand, /spx-status/, "kept out of the unversioned brand.css (browsers cache it)");
+  const css = brand + "\n" + block, start = brand.length + 1;
+  for (const page of ["index.html", "observatory.html"]) {
+    const html = fs.readFileSync(path.join(APP, page), "utf8");
+    assert.match(html, /<link rel="stylesheet" href="brand\.css">\n<link rel="stylesheet" href="release\.css\?v=\d{8}[a-z]">/, page);
+  }
   assert.doesNotMatch(block.replace(/\/\*[\s\S]*?\*\//g, ""), /#[0-9a-f]{3,8}\b|rgba?\(/i, "colours come from the theme variables");
   for (const v of ["--surface-2", "--muted", "--text", "--known", "--cand", "--warn", "--line"]) {
     assert.match(block, new RegExp(`var\\(${v}\\)`));
