@@ -204,6 +204,16 @@ test("Star database: the 'no star by that name' message goes once a search finds
   assert.doesNotMatch(p.$("starPredMsg").textContent, /node server|pipeline/);
 });
 
+// ---------- styles (checked in a headless browser while fixing; here the rules are pinned) ----------
+test("styles: Aladin's own buttons are left alone, and [hidden] beats display: grid", () => {
+  const css = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "app", "style.css"), "utf8");
+  const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({ sel: m[1].trim(), body: m[2] }));
+  for (const r of rules.filter((x) => /background:\s*var\(--surface\)/.test(x.body) && /(^|,|\s)\.obs button\b/.test(x.sel)))
+    assert.match(r.sel, /:not\(:where\(\.aladin button\)\)/, `"${r.sel}" would paint Aladin's zoom and fullscreen buttons`);
+  assert.ok(rules.some((r) => r.sel === ".obs [hidden]" && /display:\s*none\s*!important/.test(r.body)), "a [hidden] rule");
+  assert.ok(rules.some((r) => r.sel === ".map-controls label" && /display:\s*grid/.test(r.body)), "(the rule it has to beat)");
+});
+
 // ---------- the coordinate box ----------
 function typeCoords(p, ra, dec) {
   p.$("raIn").value = ra; p.$("decIn").value = dec;
