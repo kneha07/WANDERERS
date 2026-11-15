@@ -36,7 +36,7 @@ test("after typed coordinates it falls back to the plain Sky Compass", async () 
 
 test("the home hero is the chooser: exactly three doors, Observatory, Sky Compass, Star Fix (A12)", () => {
   const h = html("index.html");
-  const hero = h.match(/<div class="cta">([\s\S]*?)<\/div>\s*<dl class="hero-stats"/);
+  const hero = h.match(/<p class="hero-lede">[\s\S]*?<div class="cta">([\s\S]*?)<\/div>\s*<p class="hero-sub"/);   // right under the lede
   assert.ok(hero, "hero buttons");
   const links = [...hero[1].matchAll(/<a class="btn [^"]*"[^>]*href="([^"]+)"/g)].map((x) => x[1]);
   assert.deepEqual(links, ["observatory.html", "compass.html", "starfix.html"]);

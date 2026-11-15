@@ -300,7 +300,10 @@ Replace the hero buttons (`<div class="cta">` in `app/index.html`) by exactly th
 - Line 1 is the result. Line 2 is the name and the one thing the person needs. A visitor can choose without a trial click.
 - All three use the two-line button style that the Sky Compass button has now (`cc-icon`, `cc-text`), the same size. Door 1 keeps `btn-primary`: it is the default for a person who does not want to choose.
 - Move "How It Works" out of this row. It stays in the top navigation, where it is already. Four mixed buttons become three like ones.
-- No label above the row: three buttons that say what they do need no heading. On a phone the doors stack. Each door is at least 44 px high.
+- No label above the row: three buttons that say what they do need no heading. Each door is at least 44 px high.
+- Fix round 1 (reviews UA M1, PM F1): the row sits right under the lede, before the longer paragraph, so that all three doors are
+  above the fold on a 1280 x 720 laptop (measured: bottom of door 3 at 671 px). One row, equal widths, from a 1024 px window
+  (text column 470 px and up); the text gets smaller while the doors are narrow. Below that (phones) the doors stack.
 - Update the expected list in `test/compass-cta.test.js` to `["observatory.html", "compass.html", "starfix.html"]`.
 
 ### 10.2 `starfix.html`: one column, three states
