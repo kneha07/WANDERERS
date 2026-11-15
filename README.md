@@ -47,6 +47,14 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
+**Path taken and path ahead** (console and Sky Compass). Every result (a prepared target, a star found by name,
+a star picked on the phone) shows where it has been and where it is going: 1900 to 2100 from the scikit-learn path
+model (`pipeline/star_ml.py`, learnt from every catalogue position since about 1950, with its 68% band) when the
+star has been learnt, else its catalogue motion; and thousands of years either way with `app/starcore.js` (straight
+line through 3D space, closest approach to the Sun). In the Sky Compass the selected star's path is drawn across
+the sky, blue behind it and green ahead. `pipeline/link_paths.py` joins the motion data to the name search
+(9,165 of 9,265 stars) and maps each target to its model (10 of 11 learnt; Luhman 16 uses its published motion).
+
 **Through Webb** (console tab and Sky Compass). WANDERERS matches any coordinates against the outlines of every
 public JWST imaging frame in NASA's MAST archive (22,049 frames merged into ~5,500 pointings, `pipeline/make_webb.py`)
 and shows the real Webb pixels there, with the frame outline on top: a MAST preview placed with its own WCS for our
@@ -87,6 +95,7 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python pipeline/make_stars.py hygdata_v40.csv.gz
 .venv/bin/python pipeline/make_webb.py
 .venv/bin/python pipeline/make_webb_previews.py
+.venv/bin/python pipeline/link_paths.py
 
 # view it
 node server.js        # http://localhost:8000 (home), /observatory.html (workspace), live "Ask WANDERERS" via claude -p
