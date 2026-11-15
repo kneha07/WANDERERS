@@ -1,6 +1,6 @@
 # Boot and demo script
 
-Status on 2026-11-14 (evening): the one-click start and the `/explore/` mode work (tested with commit `f18c472`). The NASA-style redesign of `/explore/` is in progress on branch `feat/explore-redesign`.
+Status on 2026-11-14 (night): the one-click start, the redesigned `/explore/` mode and "About this star" are on `main`. Start the demo from the repo root.
 
 ## Boot (one click)
 
@@ -23,9 +23,9 @@ start.js ──► backend/.venv uvicorn :8001  (live SPHEREx frames, disk cache
 - Stop: press Ctrl+C in the start window, or close it.
 - If a port is busy: the script reuses our own servers on 8000/8001. It stops with a message if another program uses them.
 
-### Stable demo copy (while implementers work on `main`)
+### Start from the repo root
 
-`main` can hold half-finished work during development. For a demo, run from the worktree `.worktrees/demo` (detached at a good commit): double-click `.worktrees/demo/start.cmd`. Its `backend/.venv` and `web/node_modules` are junctions to the main checkout, so it needs no new install.
+Run the demo from the main checkout: double-click `start.cmd` (Windows) or `start.command` (macOS) in the repo folder, or run `node start.js --precompute` the first time. No separate demo copy is needed.
 
 ## Demo script (about 2 minutes)
 
@@ -45,5 +45,6 @@ Screenshots of these steps: `artifacts/demo/1-wanderers-barnard.jpg`, `artifacts
 
 - Run the precompute step before the demo. IRSA sometimes answers 502/503 during the hackathon, and the cache makes the demo independent of that.
 - Warm the cache for Kapteyn's Star too: open it once before the demo.
-- R Draconis is saturated in SPHEREx. A display fix is in progress, so do not use it for the live part yet.
+- R Draconis is saturated in every SPHEREx frame. The core shows white and the panels say "too bright for SPHEREx to measure here" (screenshot: `artifacts/star-info/1440-rdra.png`). Use Barnard's Star or Kapteyn's Star to show motion.
+- Open the Data tab once per target before the demo, so "About this star" answers at once (the first answer can take about 10 s while a CDS mirror is down).
 - Record the screen at 1440 × 900 or more. The sky images are small, and the page scales them up with sharp pixels.

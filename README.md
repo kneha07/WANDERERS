@@ -172,6 +172,18 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
+**The real sky behind the Sky Compass** (`app/realsky.js`), so clouds and city lights do not matter. A switch under the
+buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (HYG via the star database, with a City /
+Suburb / Dark choice), constellation lines (d3-celestial) and the planets (JPL elements); it is drawn, not
+photographed, and works with no connection. **Deep** shows survey photographs under the AR view, in the camera's own
+projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMass and IPAC/Caltech), both tiled by CDS
+and served by NASA/IPAC IRSA. They are decades old, not a live view. Tap a planet for a card, or a star to open its
+star sheet. "Drag the sky" in the Sight check sheet moves the sky onto something you can see. The page opens with no
+signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days, and "Save the sky for a place" in
+the ⓘ sheet keeps them for a latitude before a trip. Checks: `node --test test/sky.test.js test/hips.test.js
+test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network).
+Spec: `docs/specs/sky-compass-real-sky.md`.
+
 **No more 2010 → 2025 jump.** Between WISE 2010 and SPHEREx 2025 the time-lapse now shows one NEOWISE image per sky
 visit (about every 6 months, Dec 2013 to 2024, same 3.4 and 4.6 µm bands), so you watch a fast star walk year by
 year. `pipeline/neowise.py` finds the exposures covering a target in the NEOWISE single-exposure source table
@@ -260,7 +272,8 @@ node --test test/framemath.test.js   # includes checks on the real WISE 0855 and
 With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
 `evidence.py` for that patch, shows progress in the coordinate box, and opens it when ready (first time:
 several minutes). One field is prepared at a time, up to four can wait, and errors never show server paths.
-It uses `.venv/bin/python` if present, or set `WANDERERS_PYTHON`. The static site does not have this; it
+It uses `WANDERERS_PYTHON` if set, else the project's `.venv` (`.venv/bin/python`, or `.venv\Scripts\python.exe` on Windows),
+else `python3` (`python` on Windows). The static site does not have this; it
 still shows the message that a teammate can add the field.
 
 ```mermaid
@@ -294,7 +307,7 @@ Typed coordinates match a cached target only if the sizes agree; without the ser
 shown with a note that the other size needs the local server. Links can carry it: `?ra=269.4479&dec=4.7461&fov=600`.
 
 ```bash
-python .venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
+.venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
 node --test test/fields.test.js     # job handling, validation and HTTP checks (fake pipeline, no network)
 python3 test/test_fov.py            # field-of-view helpers; no packages needed
 ```
@@ -517,10 +530,37 @@ node --test test/frameinfo.test.js   # includes checks on every committed target
 ## Explore any patch (live mode)
 
 Open <http://localhost:8000/explore/>, type any star name or sky position, and see its SPHEREx images as a blink
-video, fetched live from IRSA. It needs the live API (`backend/`, port 8001) next to `node server.js`, and a build
-of `web/`. The coordinate box links to it for positions outside the five missions.
-Double-click `start.cmd` (Windows) or `start.command` (macOS), or run `node start.js`.
-Setup and details: [docs/blink/README.md](docs/blink/README.md).
+video, fetched live from IRSA. The Data tab starts with "About this star": three sentences from the catalogs (CDS
+Sesame, SIMBAD), our own SPHEREx measurement and one quoted Wikipedia sentence. The coordinate box links to the
+explorer for positions outside the five missions. For typed coordinates, a note names a fast-moving star whose
+path passed nearby (old coordinates can miss it). A brightness change counts only when the brightest survey shows a
+source; else the panel says "No source at this position — the brightness numbers are sky noise."
+
+```
+backend/   FastAPI live API (port 8001): spherex.py (frames), about.py (About this star), app.py (routes)
+web/       React + TypeScript explorer, built to web/dist, served by server.js under /explore/
+start.js   one-click start: backend/.venv, root .venv (on-demand fields), web build, both servers
+docs/blink/   README.md (setup, limits) · api.md (the API contract)
+```
+
+Start everything with `node start.js`, or double-click `start.cmd` (Windows) or `start.command` (macOS). By hand:
+
+| Step | macOS / Linux | Windows |
+|---|---|---|
+| Python packages (once) | `python3 -m venv backend/.venv` then `backend/.venv/bin/python -m pip install -r backend/requirements.txt` | `py -3 -m venv backend\.venv` then `backend\.venv\Scripts\python -m pip install -r backend\requirements.txt` |
+| Live API | `backend/.venv/bin/python -m uvicorn backend.app:app --port 8001` | `backend\.venv\Scripts\python -m uvicorn backend.app:app --port 8001` |
+| Web app | `cd web && npm ci && npm run build`, then `node server.js` | the same |
+
+Tests of the live mode (from the repo root unless noted):
+
+```bash
+backend/.venv/bin/python -m pytest backend -q     # Windows: backend\.venv\Scripts\python -m pytest backend -q
+node --test test/*.test.js                         # server.js routes, the live proxy, the teammates' modules
+cd web && npm test && npm run build                # the explorer's pure functions, then a type check and build
+node web/scripts/verify-ui.mjs http://localhost:5173/explore/   # browser checks (needs npm run dev in web/)
+```
+
+Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). API: [docs/blink/api.md](docs/blink/api.md).
 
 ## Data (all public)
 
@@ -559,6 +599,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
   the page says so, and an empty list means "nothing found", not "nothing there".
 - In single NEOWISE exposures the brightest stars saturate: their frames are marked "saturated" and give no
   position (61 Cygni, R Draconis).
+- The public static site shows only the prepared targets. With `node server.js` (or `node start.js`), new coordinates are prepared on demand, and `/explore/` shows any patch live.
 - Through Webb: ESASky's Webb maps hold a subset of the data (to mid-2024), and MAST full previews are too large for
   phones, so many frames show the outline only, with a link to the full image. Frames are matched with the
   catalogue (J2000) position; a fast-moving star can sit a few arcseconds from where Webb saw it.
@@ -590,12 +631,12 @@ the data providers.
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
             star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
-            make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+            make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
 app/        index.html (home) · observatory.html (console) · compass.html (phone)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
-            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js
-            data/<target>/ · data/stars/ · data/starquake/ · stars.json · webb.json · declination.json
+            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
+            data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
 server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
 fields.js   the any-coordinates job service used by server.js
 start.js    one-click start for everything (also start.cmd, start.command)

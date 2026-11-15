@@ -1,0 +1,23 @@
+== Barnard's Star (barnard)
+   reference: Gaia DR3 ra=269.44850 dec=4.73942 pm=(-802,10362) mas/yr; 334 Gaia field stars
+   SPHEREx DR1: 239 images, using 150
+!! barnard failed: gave up on https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2025W35_2A/l2b-v27-2026-231/2/level2_2025W35_2A_0221_3D2_spx_l
+== Epsilon Indi B (eps_indi_b)
+   reference: Gaia DR3 ra=331.07645 dec=-56.79381 pm=(3982,-2467) mas/yr; 42 Gaia field stars
+   SPHEREx DR1: 343 images, using 150
+   AllWISE W1/W2 cached
+== WISE 0855-0714 (wise0855)
+   reference: Luhman & Esplin 2016, AJ 152, 78 ra=133.79513 dec=-7.24515 pm=(-8123,673) mas/yr; 54 Gaia field stars
+   SPHEREx DR1: 258 images, using 150
+
+
+   AllWISE W1/W2 cached
+== RW Aurigae (rw_aur)
+   reference: Gaia DR3 ra=76.95608 dec=30.40120 pm=(3,-27) mas/yr; 199 Gaia field stars
+   SPHEREx DR1: 226 images, using 150
+   AllWISE W1/W2 cached
+== R Draconis (r_dra)
+   reference: Gaia DR3 ra=248.16738 dec=66.75501 pm=(-21,6) mas/yr; 39 Gaia field stars
+   SPHEREx DR1: 414 images, using 150
+   AllWISE W1/W2 cached
+exit 0

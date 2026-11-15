@@ -1,9 +1,12 @@
 // Instrument panels. Every value comes from the API answer (docs/blink/api.md); nothing is hard-coded.
-import { Component, useState } from 'react'
+import { Component, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { brightnessChange, dateOf, frameNotes, monthTicks, motionOf, nearestGaia, yearOf } from './data'
+import { brightestSeen, brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSentence, nearestGaia, scatteredLight, yearOf } from './data'
 import type { Frame, Phot, Result } from './data'
-import { decText, raText } from './sky'
+import { decText, raText, skyToPixel } from './sky'
+import type { RaDec } from './sky'
+import { aboutUrl, aboutWhere, gaiaSentence, historyLine, LICENSE_URL, MARK_SENTENCE, measuredSentence, onTarget } from './about'
+import type { About } from './about'
 
 // ---------- shared pieces ----------
 
@@ -36,9 +39,10 @@ export class Boundary extends Component<{ name: string; children: ReactNode }, {
   }
 }
 
-export function Panel({ id, title, actions, children }: { id: string; title: string; actions?: ReactNode; children: ReactNode }) {
+/** busy: while another target loads, a panel that still shows the previous one says so and is dimmed. */
+export function Panel({ id, title, actions, busy, children }: { id: string; title: string; actions?: ReactNode; busy?: string; children: ReactNode }) {
   return (
-    <section className="panel" id={id} aria-labelledby={`${id}-title`}>
+    <section className="panel" id={id} aria-labelledby={`${id}-title`} aria-busy={!!busy} data-stale={!!busy}>
       <header className="panel-head">
         <h2 className="panel-title" id={`${id}-title`}>
           {title}
@@ -46,6 +50,7 @@ export function Panel({ id, title, actions, children }: { id: string; title: str
         {actions}
       </header>
       <div className="panel-body">
+        {busy && <p className="stale-note">{busy}</p>}
         <Boundary name={title}>{children}</Boundary>
       </div>
     </section>
@@ -81,6 +86,122 @@ function ticks(lo: number, hi: number, count = 4) {
   const out: number[] = []
   for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10))
   return out
+}
+
+// ---------- about this star ----------
+
+const aboutAnswers = new Map<string, Promise<About>>() // url -> answer: a tab switch or a second open is instant
+
+export function fetchAbout(url: string) {
+  let p = aboutAnswers.get(url)
+  if (!p) {
+    p = fetch(url, { signal: AbortSignal.timeout(20_000) }).then(async (res) => {
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body) throw new Error(body?.detail ?? `HTTP ${res.status}`)
+      return body as About
+    })
+    p.catch(() => aboutAnswers.delete(url)) // a failure is asked again next time
+    aboutAnswers.set(url, p)
+  }
+  return p
+}
+
+/** The About request for the current target: by its typed name, or by position for typed coordinates. */
+export function targetAboutUrl(r: Result) {
+  if (r.name) return aboutUrl({ q: r.query })
+  const at = r.frames.find((f) => f.ring)?.ring ?? { x: r.size_px / 2, y: r.size_px / 2 }
+  return aboutUrl(aboutWhere(r.center, nearestGaia(r, r.gaia, at), r.gaia))
+}
+
+/** Three short sentences about the target, or about a marked candidate: (1) catalog facts, (2) our SPHEREx
+ * measurement, (3) one history sentence from Wikipedia or the SIMBAD paper count. Sources are linked below. */
+export function AboutCard({ r, mark }: { r: Result; mark?: RaDec }) {
+  const at = mark ? skyToPixel(r, mark) : (r.frames.find((f) => f.ring)?.ring ?? { x: r.size_px / 2, y: r.size_px / 2 })
+  const self = !mark || onTarget(r, at)
+  const hit = nearestGaia(r, r.gaia, at)
+  const url = self ? targetAboutUrl(r) : aboutUrl(aboutWhere(mark!, hit, r.gaia))
+  const [got, setGot] = useState<{ url: string; data?: About; error?: string }>({ url: '' })
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let live = true
+    fetchAbout(url).then(
+      (data) => live && setGot({ url, data }),
+      (e) => live && setGot({ url, error: String(e?.message ?? e) }),
+    )
+    return () => {
+      live = false
+    }
+  }, [url, attempt])
+  const a = got.url === url ? got.data : undefined
+  const error = got.url === url ? got.error : undefined
+  const loading = !a && !error
+  const byName = self && !!r.name
+  const failed = a?.notes.some((n) => n.includes('did not answer'))
+  const first = a?.facts_sentence
+    ? a.facts_sentence
+    : error
+      ? 'The catalog facts did not load.'
+      : !byName && r.gaia
+        ? gaiaSentence(hit, r.gaia.release)
+        : failed
+          ? 'The catalogs did not answer, so its facts are missing for now.'
+          : byName
+            ? 'The catalogs list no facts about it.'
+            : 'No catalog object is known at this position.'
+  const history = historyLine(a ?? null)
+  const bar = (w: number) => <span className="skeleton" style={{ display: 'block', height: 14, width: `${w}%`, borderRadius: 4, margin: '4px 0' }} />
+  return (
+    <div className="about" aria-busy={loading}>
+      <ol className="about-lines">
+        <li>{loading ? <>{bar(95)}{bar(70)}</> : first}</li>
+        <li>{self ? measuredSentence(r) : MARK_SENTENCE}</li>
+        <li>
+          {loading ? (
+            <>
+              {bar(90)}
+              {bar(55)}
+            </>
+          ) : error ? (
+            'History unavailable right now.'
+          ) : (
+            <>
+              {history.text}
+              {history.license && (
+                <>
+                  {' — '}
+                  <a href={history.url} target="_blank" rel="noreferrer">
+                    Wikipedia
+                  </a>
+                  ,{' '}
+                  <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+                    {history.license}
+                  </a>
+                </>
+              )}
+            </>
+          )}
+        </li>
+      </ol>
+      <p className="hint about-sources">
+        Sources:{' '}
+        {(a?.sources ?? []).map((s) => (
+          <span key={s.url}>
+            <a href={s.url} target="_blank" rel="noreferrer">
+              {s.label}
+            </a>
+            {' · '}
+          </span>
+        ))}
+        {!byName && !a?.facts_sentence && r.gaia ? `${r.gaia.release} (this answer) · ` : ''}
+        SPHEREx measurements (this tool)
+        {error && (
+          <button type="button" className="about-retry" onClick={() => setAttempt((n) => n + 1)}>
+            Retry
+          </button>
+        )}
+      </p>
+    </div>
+  )
 }
 
 // ---------- target ----------
@@ -244,7 +365,12 @@ export function FramesTable({ r, index, onPick }: { r: Result; index: number; on
               <td>{f.date}</td>
               <td>{f.mjd_mean.toFixed(4)}</td>
               <td>{f.n_images}</td>
-              <td>{f.detectors?.join(' ') ?? '–'}</td>
+              <td>
+                {f.detectors?.join(' ') ?? '–'}
+                {f.stack_detectors && f.detectors && f.stack_detectors.length < f.detectors.length && (
+                  <span className="sub">image: {f.stack_detectors.join(' ')}</span>
+                )}
+              </td>
               <td>{um(f.wavelength_um)}</td>
               <td className={f.saturated ? 'yes' : undefined}>{f.saturated ? 'yes' : 'no'}</td>
               <td className="wrap">{frameNotes(f).join('; ') || '–'}</td>
@@ -266,7 +392,14 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
   const pts = r.frames.map((f, i) => ({ i, ring: f.ring, c: f.centroid ?? null }))
   const xs = pts.flatMap((p) => [...(p.ring ? [p.ring.x] : []), ...(p.c ? [p.c.x - p.c.ex, p.c.x + p.c.ex] : [])])
   const ys = pts.flatMap((p) => [...(p.ring ? [p.ring.y] : []), ...(p.c ? [p.c.y - p.c.ey, p.c.y + p.c.ey] : [])])
-  if (!xs.length) return <Empty>No source stands out at the target in any frame (all peaks below 5σ).</Empty>
+  if (!xs.length)
+    return (
+      <Empty>
+        {r.pm
+          ? 'No source stands out at the target in any frame (all peaks below 5σ).'
+          : 'No proper motion is known for a typed position, so there is no predicted position to measure. Search by name to get the motion.'}
+      </Empty>
+    )
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2
   const h = Math.max(1, (Math.max(...xs) - Math.min(...xs)) / 2, (Math.max(...ys) - Math.min(...ys)) / 2) * 1.25
@@ -291,6 +424,7 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
   const predicted = shift(rings[0]?.ring, rings[rings.length - 1]?.ring)
   return (
     <>
+      <p className="plain">{motionSentence(r)}</p>
       <svg className="chart" viewBox={`0 0 ${L + W + 12} ${T + W + 44}`} style={{ maxWidth: 460 }} role="img" aria-labelledby="motion-desc">
         <desc id="motion-desc">
           Predicted target positions (dashed line) and measured positions with error bars, one per frame, north up, east left.
@@ -375,7 +509,11 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
                 <td>{i + 1}</td>
                 <td>{ring ? `${ring.x.toFixed(2)}, ${ring.y.toFixed(2)}` : '–'}</td>
                 <td>
-                  {c ? `${c.x.toFixed(2)} ± ${c.ex.toFixed(2)}, ${c.y.toFixed(2)} ± ${c.ey.toFixed(2)}` : 'no source above 5σ'}
+                  {c
+                    ? `${c.x.toFixed(2)} ± ${c.ex.toFixed(2)}, ${c.y.toFixed(2)} ± ${c.ey.toFixed(2)}`
+                    : r.pm
+                      ? 'no source above 5σ'
+                      : 'no predicted position (no proper motion known)'}
                   {c?.saturated ? ' (wings)' : ''}
                 </td>
                 <td>{c && ring ? (Math.hypot(c.x - ring.x, c.y - ring.y) * s).toFixed(2) : '–'}</td>
@@ -429,6 +567,12 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
   const unit = (r.photometry_unit ?? 'flux').split(' (')[0]
   const wl = pick === 'stack' || pick === 'each' ? null : r.detectors[pick].find((d) => d.wavelength_um)?.wavelength_um
   const change = pick === 'each' ? null : brightnessChange(good.map((p) => p.phot!))
+  // A change that is largest in D1 or D2 is probably scattered light (issue #5): never call it real.
+  // NM1: no claim about a change where no source shows (typed coordinates of a star that has moved away)
+  const source = brightestSeen(good.map((p) => ({ frame: p.frame, phot: p.phot! })), r.frames)
+  const suspect = !!change && source && change.sigmas >= 3 && scatteredLight(r) && !/^D[3-6]$/.test(pick)
+  const common = r.frames[0]?.stack_detectors
+  const sameStack = !!common && r.frames.every((f) => f.stack_detectors?.join() === common.join())
   const L = 64
   const T = 12
   const W = 440
@@ -448,7 +592,7 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
       <label className="place-row">
         Series
         <select value={pick} onChange={(e) => setSeries(e.target.value)}>
-          <option value="stack">{r.det ? `Stack (${r.det} only)` : 'All detectors (stack)'}</option>
+          <option value="stack">{r.det ? `Stack (${r.det} only)` : sameStack ? `Stack (${common!.join(' ')})` : 'All detectors (stack)'}</option>
           {dets.length > 1 && <option value="each">Each detector (all points)</option>}
           {dets.map((d) => (
             <option key={d} value={d}>
@@ -511,17 +655,25 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
         <li>△ no data at the target</li>
       </ul>
       <p className="summary">
-        {pick === 'each'
+        {good.length && !source
+          ? 'No source at this position — the brightness numbers are sky noise.'
+          : pick === 'each'
           ? good.length
             ? `Measured: ${good.map((p) => `${p.tag} ${fmt(p.phot!)} ${unit} (survey ${p.frame + 1})`).join(' · ')}`
             : 'No detector is measurable here.'
           : change
-            ? `Change: ${change.pct.toFixed(0)}% (${change.sigmas.toFixed(1)}σ) from ${+change.lo.flux.toPrecision(4)} to ${+change.hi.flux.toPrecision(4)} ${unit}${change.sigmas >= 3 ? ' — larger than the noise' : ' — within the noise'}`
+            ? `Change: ${change.lo.flux > 0 ? `the brightest survey is ${(change.hi.flux / change.lo.flux).toFixed(1)}× the faintest` : `${+(change.hi.flux - change.lo.flux).toPrecision(3)} ${unit}`} (${+change.lo.flux.toPrecision(4)} to ${+change.hi.flux.toPrecision(4)} ${unit}, ${change.sigmas.toFixed(1)}σ)${suspect ? '' : change.sigmas >= 3 ? ' — larger than the noise' : ' — within the noise'}`
             : good.length === 1
               ? `Only survey ${good[0].frame + 1} is measurable (${fmt(good[0].phot!)} ${unit}).`
               : 'No survey is measurable in this series.'}
         {wl && ` · ${pick} ${um(wl)} µm`}
       </p>
+      {suspect && (
+        <p className="note-line">
+          <AlertIcon /> May be scattered light (known issue #5): the change is largest in D1 or D2, where stray light from bright
+          stars is strongest. It is not evidence of a real change.
+        </p>
+      )}
       {sat.length > 0 && (
         <p className="note-line">
           <AlertIcon /> Saturated in survey{sat.length > 1 ? 's' : ''} {spans(sat)}: too bright for SPHEREx to measure here.
@@ -540,8 +692,12 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
         </p>
       )}
       <p className="hint">
-        Unit: {r.photometry_unit ?? '–'}. A stack mixes detectors (wavelengths), so a fixed star can change a little between
-        stacks; one detector is a fairer test.
+        Unit: {r.photometry_unit ?? '–'}.{' '}
+        {sameStack && !r.det
+          ? `The stack uses only ${common!.join(' ')}, the detectors that every survey has.`
+          : 'A stack mixes detectors (wavelengths), so a fixed star can change a little between stacks; one detector is a fairer test.'}{' '}
+        Each survey also sees the target at another wavelength inside a detector band, so an object with strong spectral bands
+        can change here without being variable.
       </p>
     </>
   )

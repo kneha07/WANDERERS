@@ -39,7 +39,7 @@ def slim(t):
 
 
 def ask(prompt):
-    r = subprocess.run(["claude", "-p", prompt, "--output-format", "text"], capture_output=True, text=True, timeout=240)
+    r = subprocess.run(["claude", "-p", prompt, "--output-format", "text"], capture_output=True, text=True, encoding="utf-8", timeout=240)   # UTF-8: Windows would read it as cp1252
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip()[:300])
     return r.stdout.strip()

@@ -1,10 +1,10 @@
 // Right rail content: the task (mark, check, report), the field guide, and the first-run tutorial cards.
 import { useState } from 'react'
-import { KNOWN_ARCSEC, nearestGaia } from './data'
+import { KNOWN_ARCSEC, nearestGaia, titleOf } from './data'
 import type { Result } from './data'
 import { decText, raText, skyToPixel } from './sky'
 import type { RaDec } from './sky'
-import { Empty } from './panels'
+import { AboutCard, Empty } from './panels'
 
 const EX = `${import.meta.env.BASE_URL}examples/`
 export const CREDIT = 'Example images: NASA/JPL-Caltech/IPAC SPHEREx (IRSA), DR1 and QR3, through this tool.'
@@ -171,7 +171,14 @@ export function matchOf(r: Result, m: RaDec) {
   return { hit, known: !!hit && hit.sep < KNOWN_ARCSEC }
 }
 
-export function reportText(r: Result, marks: RaDec[], url: string) {
+/** The toast after a mark. Below 1024 px the rail is under the flipbook, so "the Task tab" is two screens away. */
+export const markedText = (n: number, ra: number, dec: number, narrow: boolean) =>
+  `Candidate ${n} marked at ${raText(ra)} ${decText(dec)}. ${narrow ? 'See Candidates below.' : 'See the Task tab.'}`
+
+/** True while the tool runs on this computer only: its links do not open anywhere else (issue #24). */
+export const localOnly = (host = location.hostname) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host)
+
+export function reportText(r: Result, marks: RaDec[], url: string, local = localOnly()) {
   const lines = marks.map((m, k) => {
     const { hit, known } = matchOf(r, m)
     const g = hit ? `nearest ${r.gaia!.release} ${hit.star.source_id} at ${hit.sep.toFixed(1)}″${known ? ' (known)' : ' (unexplained)'}` : 'no Gaia data'
@@ -179,10 +186,22 @@ export function reportText(r: Result, marks: RaDec[], url: string) {
   })
   return [
     `Candidate${marks.length === 1 ? '' : 's'} from WANDERERS Explore (NASA SPHEREx images from IRSA)`,
-    `Field: ${r.name ?? r.query}, ${r.fov_arcmin}′, frames ${r.frames[0]?.label} to ${r.frames[r.frames.length - 1]?.label}`,
+    `Field: ${r.query}${titleOf(r).catalog ? ` (${titleOf(r).catalog})` : ''} at RA ${raText(r.center.ra)}, Dec ${decText(r.center.dec)} (${r.center.ra.toFixed(5)}, ${r.center.dec.toFixed(5)}), ${r.fov_arcmin}′`,
+    `Frames: first ${r.frames[0]?.label}, last ${r.frames[r.frames.length - 1]?.label}`,
     ...lines,
-    `Link: ${url}`,
+    local ? 'Link: none yet (the tool runs on my computer only; the RA and Dec above find the field).' : `Link: ${url}`,
   ].join('\n')
+}
+
+/** "About" on a candidate: asks the catalogs only when opened. */
+function CandAbout({ r, m }: { r: Result; m: RaDec }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <details className="cand-about" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>About</summary>
+      {open && <AboutCard r={r} mark={m} />}
+    </details>
+  )
 }
 
 type TaskProps = {
@@ -247,6 +266,7 @@ export function TaskTab({ r, marks, onRemove, onCopyLink, onTalk }: TaskProps) {
                     </>
                   )}
                 </p>
+                <CandAbout r={r} m={m} />
                 <div className="actions">
                   <a href={links.simbad} target="_blank" rel="noreferrer">
                     Check SIMBAD ↗
@@ -268,6 +288,11 @@ export function TaskTab({ r, marks, onRemove, onCopyLink, onTalk }: TaskProps) {
       )}
       <h3 className="panel-title">Done &amp; Talk</h3>
       <p className="hint">The link holds the target, the view and your marks. The Talk button also copies a report you can paste.</p>
+      {localOnly() && (
+        <p className="hint" id="local-note">
+          This link opens only on this computer until the tool is hosted (issue #24). The report gives the RA and Dec instead.
+        </p>
+      )}
       <div className="actions">
         <button type="button" onClick={onCopyLink} disabled={!r}>
           Copy share link

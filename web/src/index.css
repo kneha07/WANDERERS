@@ -1235,7 +1235,7 @@ tr[aria-current='true'] td:first-child {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  top: calc(72px + env(safe-area-inset-top, 0px)); /* under the sticky top bar: never over the flipbook or its controls */
   z-index: 10;
   max-width: calc(100% - 32px);
   padding: 8px 16px;
@@ -1290,4 +1290,121 @@ footer {
   .indicator {
     animation-delay: 300ms !important;
   }
+}
+
+/* ---------- loading another target (H1): never show the old target as the new one ---------- */
+.viewer[data-status='loading'] .timeline {
+  opacity: 0.35;
+}
+
+.panel[data-stale='true'] .panel-body > :not(.stale-note) {
+  opacity: 0.35;
+}
+
+.stale-note {
+  color: var(--amber);
+  font-size: 0.87rem;
+}
+
+.target-line .catalog {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.plain {
+  font-size: 1rem;
+}
+
+td .sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.viewer[data-status='loading'] .stage svg {
+  opacity: 0.35;
+}
+
+/* Desktop: the flipbook controls sit above the image in one row, and the image fits a 900 px high screen (M5). */
+@media (min-width: 1024px) {
+  .flip > .toolbar {
+    order: -1;
+  }
+  .toolbar button {
+    padding: 8px;
+  }
+  .toolbar .speed input {
+    width: 56px;
+  }
+  .stage {
+    width: min(640px, 100%, calc(100dvh - 330px));
+  }
+}
+
+/* Phone: the test targets scroll sideways in one row, so the flipbook starts higher (M6). */
+@media (max-width: 600px) {
+  .chips {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(240px, 82%);
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    padding-bottom: 4px;
+  }
+  .chips li {
+    scroll-snap-align: start;
+  }
+  .toast {
+    top: calc(8px + env(safe-area-inset-top, 0px)); /* the top bar scrolls away on a phone */
+    right: 16px;
+    left: 16px;
+    max-width: none;
+    transform: none;
+    font-size: 0.87rem;
+  }
+}
+
+/* ---------- About this star ---------- */
+.about-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each sentence keeps two lines while it loads, so the answer does not push the panels below. */
+.about-lines li {
+  min-height: 3em;
+}
+
+.about-lines li + li {
+  margin-top: 4px;
+}
+
+.about-sources a {
+  overflow-wrap: anywhere;
+}
+
+.about-retry {
+  margin-left: 8px;
+}
+
+.cand-about summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--data);
+}
+
+.cand-about .about {
+  padding-bottom: 8px;
+}
+
+.cand-about summary::after {
+  content: '▸';
+  margin-left: 6px;
+}
+
+.cand-about[open] summary::after {
+  content: '▾';
 }

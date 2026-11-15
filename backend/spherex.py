@@ -22,6 +22,7 @@ from itertools import groupby
 from pathlib import Path
 from urllib.parse import quote
 
+import aiohttp
 import numpy as np
 import requests
 from astropy import units as u
@@ -39,16 +40,24 @@ from scipy.optimize import curve_fit
 PIXEL_ARCSEC = 6.15
 CENTER_MJD = 61041.0  # epoch J2026.0: cutouts are centered on the target's position at this date
 J2016_MJD = 57388.5  # Gaia DR3 reference epoch
-SESAME_URL = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?"
+# CDS Sesame and its CfA mirror. CDS now redirects to a mirror that can wait a minute when SIMBAD is down, so each
+# gets one short try. -oxp: XML with proper motion; SNV: SIMBAD, then NED, then VizieR.
+SESAME_URLS = ("https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?", "https://vizier.cfa.harvard.edu/viz-bin/nph-sesame/-oxp/SNV?")
+SESAME_TIMEOUT_S, MIRROR_DOWN_S = 8, 600  # one short try per mirror; a failed mirror is skipped for 10 minutes
 SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
 S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
 FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
+GAIA_TIMEOUT_S, GAIA_DOWN_S = 8, 600  # the Gaia overlay is optional: one short try, then skip it for 10 minutes
+_down_until = {}  # service URL -> time.time() until which it is skipped after a failure (a negative cache)
 # FLAGS bits that mark bad pixels (cosmic rays, hot/dead pixels, persistence). These show up as false blinkers.
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
 OVERFLOW, BLOOM = 2, 67108864  # saturated pixel; pixel inside the bloom of a bright star
 CACHE_DIR = Path(__file__).parent / "cache"
-CACHE_VERSION = 5  # bump when the response gains fields, so old cache files are not served
+CACHE_VERSION = 6  # bump when the response gains fields, so old cache files are not served
+DAY_S = 86400
+CACHE_MAX_AGE_S = 7 * DAY_S  # QR3 adds new surveys every week, so an answer is rebuilt after a week
+DEGRADED_MAX_AGE_S = 3600  # an answer with failed images or dropped epochs is rebuilt after an hour
 # Centroid error floor, px (resampling, WCS, undersampled PSF): (clean core, core with no data). Measured in
 # 2026-11: Gaia stars in the Kapteyn's Star and RW Aur fields sit a median 0.1 px from their fits; per-detector
 # fits of saturated cores (Barnard's, Kapteyn's Star) scatter 0.1 to 0.35 px around the proper-motion track.
@@ -56,12 +65,15 @@ CENTROID_FLOOR_PX = 0.1, 0.3
 # A fit further than this from the predicted position is another source: WISE 0855 sits 1.2 px from a brighter
 # star, which the short-wavelength detectors see alone. (The PSF FWHM is 1.2 px.)
 CENTROID_MAX_SHIFT_PX = 1.0
+NO_PM_NOTE = "no proper motion known: no predicted position"
 # False-colour image: detectors per channel, short wavelengths blue (D1 0.75 um ... D6 5.0 um)
 RGB_CHANNELS = {"blue": ("D1", "D2"), "green": ("D3", "D4"), "red": ("D5", "D6")}
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
 SEXAGESIMAL = re.compile(r"\s*[+-]?\d[\d\s:hmsd°'\".,+-]*")
 log = logging.getLogger(__name__)
+# Errors that a second try can fix: S3 and HTTP connection problems (fsspec raises aiohttp errors and OSError).
+NETWORK_ERRORS = (OSError, requests.RequestException, aiohttp.ClientError)
 # NaN means "no data" (off the detector, bad pixel); all-NaN pixels stay NaN without a warning.
 warnings.filterwarnings("ignore", r"All-NaN slice|Mean of empty slice", RuntimeWarning)
 
@@ -180,6 +192,11 @@ def display_xy(grid, n, coord):
     """
     x, y = grid.wcs_world2pix(coord.ra.deg, coord.dec.deg, 0)
     return float(x) + 0.5, n - 0.5 - float(y)
+
+
+def stack_of(images, detectors):
+    """Mean of the aligned cutouts of the images taken with the given detectors."""
+    return np.nanmean([im["cutout"] for im in images if im["detector"] in detectors], axis=0)
 
 
 def to_png(v):
@@ -332,14 +349,14 @@ def stretch(img, lo, hi):
     return np.arcsinh(v / 0.1) / np.arcsinh(10)
 
 
-def http_get(url, stats=None, **params):
-    """GET with up to 3 tries; back off on 5xx and network errors. HTTPException(502) if all fail.
+def http_get(url, stats=None, tries=3, timeout=30, **params):
+    """GET with up to `tries` tries; back off on 5xx and network errors. HTTPException(502) if all fail.
 
     stats: optional dict; stats["retries"] counts the extra tries (reported in the response notes).
     """
-    for attempt in range(3):
+    for attempt in range(tries):
         try:
-            r = requests.get(url, params=params or None, timeout=30)
+            r = requests.get(url, params=params or None, timeout=timeout)
             if r.ok:
                 return r
             err = f"HTTP {r.status_code}"
@@ -347,7 +364,7 @@ def http_get(url, stats=None, **params):
                 break
         except requests.RequestException as e:
             err = type(e).__name__
-        if attempt < 2:
+        if attempt < tries - 1:
             if stats is not None:
                 stats["retries"] += 1
             time.sleep(3 * (attempt + 1))
@@ -356,33 +373,71 @@ def http_get(url, stats=None, **params):
 
 def gaia_field(center, radius_deg):
     """Gaia DR3 stars brighter than G = 19 within radius_deg of center: the ESA archive TAP query that WANDERERS
-    pipeline/fetch.py uses. Cached on disk, because the field does not change."""
-    path = CACHE_DIR / f"gaia-{center.ra.deg:.4f}-{center.dec.deg:.4f}-{radius_deg:.4f}.json"
-    if path.exists():
-        return json.loads(path.read_text())
-    query = ("SELECT TOP 2000 source_id, ra, dec, pmra, pmdec, phot_g_mean_mag FROM gaiadr3.gaia_source WHERE "
+    pipeline/fetch.py uses. Cached on disk, because the field does not change.
+
+    The overlay is optional, so the query gets one short try. After a failure, Gaia is skipped for GAIA_DOWN_S:
+    when ESA is down, later requests answer at once instead of waiting again.
+    """
+    path = CACHE_DIR / f"gaia2-{center.ra.deg:.4f}-{center.dec.deg:.4f}-{radius_deg:.4f}.json"
+    stars, _ = read_cache(path)
+    if stars is not None:
+        return stars
+    if time.time() < _down_until.get(GAIA_TAP, 0):
+        raise HTTPException(502, "the ESA Gaia archive failed a few minutes ago; it is tried again after 10 minutes")
+    query = ("SELECT TOP 2000 source_id, ra, dec, pmra, pmdec, phot_g_mean_mag, parallax, parallax_over_error "
+             "FROM gaiadr3.gaia_source WHERE "
              f"1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{center.ra.deg},{center.dec.deg},{radius_deg})) "
              "AND phot_g_mean_mag < 19 ORDER BY phot_g_mean_mag")
-    r = http_get(GAIA_TAP, REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query)
+    try:
+        r = http_get(GAIA_TAP, tries=1, timeout=GAIA_TIMEOUT_S, REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query)
+    except HTTPException:
+        _down_until[GAIA_TAP] = time.time() + GAIA_DOWN_S
+        raise
     num = lambda v: float(v) if v not in ("", None) else None  # noqa: E731 - masked Gaia values are empty
     stars = [{"source_id": row["source_id"], "ra": float(row["ra"]), "dec": float(row["dec"]), "pmra": num(row["pmra"]),
-              "pmdec": num(row["pmdec"]), "gmag": num(row["phot_g_mean_mag"])}
+              "pmdec": num(row["pmdec"]), "gmag": num(row["phot_g_mean_mag"]), "parallax": num(row["parallax"]),
+              "parallax_over_error": num(row["parallax_over_error"])}
              for row in csv.DictReader(io.StringIO(r.text))]
     write_json(path, stars)
     return stars
 
 
+def sesame_resolver(name, urls):
+    """The first <Resolver> with a position that a Sesame mirror finds for name (its host in the attribute "mirror"),
+    or None if no mirror knows it.
+    A mirror that fails or says "nothing found" passes the name to the next one. A mirror that failed is skipped for
+    MIRROR_DOWN_S (the last one is always asked). HTTPException(502) if all fail."""
+    failed = []
+    for url in urls:
+        if time.time() < _down_until.get(url, 0) and url != urls[-1]:  # it failed a few minutes ago
+            failed.append(url.split("/")[2])
+            continue
+        try:
+            hit = ET.fromstring(http_get(url + quote(name), tries=1, timeout=SESAME_TIMEOUT_S).content).find(".//Resolver[jradeg]")
+        except (HTTPException, ET.ParseError) as e:  # no answer, or an HTML error page
+            _down_until[url] = time.time() + MIRROR_DOWN_S
+            failed.append(url.split("/")[2])
+            log.warning("Sesame %s failed for %r: %s", url.split("/")[2], name, getattr(e, "detail", e))
+            continue
+        if hit is not None:
+            hit.set("mirror", url.split("/")[2])  # which host answered (about.py links SIMBAD on the same host)
+            return hit
+    if len(failed) == len(urls):
+        raise HTTPException(502, f"CDS Sesame did not answer ({', '.join(failed)}). Try again in a minute.")
+    return None
+
+
 @lru_cache(maxsize=256)
 def sesame(name):
     """Name -> (ra, dec, name, (pmra, pmdec) or None) from CDS Sesame; J2000 degrees, mas/yr. None if unknown."""
-    hit = ET.fromstring(http_get(SESAME_URL + quote(name)).content).find(".//Resolver[jradeg]")
+    hit = sesame_resolver(name, SESAME_URLS)
     if hit is None:
         return None
     try:
         pm = (float(hit.findtext("pm/pmRA")), float(hit.findtext("pm/pmDE")))
     except (TypeError, ValueError):  # no proper motion known
         pm = None
-    oname = (hit.findtext("oname") or name).removeprefix("NAME ")
+    oname = " ".join((hit.findtext("oname") or name).removeprefix("NAME ").split())  # the CfA mirror pads: "Wolf  359"
     return float(hit.findtext("jradeg")), float(hit.findtext("jdedeg")), oname, pm
 
 
@@ -398,7 +453,8 @@ def resolve(q):
         return c, None, None
     hit = sesame(q.strip())
     if hit is None:
-        raise HTTPException(400, f"Could not find '{q.strip()}'. Type RA and Dec instead, for example 269.45 4.69.")
+        raise HTTPException(400, f"No object called '{q.strip()}' found. Try another name or type RA/Dec, for example"
+                                 " 17h57m48s +04d41m36s.")
     ra, dec, name, pm = hit
     return SkyCoord(ra, dec, unit=u.deg), name, pm
 
@@ -472,11 +528,11 @@ def subtract_background(cut):
 
 
 def read_with_retry(url, ra, dec, stats=None):
-    """read_cutout with up to 3 tries (S3 and network errors are usually short)."""
+    """read_cutout with up to 3 tries for network errors (usually short). Other errors are raised at once."""
     for attempt in range(3):
         try:
             return read_cutout(url, ra, dec)
-        except Exception:
+        except NETWORK_ERRORS:
             if attempt == 2:
                 raise
             if stats is not None:
@@ -501,15 +557,18 @@ def build(q, name, coord, center, pm, fov, per_group, det):
     for im, f in zip(flat, futures):
         try:
             im["cutout"] = f.result()
-        except Exception as e:
-            log.warning("skipped %s: %r", im["url"], e)
+        except Exception as e:  # a network error after 3 tries is a warning; anything else is a bug: log it in full
+            log.log(logging.WARNING if isinstance(e, NETWORK_ERRORS) else logging.ERROR, "skipped %s: %r", im["url"], e,
+                    exc_info=not isinstance(e, NETWORK_ERRORS))
             im["cutout"] = None
             n_failed += 1
 
-    frames, stacks, targets, by_det, planes, all_used = [], [], [], defaultdict(list), [], []
+    frames, kept, by_det, planes, all_used = [], [], defaultdict(list), [], []
+    dropped = 0
     for e in epochs:
         used = [im for im in e if im["cutout"] is not None and np.isfinite(im["cutout"]).any()]
         if not used:
+            dropped += 1
             continue
         mjd = float(np.mean([im["mjd"] for im in used]))
         target = at_epoch(coord, pm, mjd) if pm else center
@@ -518,29 +577,39 @@ def build(q, name, coord, center, pm, fov, per_group, det):
             x, y = display_xy(grid, n, target)
             ring = {"x": round(x, 2), "y": round(y, 2)}
         tx, ty = (float(v) for v in grid.wcs_world2pix(target.ra.deg, target.dec.deg, 0))
-        names, dets = sorted({im["detector"] for im in used}), []
+        names, dets = sorted({im["detector"] for im in used}), {}
         for d in names:
             ims = [im for im in used if im["detector"] == d]
             img = np.nanmean([im["cutout"] for im in ims], axis=0)
-            dets.append({"group_index": len(frames), "img": img, "n_images": len(ims), "wavelength_um": wavelength_range(ims),
-                         "photometry": aperture_photometry(img, tx, ty), "centroid": centroid(img, tx, ty)})
-            by_det[d].append(dets[-1])
-        stack = np.nanmean([im["cutout"] for im in used], axis=0)
+            dets[d] = {"group_index": len(frames), "img": img, "n_images": len(ims), "wavelength_um": wavelength_range(ims),
+                       "photometry": aperture_photometry(img, tx, ty), "centroid": centroid(img, tx, ty)}
+            by_det[d].append(dets[d])
         # a core saturated in any detector shows white; else the other detectors would tint it
-        planes.append((*rgb_planes(dict(zip(names, (it["img"] for it in dets)))),
-                       np.logical_or.reduce([saturated_holes(it["img"]) for it in dets])))
+        planes.append((*rgb_planes({d: it["img"] for d, it in dets.items()}),
+                       np.logical_or.reduce([saturated_holes(it["img"]) for it in dets.values()])))
         all_used += used
-        stacks.append(stack)
-        targets.append((tx, ty))
+        kept.append((used, dets, (tx, ty)))
         # Measured per detector: the detectors see the target at different brightness and saturate differently,
         # so near a bright core the all-detector stack mixes different images in each pixel.
         frames.append({"label": epoch_label([im["mjd"] for im in used]), "mjd_mean": round(mjd, 4),
                        "date": Time(mjd, format="mjd").strftime("%Y-%m-%d"), "n_images": len(used), "ring": ring,
                        "detectors": names, "wavelength_um": wavelength_range(used),
-                       "centroid": mean_centroid([it["centroid"] for it in dets]),
-                       "photometry": aperture_photometry(stack, tx, ty) if all(it["photometry"] for it in dets) else None})
+                       "centroid": (c := mean_centroid([it["centroid"] for it in dets.values()])),
+                       # typed RA/Dec: a mover is not where it was typed, so an empty fit says nothing about it
+                       "notes": [] if pm or c else [NO_PM_NOTE]})
     if not frames:
         raise HTTPException(502, "Could not read any SPHEREx image for this position. Try again in a minute.")
+
+    # Each detector sees a star at another brightness, so a stack of a changing detector mix makes fixed stars blink
+    # (Barnard's Star: D1-D6 first, D2+D5 last). The gray frames stack only the detectors that every frame has.
+    common = sorted(set.intersection(*(set(f["detectors"]) for f in frames)))
+    stacks, targets = [], []
+    for f, (used, dets, txy) in zip(frames, kept):
+        f["stack_detectors"] = common or f["detectors"]
+        stacks.append(stack_of(used, f["stack_detectors"]))
+        targets.append(txy)
+        f["photometry"] = (aperture_photometry(stacks[-1], *txy)
+                           if all(dets[d]["photometry"] for d in f["stack_detectors"]) else None)
 
     lo, hi = np.nanpercentile(stacks, [0.5, 99.7])  # one stretch for all frames, so blinking is fair
     holes = [saturated_holes(s) for s in stacks]
@@ -573,8 +642,12 @@ def build(q, name, coord, center, pm, fov, per_group, det):
         if k := sum(bool(filled) for _, filled, _ in planes):
             notes.append(f"Colour image: {k} of {len(frames)} frames lack the detectors of one or two channels; there a"
                          " missing channel shows the mean of the other channels, so the colours are less true.")
+    if dropped:
+        notes.append(f"{dropped} survey epoch{'s' if dropped > 1 else ''} left out: no image of it had data here.")
     if n_failed:
         notes.append(f"{n_failed} image{'s' if n_failed > 1 else ''} failed after retries.")
+    if n_failed or dropped:
+        notes.append("This answer is not kept for more than an hour, so a later load tries again.")
     if stats["retries"]:
         notes.append(f"IRSA or S3 needed {stats['retries']} retr{'ies' if stats['retries'] > 1 else 'y'}.")
     if k := sum(f["saturated"] for f in frames):
@@ -582,14 +655,27 @@ def build(q, name, coord, center, pm, fov, per_group, det):
     if k := sum(f["photometry"] is None for f in frames):
         notes.append(f"No photometry in {k} of {len(frames)} frames: in at least one detector the aperture has no data"
                      " (saturated core or detector edge). Per-detector photometry is given where it exists.")
+    if not common:
+        notes.append("No detector is in every frame, so each gray frame stacks all of its detectors: a fixed star can"
+                     " change brightness between frames. One detector (Expert settings) gives a fair comparison.")
+    elif any(f["detectors"] != common for f in frames):
+        notes.append(f"The gray frames stack only {' '.join(common)}, the detectors that every frame has, so a fixed star"
+                     " keeps its brightness between frames.")
     difference = None
-    if len(stacks) >= 2:
-        diff = stacks[-1] - stacks[0]  # a mover: dark where it was, bright where it is now
-        diff[holes[0] | holes[-1]] = np.nan  # saturated cores have no measurement: gray, like no data
+    if len(stacks) >= 2:  # last minus first, from the detectors that both frames have
+        pair = sorted(set(frames[0]["detectors"]) & set(frames[-1]["detectors"]))
+        first, last = (stack_of(kept[k][0], pair) for k in (0, -1)) if pair else (stacks[0], stacks[-1])
+        diff = last - first  # a mover: dark where it was, bright where it is now
+        diff[saturated_holes(first) | saturated_holes(last)] = np.nan  # saturated cores: gray, like no data
         s = np.nanpercentile(np.abs(diff), 99.7)
         v = 0.5 + 0.5 * np.sign(diff) * stretch(np.abs(diff), 0, s)
         difference = {"png": to_png(np.nan_to_num(v, nan=0.5)),  # no data -> gray (no change), not black
-                      "from": frames[0]["label"], "to": frames[-1]["label"]}
+                      "from": frames[0]["label"], "to": frames[-1]["label"], "detectors": pair or None}
+        if not pair:
+            notes.append("The first and the last frame have no detector in common, so the difference compares different"
+                         " wavelengths: a fixed star can leave a bright or dark spot.")
+        elif pair != common and (pair != frames[0]["detectors"] or pair != frames[-1]["detectors"]):
+            notes.append(f"The difference uses only {' '.join(pair)}, the detectors in both the first and the last frame.")
     return {
         "query": q,
         "name": name,
@@ -607,11 +693,26 @@ def build(q, name, coord, center, pm, fov, per_group, det):
         "notes": notes,
         "n_images_used": sum(f["n_images"] for f in frames),
         "n_failed": n_failed,
+        "epochs_dropped": dropped,
     }
 
 
+def read_cache(path):
+    """(data, age in seconds) of a cache file, or (None, None) when it is missing or unreadable."""
+    try:
+        age = time.time() - path.stat().st_mtime
+        return json.loads(path.read_text()), age
+    except (OSError, ValueError):  # missing, locked by a writer on Windows, or half-written by an old version
+        return None, None
+
+
+def max_age_s(result):
+    """How long a built answer stays in the cache: a week, or an hour when images failed or epochs were dropped."""
+    return CACHE_MAX_AGE_S if not (result["n_failed"] or result.get("epochs_dropped")) else DEGRADED_MAX_AGE_S
+
+
 def get_frames(q, fov=5.0, per_group=12, det=""):
-    """API response for query q; served from the disk cache when the same view was built before.
+    """API response for query q; served from the disk cache when the same view was built recently (max_age_s).
 
     det: '' stacks all detectors; 'D1'..'D6' stacks only that detector (D6 suits cold brown dwarfs).
     """
@@ -620,11 +721,20 @@ def get_frames(q, fov=5.0, per_group=12, det=""):
     fov, per_group = float(fov), int(per_group)
     key = json.dumps([CACHE_VERSION, round(center.ra.deg, 5), round(center.dec.deg, 5), fov, per_group, det])
     path = CACHE_DIR / (hashlib.sha256(key.encode()).hexdigest() + ".json")
-    cached = path.exists()
-    result = json.loads(path.read_text()) if cached else build(q, name, coord, center, pm, fov, per_group, det)
+    result, age = read_cache(path)
+    cached, stale = result is not None, []
+    if cached and age > max_age_s(result):
+        try:
+            result, cached = build(q, name, coord, center, pm, fov, per_group, det), False
+        except HTTPException as e:  # IRSA or S3 down: an old answer is better than none
+            if e.status_code < 500:
+                raise
+            stale = [f"{e.detail} This is the answer built {age / DAY_S:.0f} days ago."]
+    elif not cached:
+        result = build(q, name, coord, center, pm, fov, per_group, det)
     if not cached:
         write_json(path, result)
-    n, notes = result["size_px"], list(result["notes"])
+    n, notes = result["size_px"], list(result["notes"]) + stale
     try:  # not cached with the frames, so a failed Gaia query is tried again on the next request
         stars = gaia_field(center, fov / 60 / 2 * 1.5)
         gaia = gaia_overlay(stars, output_wcs(center, n), n, [f["mjd_mean"] for f in result["frames"]])
@@ -632,14 +742,32 @@ def get_frames(q, fov=5.0, per_group=12, det=""):
         gaia = None
         notes.append(f"Gaia DR3 query failed; overlay off ({getattr(e, 'detail', e)}).")
     quality = {"n_images_used": result["n_images_used"], "n_failed": result["n_failed"],
-               "cache_age_s": round(time.time() - path.stat().st_mtime) if cached else 0}
+               "epochs_dropped": result.get("epochs_dropped", 0), "cache_age_s": round(age) if cached else 0}
     return {**result, "query": q, "cached": cached, "gaia": gaia, "notes": notes, "quality": quality}
 
 
-def write_json(path, data):
-    """Write JSON atomically (temp file, then rename), so a reader never sees half a file."""
-    CACHE_DIR.mkdir(exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=CACHE_DIR, suffix=".tmp")
-    with os.fdopen(fd, "w") as f:
-        json.dump(data, f)
-    os.replace(tmp, path)
+def write_json(path, data, tries=5):
+    """Write JSON atomically (unique temp file, then rename), so a reader never sees half a file. True if written.
+
+    Windows refuses the rename while another request reads the file (PermissionError 13), so retry with a short
+    backoff. If it still fails, give up quietly: the caller serves its fresh result, only the cache misses it.
+    """
+    path.parent.mkdir(exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        for attempt in range(tries):
+            try:
+                os.replace(tmp, path)
+                return True
+            except PermissionError:
+                time.sleep(0.05 * 2**attempt)
+        log.warning("cache file %s is locked; result not cached", path.name)
+    except OSError as e:  # disk full, no write access
+        log.warning("could not cache %s: %r", path.name, e)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    return False
