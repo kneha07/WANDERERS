@@ -249,7 +249,7 @@ test("high-confidence preset: switches on, is recognised, switches off without t
 });
 
 test("URL round trip: every filter and the sort come back the same", () => {
-  const f = { cls: "unexplained", minPm: 0.5, red: true, q: "8545-", tile: 8545, minVisits: 12, minSnr: 7.5, hide: ["saturated", "edge"] };
+  const f = { cls: "unexplained", minPm: 0.5, red: true, q: "8545-", tile: 8545, minVisits: 12, minSnr: 7.5, hide: ["saturated", "edge"], spherex: true };
   const sorts = C.sortDefaults();
   for (const sort of [{ key: "snr", dir: -1 }, { key: "w1w2", dir: 1 }, { key: "rank", dir: -1 }, { key: "rank", dir: 1 }]) {
     const params = new URLSearchParams(T.toParams(f, sort, sorts));
@@ -258,7 +258,7 @@ test("URL round trip: every filter and the sort come back the same", () => {
     assert.deepEqual(back.sort, sort.key === "rank" && sort.dir === 1 ? null : sort, JSON.stringify(sort));
   }
   assert.equal(new URLSearchParams(T.toParams(f, { key: "snr", dir: -1 }, sorts)).toString(),
-    "class=unexplained&minpm=0.5&red=1&visits=12&snr=7.5&hide=edge%2Csaturated&q=8545-&tile=8545&sort=snr");
+    "class=unexplained&minpm=0.5&red=1&spherex=1&visits=12&snr=7.5&hide=edge%2Csaturated&q=8545-&tile=8545&sort=snr");
   assert.deepEqual(T.toParams({ ...T.FILTER_DEFAULTS }, { key: "rank", dir: 1 }, sorts), [], "defaults leave the address clean");
 });
 
