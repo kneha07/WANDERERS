@@ -24,7 +24,7 @@
 <link rel="stylesheet" href="brand.css">
 <link rel="stylesheet" href="release.css?v=20261115b">
 <link rel="stylesheet" href="home.css?v=20261116r">
-<link rel="stylesheet" href="explorer.css?v=20261116b">
+<link rel="stylesheet" href="explorer.css?v=20261117c">
 </head>
 <body class="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -68,8 +68,11 @@
     <div class="activities" aria-label="More things to do">
       <a class="act" href="compass.html"><span class="act-k">Live</span><b>Find real stars with your phone</b><span>Sky Compass shows what’s above you, even indoors.</span></a>
       <a class="act" href="observatory.html?target=wise0855"><span class="act-k">Observatory</span><b><span class="kids-only">Meet the coldest brown dwarf</span><span class="teens-only">Blink like an astronomer</span></b><span>Flip between real pictures taken years apart.</span></a>
-      <div class="act soon" aria-disabled="true"><span class="act-k">Coming soon</span><b>Space Camera &amp; My Space Story</b><span>Snap the sky and make a story card. Photos stay on your device.</span></div>
+      <a class="act act-camera" href="stories.html"><span class="act-k">New</span><b>Space Camera &amp; My Space Story</b><span>Snap the sky and make a story card. Photos stay on your device.</span></a>
     </div>
+    <div class="learn" id="missionBoard" aria-label="Missions and discovery badges"></div>
+    <div class="learn quizzes" id="quizzes" hidden aria-label="Quick questions"></div>
+    <div class="learn" id="constellationCards" aria-label="Constellation cards"></div>
     <div class="dc-foot">
       <p class="dc-note" data-explain="evidence">We only say what the pictures show.</p>
       <button type="button" class="btn btn-ghost" id="showScience" aria-controls="science" aria-expanded="false">Show the scientist view</button>
@@ -128,10 +131,16 @@
       <li><span class="tag-chip">Catalogue</span> Gaia DR3, or the cited literature (Luhman &amp; Esplin 2016 for WISE 0855)</li>
       <li><span class="tag-chip ai">Interpretation</span> rule-based class; plain-language text is written by Claude and labelled</li>
     </ul>
+    <div class="rp-tools">
+      <label class="rp-field"><span>Search</span><input id="rpSearch" type="search" placeholder="Name, id or class" autocomplete="off"></label>
+      <label class="rp-field"><span>Classification</span><select id="rpClass"><option value="">All</option></select></label>
+      <p class="rp-count mono" id="rpCount" aria-live="polite"></p>
+      <button type="button" class="btn btn-ghost tiny" id="rpCsv">Download table · CSV</button>
+    </div>
     <div class="rp-table" role="region" aria-label="Targets" tabindex="0">
       <table>
-        <thead><tr><th scope="col">Target</th><th scope="col">RA (deg, ICRS)</th><th scope="col">Dec (deg)</th><th scope="col">Epochs · 4.6 µm (yr)</th><th scope="col">Measured motion</th><th scope="col">Catalogue</th><th scope="col">Classification · confidence</th><th scope="col">Data</th></tr></thead>
-        <tbody id="researchRows"><tr><td colspan="8">Loading…</td></tr></tbody>
+        <thead><tr><th scope="col">Target</th></tr></thead>
+        <tbody id="researchRows"><tr><td colspan="9">Loading…</td></tr></tbody>
       </table>
     </div>
     <p class="rp-note" data-explain="evidence">Rule-based classification.</p>
@@ -322,7 +331,12 @@
 <script src="release.js?v=20261115a"></script>
 <script src="theme.js"></script>
 <script src="home.js?v=20261116a"></script>
-<script src="explorer.js?v=20261116b"></script>
-<script src="explorer-home.js?v=20261116b"></script>
+<script src="share.js?v=20261117a"></script>
+<script src="research.js?v=20261117b"></script>
+<script src="story-render.js?v=20261117a"></script>
+<script src="explorer.js?v=20261117a"></script>
+<script src="discoveries.js?v=20261117a"></script>
+<script src="explorer-home.js?v=20261117b"></script>
+<script src="explorer-learn.js?v=20261117a"></script>
 </body>
 </html>

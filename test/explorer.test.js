@@ -112,8 +112,11 @@ test("homepage: early mode flag matches explorer.js, sections are wired, General
     assert.equal(root.dataset.mode, E.resolve(saved, q).mode || E.DEFAULT);
   }
   for (const id of ["discover", "storyDeck", "mission", "showScience", "research", "researchRows"]) assert.match(html, new RegExp(`id="${id}"`), id);
-  assert.match(html, /<script src="explorer\.js\?v=\w+"><\/script>\s*<script src="explorer-home\.js\?v=\w+"><\/script>/);
-  assert.ok(html.indexOf("explorer.js") > html.indexOf("home.js?"), "loads after home.js");
+  // load order: helpers, then the mode system, then the layers that use it
+  const at = (f) => html.indexOf(`<script src="${f}?v=`);
+  for (const f of ["home.js", "share.js", "research.js", "story-render.js", "explorer.js", "discoveries.js", "explorer-home.js", "explorer-learn.js"]) assert.ok(at(f) > 0, f);
+  assert.ok(at("home.js") < at("explorer.js") && at("explorer.js") < at("discoveries.js") && at("discoveries.js") < at("explorer-home.js") && at("explorer-home.js") < at("explorer-learn.js"));
+  assert.ok(at("research.js") < at("explorer-home.js") && at("story-render.js") < at("explorer-learn.js"));
   for (const id of ["heroSky", "heroStats", "tlAxis", "evCard", "miniSpec", "targetCards"]) assert.match(html, new RegExp(`id="${id}"`), `scientific homepage keeps #${id}`);
   assert.equal((html.match(/class="[^"]*\bsci\b/g) || []).length, 6, "hero and five chapters fold away for Kids and Students");
 });
@@ -123,4 +126,37 @@ test("home.js is unchanged by the explorer layer (General Explorer stays the sci
   assert.match(css, /html\[data-mode="kids"\]:not\(\.show-science\) \.sci/);
   assert.doesNotMatch(css, /html\[data-mode="adults"\][^{]*\.sci/, "no rule hides science for General Explorer");
   assert.doesNotMatch(read("app/home.js"), /Explorer|data-mode/);
+});
+
+test("every page with the mode layer sets the mode before first paint, the same way", () => {
+  for (const p of ["app/index.html", "app/observatory.html", "app/stories.html"]) {
+    const html = read(p);
+    const boot = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes("wanderers-mode"));
+    assert.ok(boot && html.indexOf(boot) < html.indexOf("<body"), p);
+    for (const [saved, q, want] of [[null, "", "adults"], ["kids", "?mode=research", "research"], ["junk", "", "adults"]]) {
+      const root = { dataset: {} };
+      const ctx = { document: { documentElement: root }, location: { search: q, hash: "", replace: () => {} },
+        localStorage: { getItem: (k) => (k === "wanderers-mode" ? saved : null) }, matchMedia: () => ({ matches: false }) };
+      vm.createContext(ctx); vm.runInContext(boot, ctx);
+      assert.equal(root.dataset.mode, want, `${p} ${saved} ${q}`);
+    }
+    assert.match(html, /<script src="explorer\.js\?v=\w+"><\/script>/, p);
+  }
+});
+
+test("the Observatory keeps app.js and every original element; the layer is added after it", () => {
+  const html = read("app/observatory.html");
+  assert.ok(html.indexOf("explorer-observatory.js") > html.indexOf("app.js?"), "loads after app.js");
+  for (const id of ["targetList", "sky", "play", "frame", "tDiff", "mixMode", "verdict", "checks", "spec", "classify", "webbView", "starView", "targetQuake"]) assert.match(html, new RegExp(`id="${id}"`), id);
+  assert.doesNotMatch(read("app/app.js"), /Explorer|data-mode/, "app.js is unchanged by the mode layer");
+});
+
+test("new explanation layers (Through Webb, Starquakes) exist for every mode", () => {
+  for (const c of ["webb", "starquake"]) for (const m of E.IDS) assert.ok(E.explain(c, m).length > 30, `${c}/${m}`);
+});
+
+test("Kids and Students never see public classification; General and Research keep everything", () => {
+  const css = read("app/explorer.css");
+  assert.match(css, /html\[data-mode="kids"\] \.obs #classify, html\[data-mode="teens"\] \.obs #classify/);
+  assert.doesNotMatch(css, /data-mode="(adults|research)"\][^{]*(#classify|\.coord-box|#mix|\.tools)/, "no tool is hidden for General or Research");
 });

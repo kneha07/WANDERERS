@@ -71,6 +71,18 @@
       adults: "Stated rules turn measurements into a classification and a confidence. Unmatched objects are candidates, never discoveries.",
       research: "Rule-based classification (see pipeline/evidence.py); measured values, derived quantities and AI-written interpretation are labelled separately.",
     },
+    webb: {
+      kids: "The James Webb Space Telescope takes super-sharp pictures. If it has ever looked at this spot, you’ll see its real picture here.",
+      teens: "WANDERERS checks every public Webb (JWST) image in NASA’s archive. If one covers this spot, you see the real Webb pixels, outlined in gold.",
+      adults: "Matches these coordinates against the outlines of every public JWST imaging frame in NASA’s MAST archive and shows the real pixels.",
+      research: "Footprint match against public JWST imaging frames (MAST); pixels shown as archived, with the frame outline in gold.",
+    },
+    starquake: {
+      kids: "Some stars shake and ring like a bell. We can turn those wobbles into sounds you can hear!",
+      teens: "Stars like the Sun ring with sound waves (starquakes). Each sound is labelled: measured by Kepler, published, or predicted by a model.",
+      adults: "Solar-like oscillations, played as sound: a real Kepler recording where one exists, otherwise a labelled model prediction.",
+      research: "Solar-like oscillations: νmax and Δν from Kepler recordings or the literature where available, else scaling-relation predictions (labelled).",
+    },
   };
   /** The explanation of a concept at a mode's level (falls back to the General Explorer text). */
   function explain(concept, mode) {
