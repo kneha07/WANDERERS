@@ -470,6 +470,7 @@
   // ---------- wiring ----------
   let grab = null, tap = null;                       // the finger dragging the sky, and the press that may be a tap
   const cancelGesture = () => { grab = null; tap = null; };   // compass.js: a second finger came down (pinch to zoom)
+  const cancelDrag = () => { grab = null; endDrag(false); };   // compass.js: hold mode starts or ends during Drag the sky
   function init(ctx) {
     C = ctx;
     $("skySeg").querySelectorAll("button").forEach((b) => (b.onclick = () => setSky(b.dataset.sky)));
@@ -509,6 +510,6 @@
     setSky(R.sky);
   }
 
-  const api = { init, draw, cover, cancelGesture, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
+  const api = { init, draw, cover, cancelGesture, cancelDrag, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
   root.RealSky = api;
 })(window);

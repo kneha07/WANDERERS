@@ -215,3 +215,17 @@ test("Drag the sky aims a held view and leaves the sight-check offsets and the c
   c.el("dragDone").onclick();
   assert.equal(c.F.compassFrozen, false, "Done does not freeze the compass while held");
 });
+
+test("cancelDrag() ends a running Drag the sky as Cancel does, and the finger stops moving the view", async () => {
+  const c = load();
+  c.frame();
+  c.el("dragSky").onclick();
+  const before = { ...c.S.manual }, hud = c.el("hud");
+  hud.dispatch("pointerdown", { clientX: 195, clientY: 422, pointerId: 1 });
+  hud.dispatch("pointermove", { clientX: 215, clientY: 432, pointerId: 1 });
+  c.RS.cancelDrag();
+  assert.deepEqual(c.S.manual, before, "the view is back where Drag the sky started");
+  assert.deepEqual([c.RS.R.calDrag, c.el("dragBar").hidden], [null, true]);
+  hud.dispatch("pointermove", { clientX: 260, clientY: 470, pointerId: 1 });
+  assert.deepEqual(c.S.manual, before, "the finger still down no longer moves it");
+});

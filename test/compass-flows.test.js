@@ -78,7 +78,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const env = {
     window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
     // realsky.js (the team's real-sky layer) draws extra sky detail; these flow tests only need it to be present
-    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cover: () => 0, cancelGesture() {}, renderSaved() {}, projector: () => () => null },
+    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cover: () => 0, cancelGesture() {}, cancelDrag() {}, renderSaved() {}, projector: () => () => null },
     Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: pathView,
     getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
@@ -340,6 +340,17 @@ test("hold mode is checked every frame: it starts when the sensors start late, a
   assert.equal(c.S.hold, false, "and not held while the camera shows");
   c.RealSky.cover = () => 1; c.frame();
   assert.equal(c.S.hold, true, "covered again: held");
+});
+
+test("entering or leaving hold first cancels a running 'Drag the sky', so its old pose is not put back over the held view", async () => {
+  const c = await phoneAt(100, 20);
+  let cancels = 0;
+  c.RealSky.cancelDrag = () => { cancels++; Object.assign(c.S.manual, { az: 180, alt: 25 }); };   // as Cancel does: back to the pose at its start
+  c.setZoom(10);
+  assert.equal(cancels, 1);
+  assert.ok(near(c.S.manual, 100, 20), `held where the phone points, got ${c.S.manual.az}, ${c.S.manual.alt}`);
+  c.setZoom(5);
+  assert.equal(cancels, 2, "leaving hold cancels it too");
 });
 
 test("hold mode: a key press during the snap's glide stops the view where it is", async () => {

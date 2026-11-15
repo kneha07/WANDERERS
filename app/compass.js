@@ -256,6 +256,7 @@ let ease = null;
 function updateHold() {
   const covered = !S.camOn || RealSky.cover() === 1;
   if (S.sensors && !S.hold && S.zoom >= 8 && covered) {
+    RealSky.cancelDrag();       // first, so Drag the sky's Cancel cannot put its old pose back over the held view
     const T = S.sel && S.targets.find((t) => t.id === S.sel.id), p = F.pointing();
     S.snapped = !!(T && T._sep != null && T._sep <= 6);
     if (p) S.manual = { az: p.az, alt: p.alt };
@@ -265,7 +266,7 @@ function updateHold() {
     }
     S.hold = true;
     if (navigator.vibrate) navigator.vibrate(30);
-  } else if (S.hold && (S.zoom < 6 || !covered)) { S.hold = false; S.snapped = false; ease = null; }
+  } else if (S.hold && (S.zoom < 6 || !covered)) { RealSky.cancelDrag(); S.hold = false; S.snapped = false; ease = null; }
 }
 function glide() {
   if (!ease) return;
