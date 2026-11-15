@@ -249,8 +249,8 @@ test("zoom: two fingers pinch the view, and the finger that stays down does not 
   ev("pointermove", 2, 300, 400);                                    // fingers 100 px apart, then 200 px
   assert.equal(c.S.zoom, 2);
   assert.equal(c.S.manual.az, 180, "a pinch does not turn the view");
-  ev("pointermove", 2, 2000, 400);
-  assert.equal(c.S.zoom, 8, "zoom stops at 8x");
+  ev("pointermove", 2, 40000, 400);
+  assert.equal(c.S.zoom, 300, "zoom stops at 300x");
   ev("pointermove", 2, 110, 400);
   assert.equal(c.S.zoom, 0.5, "with no camera the view can widen, to half");
   ev("pointerup", 2, 110, 400); ev("pointermove", 1, 600, 400);

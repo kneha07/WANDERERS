@@ -225,7 +225,7 @@ let drag = null;
 // The camera picture is enlarged by the same factor (a digital zoom), so with the camera on the view can only
 // zoom in. Without the camera it can also widen. These listeners come before every other one on the canvas:
 // while two fingers are down, no drag and no tap may start.
-const ZOOM_MAX = 8;
+const ZOOM_MAX = 300;
 function setZoom(z) {
   S.zoom = Math.max(S.camOn ? 1 : 0.5, Math.min(ZOOM_MAX, z));
   $("cam").style.transform = S.zoom === 1 ? "" : `scale(${S.zoom})`;
