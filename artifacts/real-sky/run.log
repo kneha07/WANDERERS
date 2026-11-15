@@ -19,7 +19,7 @@ PASS  tap a star: the star sheet opens on it  — Vega → Vega
 PASS  drag the sky: the grabbed point follows the finger  — moved 60.0, 40.0 px for a drag of 60, 40
 PASS  drag the sky: Done keeps it as the sight check  — direction -7.44°, tilt 5.31°
 PASS  no script errors on the page (online)
-PASS  save Basic, 48° N: finished  — Saved for latitude 48° N. On an iPhone, add this page to the (4 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)
+PASS  save Basic, 48° N: finished  — Saved for latitude 48° N. On an iPhone, add this page to the (3 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)
 PASS  saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest  — 60 tiles, 65 files
 PASS  no saved picture is also kept as a recent one  — 0 duplicates
 PASS  the place is listed from its manifest  — ["Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove"]
