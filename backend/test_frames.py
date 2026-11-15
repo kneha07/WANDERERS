@@ -180,3 +180,17 @@ def test_a_failed_gaia_query_costs_one_short_wait_then_the_overlay_stays_off_for
     now[0] += 11 * 60
     stars = frames()["gaia"]["stars"]
     assert [(s["source_id"], s["parallax"]) for s in stars] == [("1", 3.0)]
+
+
+def test_a_network_error_is_retried_but_a_program_error_is_not(sky):
+    sky.fail = {"D2@60200.0"}  # OSError: S3 dropped the connection
+    assert any("needed 2 retries" in n for n in frames()["notes"])
+
+    reads = []
+    def broken(url, ra, dec):
+        reads.append(url)
+        raise KeyError("FLAGS")  # a bug or a changed file layout: trying again cannot help
+    spherex.read_cutout = broken  # monkeypatch restores the fake at teardown
+    with pytest.raises(HTTPException) as e:
+        spherex.get_frames("10 21", fov=2, per_group=2)
+    assert (e.value.status_code, len(reads)) == (502, 4)  # 4 images, one read each, not 3

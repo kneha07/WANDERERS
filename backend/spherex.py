@@ -22,6 +22,7 @@ from itertools import groupby
 from pathlib import Path
 from urllib.parse import quote
 
+import aiohttp
 import numpy as np
 import requests
 from astropy import units as u
@@ -68,6 +69,8 @@ NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
 DECIMAL = re.compile(rf"\s*{NUMBER}\s*[,\s]\s*{NUMBER}\s*")
 SEXAGESIMAL = re.compile(r"\s*[+-]?\d[\d\s:hmsd°'\".,+-]*")
 log = logging.getLogger(__name__)
+# Errors that a second try can fix: S3 and HTTP connection problems (fsspec raises aiohttp errors and OSError).
+NETWORK_ERRORS = (OSError, requests.RequestException, aiohttp.ClientError)
 # NaN means "no data" (off the detector, bad pixel); all-NaN pixels stay NaN without a warning.
 warnings.filterwarnings("ignore", r"All-NaN slice|Mean of empty slice", RuntimeWarning)
 
@@ -496,11 +499,11 @@ def subtract_background(cut):
 
 
 def read_with_retry(url, ra, dec, stats=None):
-    """read_cutout with up to 3 tries (S3 and network errors are usually short)."""
+    """read_cutout with up to 3 tries for network errors (usually short). Other errors are raised at once."""
     for attempt in range(3):
         try:
             return read_cutout(url, ra, dec)
-        except Exception:
+        except NETWORK_ERRORS:
             if attempt == 2:
                 raise
             if stats is not None:
@@ -525,8 +528,9 @@ def build(q, name, coord, center, pm, fov, per_group, det):
     for im, f in zip(flat, futures):
         try:
             im["cutout"] = f.result()
-        except Exception as e:
-            log.warning("skipped %s: %r", im["url"], e)
+        except Exception as e:  # a network error after 3 tries is a warning; anything else is a bug: log it in full
+            log.log(logging.WARNING if isinstance(e, NETWORK_ERRORS) else logging.ERROR, "skipped %s: %r", im["url"], e,
+                    exc_info=not isinstance(e, NETWORK_ERRORS))
             im["cutout"] = None
             n_failed += 1
 
