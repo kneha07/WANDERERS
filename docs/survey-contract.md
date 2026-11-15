@@ -119,6 +119,49 @@ kept; the others are left out of the ranking and of every count (`movers`, `unex
 `n_candidates`), and a limits line says how many were merged. Gaia is still asked about every mover of a tile, so
 the per-tile Gaia cache stays valid. `python pipeline/survey/dedupe.py <out>/tiles` counts duplicates in tile files.
 
+### SPHEREx 2025–26 stage (`survey/spherex.py`, used by `run.publish`)
+SPHEREx has no public source catalogue yet, so the stage measures its all-sky **DR1 spectral cube** directly, on
+NASA IRSA's public bucket (anonymous, us-east-1), one ~321 MB file per order-5 tile with the survey's k5 numbering:
+`https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/dr1/hips5_cube/hips_20261026/Norder5/Dir{(k5 // 10000) * 10000}/Npix{k5}_cube.fits`.
+Layout (read from the headers): primary (MJD-BEG/END, BLANKCH = all-NaN channels such as `D3:17,D4:01`); IMAGE
+(float32 big-endian, 512 × 512 × 102 planes, 0.753–4.988 µm, MJy/sr, RA---HPX/DEC--HPX on the HEALPix order-14
+grid: equal-area pixels of 3.90e-9 sr, ~12.9″); NHITS and FLAGS (same shape, not read); SPECTRAL_CHANNELS and
+WCS-WAVE (wavelength tables). There is **no uncertainty plane**: errors come from the local background scatter.
+Nothing is downloaded whole: ~4 small Range requests per tile for the headers and tables, then one request per
+plane for the few rows around each mover (nearby movers share them): about 100 requests and 2–3 MB per mover.
+
+`check_tile(k5, movers, deadline=None) -> [dict]` never raises. For each mover it predicts the position at the
+cube's mean epoch with the mover's own motion (a fast mover may have crossed into a neighbouring tile; stamps
+that cross a tile edge read the neighbour's cube), measures aperture photometry in every channel, a matched-filter
+detection S/N over the channels inside NEOWISE's W1+W2 bands (weighted by the mover's own W1/W2 magnitudes), the
+centroid offset from the predicted spot with its error, the 2014 position (fast movers), a 24-band spectrum and
+spectral indices. Every leaderboard row then carries (same keys every time, ~0.3–1 KB):
+```json
+"spherex": {"checked": true, "detected": true, "confirmed": true, "snr": 13.3, "offset_arcsec": 3.83,
+  "offset_err": 3.16, "expected_offset": 93.84, "at_predicted": true, "gone_from_2014": true, "old_snr": 2.2,
+  "w2_ratio": 1.15, "epoch": 2025.883, "tile": 10226,
+  "spectrum": {"um": [0.79, "… 24 bands …"], "mjy": [1.12, "…"], "err": [0.05, "…"]},
+  "indices": {"w1w2": 2.26, "w1w2_err": 0.31, "w1w2_lim": false, "ch4_depth": null, "ch4_err": null,
+              "methane": null, "peak_um": 4.5, "hints": ["3–5 µm colour very red, like a cold brown dwarf (…, hint)"]},
+  "notes": ["…plain words…"], "error": null}
+```
+`expected_offset` = how far the motion moves it between its first NEOWISE visit (2014) and the SPHEREx epoch;
+`at_predicted` = detected within 3σ of the predicted spot (null when it cannot tell, e.g. not detected, or SPHEREx's
+4–5 µm flux is more than ×2.5 off NEOWISE W2: another source in the same pixels); `confirmed` = at_predicted, the
+two positions more than 2 × 3σ apart (SPHEREx itself sees the motion) and the 2014 spot not still occupied.
+Slow movers (≲ 1″/yr) cannot be confirmed with ~13″ pixels. `checked: false` with `error` = `"network: …"` or
+`"time budget"` is retried at the next publish; a Gaia-explained mover is not looked up (note only).
+Indices are hints, never classifications: a synthetic W1−W2 (2.8–3.8 vs 4.1–5.0 µm, WISE zero points of Jarrett
+et al. 2011), a 3.3 µm methane depth against a power-law continuum (2.9–3.1 and 3.7–3.95 µm; hint at ≥ 3σ and
+≥ 10 %), and the 2.8–5 µm peak.
+
+Runner: answers are cached per tile under `<cache>/spherex_tiles/<k5>.json`; `--spherex-budget` minutes per
+periodic publish (the final one has no limit), `--no-spherex` switches the stage off, `--spherex-all` also looks up
+Gaia-explained movers. `summary.json` adds `spherex_checked` and `spherex_confirmed`. Ranking: `confirmed` adds
++0.5 with a reason; "seen but too slow", "not where predicted" and a methane hint add a reason and no points.
+CLI for real checks: `python pipeline/survey/spherex.py --tile-file tiles/8545.json` or
+`--leaderboard leaderboard.json --top 30 --class unexplained`.
+
 ### Promoting a candidate (`survey/promote.py`)
 `python pipeline/survey/promote.py --id <id> [--id …] [--top N [--unexplained]] [--run] [--json]` prints (default)
 or runs the commands that make a candidate a full WANDERERS target: `fetch.py --ra --dec --fov --name`,

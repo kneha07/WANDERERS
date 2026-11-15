@@ -677,7 +677,7 @@ def broadband(flux: np.ndarray, err: np.ndarray) -> tuple[float | None, float | 
 
 
 def centroid(values: np.ndarray, xi: np.ndarray, eta: np.ndarray, bkg: np.ndarray, sig: np.ndarray,
-             pix_arcsec: float, iterations: int = 3, template: np.ndarray | None = None
+             pix_arcsec: float, iterations: int = 2, template: np.ndarray | None = None
              ) -> tuple[float, float, float] | None:
     """Centroid (arcsec offsets) of the background-subtracted broadband image within R_AP of the current centre,
     iterated from the predicted position; channels weighted by template / noise^2 (a matched filter; template
@@ -869,7 +869,7 @@ def compact(d: Any) -> dict:
     out["tile"] = int(t) if isinstance(t, (int, np.integer)) or (_float(t) is not None and float(t).is_integer()) else None
     sp = d.get("spectrum")
     if isinstance(sp, dict) and all(k in sp for k in SPECTRUM_KEYS):
-        out["spectrum"] = {"um": [_r(v, 3) for v in sp["um"]], "mjy": [_sig(v, 3) for v in sp["mjy"]],
+        out["spectrum"] = {"um": [_r(v, 2) for v in sp["um"]], "mjy": [_sig(v, 3) for v in sp["mjy"]],
                            "err": [_sig(v, 2) for v in sp["err"]]}
     else:
         out["spectrum"] = None
@@ -1118,8 +1118,7 @@ class SpherexStage:
             res["checked"] = False
             res["error"] = "no usable SPHEREx data at the predicted position (edge, gap or saturated)"
             return res
-        if lay.blank:
-            notes.append(f"{len(lay.blank)} of {lay.nplanes} channels have no data in this tile")
+        # (channels the cube lists as blank, BLANKCH, are simply gaps in the spectrum: no note on every mover)
         if n_ch < lay.nplanes - len(lay.blank):
             notes.append(f"{lay.nplanes - len(lay.blank) - n_ch} channels unusable here (no data or saturated)")
         detected = snr is not None and snr >= DETECT_SNR
