@@ -1,6 +1,6 @@
 # Catalogue survey: from "pick a field" to a ranked candidate queue
 
-Date: 2026-11-15. Base: `origin/main` at `ca220c7`. Status: design, not built.
+Date: 2026-11-15. Base: `origin/main` at `ca220c7`. Status: design, not built. Tracking: issue #60 (build decision), issue #59 (step 0).
 
 ## 1. The gap, evaluated
 
@@ -16,7 +16,7 @@ The statement: WANDERERS analyses a field that a user selects. The full problem 
 Two notes change the solution:
 
 1. **The billion objects are catalogue rows, not SPHEREx pixels.** CatWISE2020 holds about 1.9 billion sources, each with a motion measured from 2010 to 2018. A database can filter them. Nobody must download images to do it.
-2. **The image search under the product is not reliable today.** On `origin/main` the committed data gives `target_recovered: false` for WISE 0855 and Barnard's Star. The record for issue #41 (`artifacts/movers/pr-body.md`) says `true`. A later data rebuild is the probable cause (suspect: `6535cc8`). This is not verified. A queue built on this search inherits the fault, so step 0 below repairs it first.
+2. **The committed mover data is older than the mover code.** On `origin/main` the data gives `target_recovered: false` for WISE 0855 and Barnard's Star. The record for issue #41 (`artifacts/movers/pr-body.md`) says `true`. The cause is known: merge `ce65492` kept the pairing fix in `analyze.py` but kept main's older data for the five targets, because main's files had NEOWISE frames. Its message says: "The five targets need one rebuild with the merged code". Nobody did that rebuild. Commit `1d67484` holds the last data with `true`. Step 0 below does the rebuild, because stage 3 uses the same search.
 
 ## 2. What we measured (2026-11-15)
 
@@ -108,7 +108,7 @@ Each row has four links: the Observatory page (verified rows only), WiseView at 
 
 | Step | Work | Done when |
 |---|---|---|
-| 0 | Find why `target_recovered` is `false` on `origin/main` for WISE 0855 and Barnard's Star. Repair the data or the code. | Both are `true`. `tests/test_movers.py` passes. |
+| 0 | Rebuild the five targets with the merged code: `fetch.py`, `neowise.py`, `analyze.py`, `evidence.py`, `vet.py` (issue #59). | `target_recovered` is `true` for WISE 0855, Barnard's Star and Epsilon Indi B on main. `tests/test_movers.py` passes. If a value stays `false`, the fault is in the code and gets its own fix. |
 | 1 | `survey.py scan` and `match` on the test box | `tests/test_survey.py` passes on the saved CSV: the four WISE 0855 rows merge into one, the W2 = 5.5 row is `rejected`, WISE 0855 is in the top 3 |
 | 2 | `rank`, `index.json`, `app/queue.html` | The page shows the test box with its true `sky_fraction` |
 | 3 | `add_position` with a motion; verify the top 25 | WISE 0855 from the queue reads `spherex: confirmed` with no hand-made target entry |
@@ -148,4 +148,4 @@ Control check for each larger run: ten known brown dwarfs that Gaia does not hol
 - The names of the CatWISE flag columns at Data Lab (`ab_flags`, `cc_flags`).
 - That SPHEREx detects sources as faint as W2 = 15.5 mag in the bands that `analyze.py` uses. WISE 0855 (W2 = 13.8) is detected.
 - The number of candidates for the full sky. The test box suggests an order of 100,000 rows before the Gaia match.
-- The cause of the `target_recovered` change in step 0.
+- That the rebuild in step 0 gives `true` with NEOWISE frames in the field. The last `true` data (`1d67484`) had no NEOWISE frames.
