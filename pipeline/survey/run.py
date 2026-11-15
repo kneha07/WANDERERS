@@ -157,7 +157,9 @@ BASE_LIMITS = [
     "'Unexplained' means no Gaia DR3 star with a matching motion lies within 3 arcseconds. That is expected for "
     "cold brown dwarfs too faint for Gaia, but blends, artefacts next to bright stars and tracks cut at tile edges "
     "can look the same.",
-    "A track that crosses a tile edge can be split in two or appear in both tiles.",
+    "A track that crosses a tile edge is split between the two tiles. When both parts are found and agree in "
+    "position and motion they are counted once (the longer track is kept); a part too short to be found on its "
+    "own is lost.",
     "Motions come from a straight-line fit; parallax is fitted only where a value is given, so very nearby "
     "objects can have slightly biased motions.",
     "A candidate is not a discovery: each one needs a human check of the images and other catalogues first.",
@@ -1277,12 +1279,42 @@ class PublishAborted(Exception):
     pass
 
 
+def find_tile_duplicates(tile_files: list[tuple[int, Path]], should_abort: Callable[[], bool] | None = None) -> dict:
+    """First publish pass: movers found twice, in neighbouring tiles (survey.dedupe.find_duplicates on a few numbers
+    per mover). Returns {"drop": {id: kept id}, "groups": {kept id: [ids]}}; empty (with a warning) when the module
+    is missing or fails, so publishing never stops over it."""
+    empty: dict = {"drop": {}, "groups": {}}
+    try:
+        from survey import dedupe as dd
+    except Exception as e:  # noqa: BLE001
+        log.warning("cross-tile duplicate check unavailable (%s: %s)", type(e).__name__, e)
+        return empty
+    recs = []
+    for k5, path in tile_files:
+        if should_abort and should_abort():
+            raise PublishAborted()
+        tile = read_tile_file(path)
+        if tile is None:
+            continue
+        for m in tile["movers"]:
+            r = dd.record(m, k5) if isinstance(m, dict) else None
+            if r is not None:
+                r["k5"] = int(k5)
+                recs.append(r)
+    try:
+        res = dd.find_duplicates(recs)
+    except Exception as e:  # noqa: BLE001
+        log.warning("cross-tile duplicate check failed (%s: %s)", type(e).__name__, e)
+        return empty
+    return {"drop": res["drop"], "groups": res["groups"]}
+
+
 def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, use_gaia: bool = True,
             xmatch_fn: Callable | str | None = None, rank_fn: Callable | str | None = None,
             top: int = TOP_CANDIDATES, gaia_budget_s: float | None = None, runs: list[dict] | None = None,
             should_abort: Callable[[], bool] | None = None, clock: Callable[[], float] = time.monotonic,
             gaia_fail_limit: int = 3, status: str | None = None, tiles_planned: int | None = None,
-            min_pm: float | None = None) -> dict:
+            min_pm: float | None = None, dedupe: bool = True) -> dict:
     """Rebuild leaderboard.json and summary.json from every tiles/<k5>.json in `out`.
 
     Streams the tile files (memory stays bounded by `top`), checks movers against Gaia per tile (answers cached
@@ -1290,7 +1322,12 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
     row the service is left alone until the next publish), ranks per tile and keeps the global top `top`
     (leaderboard order: score, then pm_snr, then id, like survey.rank.rank). `n_candidates` is the number of
     ranked movers over all tiles. status / tiles_planned / min_pm default to: "running" if a live run holds the
-    lock else "done"; the last run's plan; the last run's threshold (else the core's default). Returns the summary."""
+    lock else "done"; the last run's plan; the last run's threshold (else the core's default).
+
+    With `dedupe` (default), a first pass over the tile files finds movers seen twice in neighbouring tiles
+    (survey.dedupe): only the better track is ranked and counted, and its leaderboard row lists the other ids under
+    "duplicates". Gaia is still asked about every mover of a tile, so the per-tile Gaia cache stays valid.
+    Returns the summary."""
     out = Path(out)
     if status is None:
         status = "running" if run_in_progress(out) else "done"
@@ -1317,7 +1354,11 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         pool.sort(key=lambda e: e[:3])
         del pool[n:]
 
-    for k5, path in sorted(scan_tiles(out / "tiles").items()):
+    tile_files = sorted(scan_tiles(out / "tiles").items())
+    dups = find_tile_duplicates(tile_files, should_abort) if dedupe else {"drop": {}, "groups": {}}
+    drop, groups = dups["drop"], dups["groups"]
+
+    for k5, path in tile_files:
         if should_abort and should_abort():
             raise PublishAborted()
         tile = read_tile_file(path)
@@ -1328,6 +1369,8 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
             totals[key] += _int(tile.get(key), 0)
         movers = [m for m in tile["movers"] if isinstance(m, dict)]
         n_movers = _int(tile.get("n_movers", len(movers)), len(movers))
+        is_dup = [str(m.get("id")) in drop for m in movers]
+        n_movers = max(0, n_movers - sum(is_dup))          # a mover found in two tiles counts once (in the better)
         totals["movers"] += n_movers
         n_unexplained = 0
         if movers:
@@ -1351,7 +1394,9 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
                 stats["unchecked_tiles"] += 1
             for i, m in enumerate(movers):
                 m["gaia"] = dict(gaia[i]) if gaia is not None else dict(GAIA_UNCHECKED)
+            movers = [m for m, d in zip(movers, is_dup) if not d]
             totals["gaia_unchecked"] += sum(1 for m in movers if not m["gaia"].get("checked"))
+        if movers:
             try:
                 ranked = rank_callable([dict(m) for m in movers], top=max(len(movers), 1))
                 if not isinstance(ranked, list):
@@ -1384,6 +1429,8 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         row.setdefault("reasons", [])
         row.setdefault("class", "not checked")
         row["rank"] = i + 1
+        if groups.get(row["id"]):
+            row["duplicates"] = list(groups[row["id"]])        # ids of the same source in neighbouring tiles
         candidates.append(row)
     generated = utc_iso()
     extra = []
@@ -1393,15 +1440,20 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         extra.append(f"The Gaia check is still pending for {stats['unchecked_tiles']} of "
                      f"{stats['tiles_with_movers']} tiles with movers (service busy or offline); their movers are "
                      "'not checked'.")
+    if drop:
+        n = len(drop)
+        extra.append(f"{n} mover{'s were' if n != 1 else ' was'} also found in a neighbouring tile (same position "
+                     "and motion near a tile edge) and counted once, keeping the track with more visits; the "
+                     "candidate lists the other id under 'duplicates'.")
     summary = build_summary(totals, rows, runs, load_validation(out), extra, generated, status=status,
                             tiles_planned=tiles_planned, min_pm=min_pm)
     leaderboard = {"generated": generated, "n_candidates": n_ranked, "candidates": candidates}
     atomic_write_json(out / "leaderboard.json", leaderboard)
     atomic_write_json(out / "summary.json", summary)
     log.info("published (%s) %d of %d planned tiles, %s movers, %d unexplained, top %d of %d ranked "
-             "(Gaia queries %d, unchecked tiles %d)", summary["status"], len(rows), summary["tiles_planned"],
-             f"{totals['movers']:,}", totals["unexplained"], len(candidates), n_ranked, stats["queries"],
-             stats["unchecked_tiles"])
+             "(Gaia queries %d, unchecked tiles %d, cross-tile duplicates merged %d)", summary["status"], len(rows),
+             summary["tiles_planned"], f"{totals['movers']:,}", totals["unexplained"], len(candidates), n_ranked,
+             stats["queries"], stats["unchecked_tiles"], len(drop))
     return summary
 
 
