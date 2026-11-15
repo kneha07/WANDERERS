@@ -261,6 +261,12 @@ def fetch(tid):
             print(f"   AllWISE {band}: none"); continue
         f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(fov * 1.6)}arcsec"))
     print(f"   AllWISE W1/W2 cached", flush=True)
+    # NEOWISE 2014-2024: one stacked image per sky visit, from NASA IRSA's copy on AWS (pipeline/neowise.py)
+    try:
+        import neowise
+        neowise.run(tid)
+    except Exception as e:                      # optional: the time-lapse still works with WISE 2010 + SPHEREx
+        print(f"   NEOWISE skipped: {e}", flush=True)
 
 
 def add_position(ra, dec, name=None, fov=None):

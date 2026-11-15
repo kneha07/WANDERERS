@@ -169,6 +169,14 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
+**No more 2010 → 2025 jump.** Between WISE 2010 and SPHEREx 2025 the time-lapse now shows one NEOWISE image per sky
+visit (about every 6 months, Dec 2013 to 2024, same 3.4 and 4.6 µm bands), so you watch a fast star walk year by
+year. `pipeline/neowise.py` finds the exposures covering a target in the NEOWISE single-exposure source table
+(Parquet on NASA IRSA's AWS bucket, 5 columns of one sky partition), reads only the strip of each Level-1b image
+around the target with HTTP byte ranges, and median-stacks up to 10 exposures per visit. `fetch.py` runs it for
+new fields too. For any searched star the sky map has a **Play its path** year slider (1900 → 2100) that moves a
+marker along its predicted path; it is labelled as a prediction, because there are no images for every star.
+
 **Path taken and path ahead** (console and Sky Compass). Every result (a prepared target, a star found by name,
 a star picked on the phone) shows where it has been and where it is going: 1900 to 2100 from the scikit-learn path
 model (`pipeline/star_ml.py`, learnt from every catalogue position since about 1950, with its 68% band) when the
@@ -523,6 +531,7 @@ Setup and details: [docs/blink/README.md](docs/blink/README.md).
 | NASA Kepler short-cadence light curves (MAST) | real starquakes of four Kepler LEGACY stars |
 | ESA Gaia archive TAP (Gaia DR1-3, Hipparcos-2, Tycho-2, 2MASS, AllWISE, Pan-STARRS1, URAT1, UCAC4, PPMXL, GSC 2.3, CatWISE2020) | measured positions that train each star's trajectory model |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
+| NEOWISE-R single exposures and source table (NASA IRSA on AWS) | yearly frames 2014–2024 between WISE 2010 and SPHEREx |
 | HYG database v4.0 (astronexus; Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0 | the 9,265-star name search (`app/data/stars.json`, same licence) |
 | MAST (STScI), JWST public level-3 images | Webb frame outlines (`s_region`) and previews for "Through Webb" |
 | ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
