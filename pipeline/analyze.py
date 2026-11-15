@@ -557,7 +557,7 @@ def analyze(tid):
         "spherex_visits": [{"year": y, "n_images": len(v)} for y, v in zip(vyear, visits)],
     }
     (out / "target.json").write_text(json.dumps(result, indent=1, default=float))
-    print(f"   flipbook frames: {[ (ch, len(flip.get(ch, []))) for ch in ("w2","w1")]}  spectrum bins: {len(spectrum)} "
+    print(f"   flipbook frames: {[(ch, len(flip.get(ch, []))) for ch in ('w2', 'w1')]}  spectrum bins: {len(spectrum)} "
           f"(points {len(pts)}, flagged {len(pts) - len(good)})", flush=True)
     if motion:
         print(f"   motion: measured {motion['measured_arcsec_per_yr']:.2f}\"/yr vs expected "
