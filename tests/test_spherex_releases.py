@@ -34,6 +34,7 @@ def fixture(name):
 
 
 REAL_DISCOVER = sr.discover
+REAL_DISCOVER_S3 = sr.discover_s3
 
 
 def canned(name):
@@ -43,6 +44,17 @@ def canned(name):
 
 def down():
     raise sr.IrsaUnavailable("IRSA TAP answered HTTP 502")
+
+
+def s3_down():
+    raise OSError("S3 listing: connection refused")
+
+
+@pytest.fixture(autouse=True)
+def no_bucket(monkeypatch):
+    """The command line lists the S3 bucket when IRSA is down; these tests never touch the network, so by default
+    the bucket is down too (tests of the S3 fallback pass their own fake)."""
+    monkeypatch.setattr(sr, "discover_s3", lambda *a, **k: s3_down())
 
 
 def make_target(data_dir, tid, dates=(), frames=None, raw=None):
@@ -517,6 +529,14 @@ def test_mark_synced_without_a_rebuild_keeps_the_old_time(data, status_file):
     assert rebuilt == [] and st["synced"] == "2026-11-15T06:10:33Z"
 
 
+def test_mark_synced_counts_only_the_targets_named(data, status_file):
+    sr.check(status_file, data_dir=data, now=NOW, ask=down, git=no_git)
+    st, rebuilt = sr.mark_synced(status_file, since="2000-01-01T00:00:00Z", data_dir=data, cache_dir=None,
+                                 now=LATER, git=no_git, only=["beta"])
+    assert rebuilt == ["beta"] and st["rebuilt_targets"] == ["beta"] and st["not_rebuilt"] == ["alpha"]
+    assert "rebuilt 1 of 2" in st["synced_source"]
+
+
 def test_target_definition_from_a_gaia_target():
     t = {"name": "Kapteyn's Star", "kind": "Halo star", "story": "explore", "fov_arcsec": 300.0,
          "reference": {"source": "Gaia DR3", "source_id": 4810594479418041856, "ra": 77.9, "dec": -45.0}}
@@ -646,3 +666,170 @@ def test_the_committed_status_file_is_consistent():
     assert st["checked"] or "failed" in (st["error"] or "")            # never checked: it says the check failed
     assert st["new_release_available"] == bool(st["targets_behind"])
     assert sr.load_release_names(sr.STATUS_FILE) == rel
+    assert st.get("checked_via") in (None, sr.VIA_IRSA, sr.VIA_S3)
+    if st.get("checked_via") == sr.VIA_S3:
+        assert st["s3_listing"]["folders"] and st["releases_source"] == sr.SOURCE_S3
+
+
+# ---------------------------------------------------------------- the S3 bucket fallback -------------------------
+
+BUCKET_NOW = "2026-11-15T12:00:05Z"
+
+
+def bucket(folders=("dr1", "qr2", "qr3"), weeks=None):
+    """A fake bucket listing, as discover_s3 returns it (no network)."""
+    weeks = weeks if weeks is not None else {"dr1": "2026W20_1A", "qr2": "2026W29_2A", "qr3": "2026W40_2A"}
+    weeks = {f: w for f, w in weeks.items() if f in folders}
+    entries, superseded = sr.releases_from_bucket(folders, weeks)
+    return lambda: {"releases": entries, "superseded": superseded, "folders": list(folders),
+                    "newest_weeks": weeks, "listed": BUCKET_NOW}
+
+
+def test_bucket_qr2_is_superseded_by_dr1():
+    entries, superseded = sr.releases_from_bucket(["dr1", "qr2", "qr3"], {"qr3": "2026W40_2A"})
+    assert names(entries) == ["spherex_dr1", "spherex_qr3"] and superseded == {"spherex_qr2": "spherex_dr1"}
+    qr3 = entries[1]
+    assert (qr3["newest_week"], qr3["newest_week_label"], qr3["newest_week_ends"]) == \
+           ("2026W40_2A", "2026 week 40", "2026-10-04")
+    assert "newest_week" not in entries[0]
+
+
+def test_bucket_qr2_alone_is_still_a_release():
+    entries, superseded = sr.releases_from_bucket(["qr2", "qr3"], {})
+    assert names(entries) == ["spherex_qr2", "spherex_qr3"] and superseded == {}
+
+
+def searched_everything(tmp_path, tids=("alpha", "beta")):
+    cache = tmp_path / "cache"
+    for tid in tids:
+        (cache / tid).mkdir(parents=True)
+        for f in ("spherex_sia.xml", "spherex_qr3_sia.xml"):
+            (cache / tid / f).write_text("<VOTABLE/>")
+    return cache
+
+
+@pytest.mark.parametrize("new", ["qr4", "dr2"])
+def test_bucket_a_newer_release_folder_counts_as_new_data(data, status_file, tmp_path, new):
+    cache = searched_everything(tmp_path)
+    weeks = {"dr1": "2026W20_1A", "qr3": "2026W40_2A", new: "2026W45_1A"}
+    st, changed, online = sr.check(status_file, data_dir=data, cache_dir=cache, now=NOW, ask=down,
+                                   s3=bucket(("dr1", "qr2", "qr3", new), weeks), git=no_git)
+    assert f"spherex_{new}" in names(st["releases"]) and "spherex_qr2" not in names(st["releases"])
+    assert st["new_release_available"] and [r["name"] for r in st["new_releases"]] == [f"spherex_{new}"]
+    assert st["targets_behind"] == {"alpha": [f"spherex_{new}"], "beta": [f"spherex_{new}"]}
+    assert not online
+
+
+def test_bucket_superseded_release_is_never_new_data(data, status_file, tmp_path):
+    cache = searched_everything(tmp_path)
+    st, _, _ = sr.check(status_file, data_dir=data, cache_dir=cache, now=NOW, ask=down, s3=bucket(), git=no_git)
+    assert not st["new_release_available"] and st["targets_behind"] == {}
+    assert st["s3_listing"]["superseded"] == {"spherex_qr2": "spherex_dr1"}
+
+
+def test_bucket_folders_that_are_not_releases_are_ignored():
+    entries, _ = sr.releases_from_bucket(["dr1", "qr3", "index.html", "spherex_qr9", "qrx", "hips"], {})
+    assert names(entries) == ["spherex_dr1", "spherex_qr3"]
+    with pytest.raises(sr.IrsaAnswerError):
+        sr.releases_from_bucket(["hips", "docs"], {})
+
+
+def test_check_lists_the_bucket_when_irsa_is_down(data, status_file):
+    report = {}
+    st, changed, online = sr.check(status_file, data_dir=data, now=NOW, ask=down, s3=bucket(), git=no_git,
+                                   report=report)
+    saved = json.loads(status_file.read_text())
+    assert saved == st and changed and not online and report == {"via": "S3 bucket"}
+    assert st["checked"] == BUCKET_NOW and st["checked_via"] == "S3 bucket" and st["last_attempt"] == NOW
+    assert st["releases_source"] == sr.SOURCE_S3 and names(st["releases"]) == ["spherex_dr1", "spherex_qr3"]
+    assert "IRSA release check failed" in st["error"] and "HTTP 502" in st["error"]
+    assert st["s3_listing"]["newest_weeks"]["qr3"] == "2026W40_2A"
+    assert st["s3_listing"]["folders"] == ["dr1", "qr2", "qr3"]
+
+
+def test_check_keeps_other_collections_from_the_last_irsa_answer(data, status_file):
+    sr.check(status_file, data_dir=data, now=NOW, ask=canned("irsa_tap_collections.xml"), git=no_git)
+    before = sr.read_status(status_file)["other_collections"]
+    st, _, _ = sr.check(status_file, data_dir=data, now=LATER, ask=down, s3=bucket(), git=no_git)
+    assert st["other_collections"] == before and before
+
+
+def test_when_irsa_and_the_bucket_fail_the_last_file_is_kept(data, status_file):
+    sr.check(status_file, data_dir=data, now=NOW, ask=down, s3=bucket(), git=no_git)
+    report = {}
+    st, changed, online = sr.check(status_file, data_dir=data, now=LATER, ask=down, s3=s3_down, git=no_git,
+                                   report=report)
+    assert (changed, online, report["via"]) == (False, False, None)
+    assert st["checked"] == BUCKET_NOW and st["checked_via"] == "S3 bucket" and st["last_attempt"] == LATER
+    assert "S3 bucket listing failed too" in st["error"] and "connection refused" in st["error"]
+
+
+def test_with_no_file_and_both_down_it_says_the_check_failed(data, status_file):
+    st, _, _ = sr.check(status_file, data_dir=data, now=NOW, ask=down, s3=s3_down, git=no_git)
+    assert st["checked"] is None and st["checked_via"] is None and "S3 bucket listing failed too" in st["error"]
+
+
+def test_a_later_irsa_answer_says_irsa_and_drops_the_bucket_details(data, status_file):
+    sr.check(status_file, data_dir=data, now=NOW, ask=down, s3=bucket(), git=no_git)
+    st, changed, online = sr.check(status_file, data_dir=data, now=LATER, ask=canned("irsa_tap_collections.xml"),
+                                   s3=bucket(), git=no_git)
+    assert online and changed and st["checked_via"] == "IRSA" and st["checked"] == LATER and st["error"] is None
+    assert "s3_listing" not in st
+
+
+def test_mark_synced_keeps_how_the_check_was_made(data, status_file):
+    sr.check(status_file, data_dir=data, now=NOW, ask=down, s3=bucket(), git=no_git)
+    st, _ = sr.mark_synced(status_file, data_dir=data, cache_dir=data.parent / "nocache", now=LATER, git=no_git)
+    assert st["checked_via"] == "S3 bucket" and st["checked"] == BUCKET_NOW
+    assert st["s3_listing"]["newest_weeks"]["qr3"] == "2026W40_2A"
+    assert [r.get("newest_week") for r in st["releases"]] == ["2026W20_1A", "2026W40_2A"]
+
+
+def test_a_complete_s3_search_answer_counts_as_searched(tmp_path):
+    d = tmp_path / "alpha"
+    d.mkdir()
+    (d / "spherex_sia.xml").write_text("<VOTABLE/>")
+    (d / sr.s3_answer_name("spherex_qr3")).write_text(json.dumps({"index_complete": True, "images": []}))
+    assert sr.searched_releases(tmp_path, ["alpha"]) == {"alpha": ["spherex_dr1", "spherex_qr3"]}
+    assert sr.release_of_cache_file("spherex_qr3_s3.json") == "spherex_qr3"
+    assert sr.release_of_cache_file("notes_s3.json") is None
+
+
+@pytest.mark.parametrize("text", ['{"index_complete": false}', "{", '{"images": []}', "[]"])
+def test_a_partial_or_broken_s3_answer_does_not_count(tmp_path, text):
+    d = tmp_path / "alpha"
+    d.mkdir()
+    (d / "spherex_sia.xml").write_text("<VOTABLE/>")
+    (d / "spherex_qr3_s3.json").write_text(text)
+    assert sr.searched_releases(tmp_path, ["alpha"]) == {"alpha": ["spherex_dr1"]}
+
+
+def test_cli_lists_the_bucket_when_irsa_is_down(data, status_file, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(sr, "discover", down)
+    monkeypatch.setattr(sr, "discover_s3", bucket())
+    out = tmp_path / "gh_output"
+    rc = sr.main(["check", "--file", str(status_file), "--data", str(data), "--github-output", str(out)])
+    text = capsys.readouterr().out
+    assert rc == 0 and "answered by: S3 bucket" in text
+    assert "Quick Release 3 at IRSA has images through 2026 week 40" in text
+    assert out.read_text().splitlines() == ["new_release=false", "changed=false", "online=s3", "current=spherex_qr3"]
+    assert sr.main(["check", "--file", str(status_file), "--data", str(data), "--require-online"]) == 1
+
+
+def test_cli_no_s3_skips_the_bucket(data, status_file, monkeypatch):
+    monkeypatch.setattr(sr, "discover", down)
+    monkeypatch.setattr(sr, "discover_s3", lambda: pytest.fail("the bucket was listed"))
+    assert sr.main(["check", "--no-s3", "--file", str(status_file), "--data", str(data)]) == 0
+    assert sr.read_status(status_file)["checked"] is None
+
+
+def test_discover_s3_with_a_fake_bucket():
+    sys.path.insert(0, str(ROOT / "tests"))
+    from _spherex_s3_fakes import FakeBucket
+    b = FakeBucket({"dr1/level2/2026W20_1A/p/1/a.fits": b"1", "qr2/level2/2026W29_2A/p/1/a.fits": b"1",
+                    "qr3/level2/2026W20_2A/p/1/a.fits": b"1", "qr3/level2/2026W40_2A/p/1/a.fits": b"1",
+                    "index.html": b"<html>"})
+    info = REAL_DISCOVER_S3(reader=b, now=lambda: BUCKET_NOW)
+    assert info["folders"] == ["dr1", "qr2", "qr3"] and info["listed"] == BUCKET_NOW
+    assert names(info["releases"]) == ["spherex_dr1", "spherex_qr3"]
+    assert info["newest_weeks"] == {"dr1": "2026W20_1A", "qr2": "2026W29_2A", "qr3": "2026W40_2A"}
