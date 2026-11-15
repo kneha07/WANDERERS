@@ -265,7 +265,8 @@
 
   // ---------- drag the sky: the sky point under the finger stays under the finger ----------
   // With motion sensors it moves the sight-check offsets (F.fineAz, F.fineAlt), like tapping a landmark does;
-  // without them it aims the view. A small 2-by-2 Newton solve, so it is exact whatever the phone's roll.
+  // without them, or while the view is held (zoomed in), it aims the view. A small 2-by-2 Newton solve, so it is
+  // exact whatever the phone's roll.
   // The pose after turning by A degrees of azimuth (about the vertical) and then tilting by T degrees about the
   // camera's right axis: what F.fineAz and F.fineAlt do in orient.js, and what a change of S.manual does.
   function turned(P, A, T) {
@@ -291,7 +292,7 @@
       A += lim((d * ex - b * ey) / det); T += lim((a * ey - c * ex) / det);
     }
     g.A = A; g.T = T;
-    if (C.S.sensors) { C.F.fineAz = Orient.wrap180(g.fine[0] + A); C.F.fineAlt = Math.max(-30, Math.min(30, g.fine[1] + T)); }
+    if (C.S.sensors && !C.S.hold) { C.F.fineAz = Orient.wrap180(g.fine[0] + A); C.F.fineAlt = Math.max(-30, Math.min(30, g.fine[1] + T)); }
     else { const m = C.S.manual; m.az = (g.manual.az + A + 720) % 360; m.alt = Math.max(-85, Math.min(85, g.manual.alt + T)); }
   }
   function startDrag() {
@@ -303,7 +304,7 @@
     const b = R.calDrag; R.calDrag = null; $("dragBar").hidden = true;
     if (!b) return;
     if (!keep) { C.F.fineAz = b.az; C.F.fineAlt = b.alt; C.F.compassFrozen = b.frozen; Object.assign(C.S.manual, b.manual); return; }
-    if (C.S.sensors) C.F.compassFrozen = true;      // the sky the user sees is the truth now, as after a sight check
+    if (C.S.sensors && !C.S.hold) C.F.compassFrozen = true;      // the sky the user sees is the truth now, as after a sight check
   }
 
   // ---------- pictures kept on the phone, and "Save the sky for a place" ----------
