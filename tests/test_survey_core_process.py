@@ -137,6 +137,12 @@ def test_prefetch_off_gives_same_result(wise0855):
     assert res["n_visit_sources"] == wise0855["n_visit_sources"]
 
 
+def test_huge_years_switch_off_prefetch_without_changing_results(wise0855, monkeypatch):
+    monkeypatch.setattr(link, "BIG_YEAR_ROWS", 10)          # every year counts as "huge" (pole-like)
+    res = link.process_tile(10226, reader=tiles.fixture_reader(W0855))
+    assert res["movers"] == wise0855["movers"] and res["n_visits"] == wise0855["n_visits"]
+
+
 def test_thresholds_are_respected():
     reader = tiles.fixture_reader(KAPTEYN)
     assert link.process_tile(8545, reader=reader, min_pm=10000.0)["movers"] == []

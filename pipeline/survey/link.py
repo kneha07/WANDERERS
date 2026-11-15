@@ -874,6 +874,18 @@ def _reduce(table):
     return out, int(m.sum())
 
 
+BIG_YEAR_ROWS = 4_000_000   # tile-years above this (ecliptic-pole files: 6 M rows) are not prefetched
+
+
+def _release_arrow_memory():
+    """Hand memory freed by pyarrow back to the OS (its allocator keeps it otherwise)."""
+    try:
+        import pyarrow as pa
+        pa.default_memory_pool().release_unused()
+    except Exception:  # noqa: BLE001 - optional, older pyarrow
+        pass
+
+
 def _subset(d, sel):
     return {k: v[sel] for k, v in d.items()}
 
@@ -931,6 +943,7 @@ def tile_sources(k5, reader=read_tile_year, years=YEARS, prefetch: bool = True, 
             red = reds[0]
             for r in reds[1:]:
                 red = _cat(red, r)
+            _release_arrow_memory()
             return red, n_rows
         tab = reader(k5, year)
         if tab is None:
@@ -945,13 +958,15 @@ def tile_sources(k5, reader=read_tile_year, years=YEARS, prefetch: bool = True, 
     vis_offset = 0
     ex = ThreadPoolExecutor(1) if prefetch else None
     fut = None
+    big = False      # a huge tile-year (ecliptic pole): stop overlapping downloads with processing
     t_io = 0.0
     try:
         if ex and years:
             fut = ex.submit(fetch, years[0])
         for i, year in enumerate(years):
             t0 = time.perf_counter()
-            red, n_rows = fut.result() if ex else fetch(year)
+            red, n_rows = fut.result() if fut is not None else fetch(year)
+            fut = None
             t_io += time.perf_counter() - t0
             if red is None:
                 years_missing.append(year)
@@ -959,7 +974,8 @@ def tile_sources(k5, reader=read_tile_year, years=YEARS, prefetch: bool = True, 
                 years_read.append(year)
                 n_det += n_rows
                 n_good += len(red["mjd"])
-            if ex and i + 1 < len(years):
+                big = big or n_rows > BIG_YEAR_ROWS
+            if ex and i + 1 < len(years) and not big:
                 fut = ex.submit(fetch, years[i + 1])
             if red is not None:
                 carry = _cat(carry, red)
