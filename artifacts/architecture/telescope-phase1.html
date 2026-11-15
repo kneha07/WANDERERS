@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telescope zoom phase 1: architecture pass</title>
+<style>
+:root { --bg:#fbfbfd; --fg:#1b1f2a; --muted:#5a6273; --card:#ffffff; --line:#d9dde6; --code:#eef1f6;
+  --strong:#11734b; --strong-bg:#dff5ea; --worth:#8a5a00; --worth-bg:#fdf0d5; --spec:#5b4a9e; --spec-bg:#ebe6fb; --accent:#1f5fbf; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f131b; --fg:#e4e8f0; --muted:#9aa4b8; --card:#171c27; --line:#2c3445; --code:#222a39;
+  --strong:#6fe0a8; --strong-bg:#123426; --worth:#f3c46b; --worth-bg:#3a2e12; --spec:#c3b5ff; --spec-bg:#2a2446; --accent:#7fb2ff; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width:980px; margin:0 auto; padding:24px 16px 64px; }
+h1 { font-size:1.6rem; margin:0 0 4px; } h2 { margin-top:2.2em; border-bottom:1px solid var(--line); padding-bottom:4px; } h3 { margin:0 0 6px; }
+p.meta, .muted { color:var(--muted); }
+code { background:var(--code); padding:1px 5px; border-radius:4px; font:0.88em ui-monospace, "JetBrains Mono", Consolas, monospace; }
+pre { background:var(--code); padding:10px 12px; border-radius:8px; overflow-x:auto; font:0.85em/1.45 ui-monospace, Consolas, monospace; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:16px 0; }
+.card.top { border:2px solid var(--strong); }
+.badge { display:inline-block; font-size:0.78rem; font-weight:600; padding:2px 9px; border-radius:999px; margin-right:6px; vertical-align:middle; }
+.b-strong { color:var(--strong); background:var(--strong-bg); } .b-worth { color:var(--worth); background:var(--worth-bg); } .b-spec { color:var(--spec); background:var(--spec-bg); }
+.b-yes { color:var(--accent); border:1px solid var(--accent); } .b-no { color:var(--muted); border:1px solid var(--line); }
+dl { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; margin:10px 0 0; } dt { font-weight:600; color:var(--muted); } dd { margin:0; }
+.ba { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; } .ba > div { border:1px dashed var(--line); border-radius:8px; padding:8px 10px; }
+.ba b { display:block; font-size:0.8rem; color:var(--muted); margin-bottom:4px; }
+table { border-collapse:collapse; width:100%; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+.tablewrap { overflow-x:auto; }
+.mermaid { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; overflow-x:auto; }
+@media (max-width:640px) { .ba { grid-template-columns:1fr; } dl { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Telescope zoom, phase 1: architecture pass</h1>
+<p class="meta">Branch <code>feature/compass-telescope</code>. Scope: <code>git diff 33272f0..HEAD -- app test</code> (599 lines added, 64 removed).
+Spec: <code>docs/specs/sky-compass-telescope.md</code>. Date: 2026-11-15. Read-only pass. No product or test file was changed.</p>
+
+<h2>Summary</h2>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Candidate</th><th>Rating</th><th>Serves phase 1-3 spec</th></tr>
+<tr><td>1</td><td>The ladder as data: one survey stack drives opacity, cover and note</td><td><span class="badge b-strong">Strong</span></td><td>Yes (phases 2, 3)</td></tr>
+<tr><td>2</td><td>One survey loader with the timeout and backoff, used by every layer</td><td><span class="badge b-strong">Strong</span></td><td>Yes (phase 2 design, section 3)</td></tr>
+<tr><td>3</td><td>One "phone steers the view" test instead of seven copies</td><td><span class="badge b-worth">Worth exploring</span></td><td>Yes (hold mode, section 2)</td></tr>
+<tr><td>4</td><td>Sidereal tracking through <code>Sky.unobserve</code> and <code>Sky.observe</code>, delete the hand rotation</td><td><span class="badge b-worth">Worth exploring</span></td><td>No (built beyond the spec)</td></tr>
+<tr><td>5</td><td>Move the hold count out of <code>note()</code></td><td><span class="badge b-worth">Worth exploring</span></td><td>Partly (honesty rules)</td></tr>
+<tr><td>6</td><td>Tests read the note and the opacity, not <code>RealSky.DEEP</code></td><td><span class="badge b-spec">Speculative</span></td><td>Yes (keeps phase 2 tests stable)</td></tr>
+</table></div>
+<p><b>Top recommendation:</b> candidate 1, with candidate 2 as its first step. See the last section.</p>
+
+<h2>Current module flow</h2>
+<p>The diagram shows one frame and the zoom input. <code>S.zoom</code> is the single input to the ladder. <code>RealSky.cover()</code> is the only number that goes back from <code>realsky.js</code> to <code>compass.js</code>.</p>
+<pre class="mermaid">
+flowchart TD
+  subgraph compass.js
+    G[pinch / wheel / 1x / Escape] --> SZ[setZoom]
+    SZ --> UH[updateHold]
+    L[loop: draw] --> UH
+    L --> TR[track: sidereal turn]
+    L --> GL[glide: snap ease]
+    UH --> SM[(S.manual / S.hold / S.snapped)]
+    TR --> SM
+    GL --> SM
+    D[drag, keys] --> SM
+    SM --> PO[pose]
+    PO --> BK[dark backdrop, alpha = 1 - cover]
+    PO --> RD
+  end
+  subgraph realsky.js
+    RD[RealSky.draw] --> DF[deepFrame: want, opacity]
+    DF --> SC[scope: 3x..6x ramp]
+    DF --> SY[syncDeep]
+    SY --> ST[startDeep: 20 s timeout, 30 s backoff]
+    SY --> SV[setSurvey: no timeout]
+    ST --> PH[pickHost]
+    SV --> PH
+    ST --> AL[("Aladin in skyDeep box")]
+    SY --> AL
+    RD --> NT[note: survey name, archive, approximate, hold hint, HOLDS count]
+    RD --> EY[drawEye: alpha x 1 - cover]
+    CV[cover] --> SC
+  end
+  UH -. reads .-> CV
+  BK -. reads .-> CV
+  UH -. cancelDrag .-> RD
+  NT --> SN["skyNote element"]
+</pre>
+
+<h2>Candidates</h2>
+
+<div class="card top">
+<h3>1. The ladder as data: one survey stack drives opacity, cover and note</h3>
+<span class="badge b-strong">Strong</span><span class="badge b-yes">Spec-backed: yes</span>
+<dl>
+<dt>Files</dt><dd><code>app/realsky.js</code> 189-206 (<code>scope</code>, <code>cover</code>, <code>deepFrame</code>), 235-256 (<code>note</code>), 88 (<code>drawEye</code> fade); <code>app/hips.js</code> <code>CONFIG.surveys</code>; <code>app/compass.js</code> 257 and 362 (readers of <code>cover()</code>).</dd>
+<dt>Problem</dt><dd>The Finder rung is spread over four places. <code>scope()</code> hard-codes the 3x to 6x ramp. <code>deepFrame</code> computes one opacity for one box. <code>cover()</code> knows only Deep or Finder. <code>note()</code> names <code>surveyOf(R.survey).name</code> and nothing else. Phase 2 adds Pan-STARRS (fade 60x to 100x, coverage Dec &gt; -30). Phase 3 adds Hubble and Webb (above 300x, only inside a frame). With the current shape, each rung must edit all four places, and each place gets a new branch. That is low <b>locality</b>.</dd>
+<dt>Change</dt><dd>Add the rung numbers to the survey entries that already exist in <code>Hips.CONFIG.surveys</code>: a fade range and a label. Replace <code>scope()</code> with one function in <code>realsky.js</code> that returns the visible stack for the current zoom and crosshair, for example <code>[{ survey, opacity }]</code>, bottom first. <code>deepFrame</code> writes those opacities. <code>cover()</code> becomes the top opacity of the stack. <code>note()</code> names the topmost layer with opacity 1. Do not add a class or a registry. One array and one function are enough. The coverage test for phase 2 is one predicate on the entry (<code>dec &gt; -30</code>).</dd>
+<dt>Benefits</dt><dd><b>Leverage</b>: phases 2 and 3 become "add one entry and one layer start", not four edits. <b>Locality</b>: the "note always names the survey on screen" rule holds by construction, because the note reads the same stack that sets the opacity. Tests: one table test (zoom and Dec in, stack out) replaces separate opacity and note checks for each rung.</dd>
+<dt>Deletion test</dt><dd>Delete <code>scope()</code> today and its ramp reappears in three callers. The new stack function concentrates the ramp, the coverage and the label. It earns its keep.</dd>
+</dl>
+<div class="ba">
+<div><b>Before</b><pre>scope()      3..6 ramp
+deepFrame    one opacity, one box
+cover()      deep ? 1 : scope()
+note()       surveyOf(R.survey).name</pre></div>
+<div><b>After</b><pre>CONFIG.surveys.visible  { fade:[3,6], label }
+CONFIG.surveys.ps1      { fade:[60,100], label, covers }
+stack(zoom, centre) -> [{survey, opacity}]
+deepFrame / cover / note read stack()</pre></div>
+</div>
+</div>
+
+<div class="card">
+<h3>2. One survey loader with the timeout and backoff, used by every layer</h3>
+<span class="badge b-strong">Strong</span><span class="badge b-yes">Spec-backed: yes</span>
+<dl>
+<dt>Files</dt><dd><code>app/realsky.js</code> 126-171: <code>DEEP</code>, <code>pickHost</code>, <code>startDeep</code>, <code>failDeep</code>, <code>setSurvey</code>.</dd>
+<dt>Problem</dt><dd>Two paths load a survey into Aladin. <code>startDeep</code> has the 20 s timeout, the start id that drops a late answer, and the 30 s backoff. <code>setSurvey</code> calls <code>pickHost</code> and <code>setBaseImageLayer</code> again, but has none of these. A hang there keeps the note on "Loading" with no limit. Phase 2 spec, section 3, says: "A startup failure in telescope mode must not retry every frame. Wait 30 s between attempts, and keep whatever rung below is working." That rule is for each layer. Today the backoff state (<code>retryAt</code>, <code>failed</code>, <code>start</code>) lives once, on <code>DEEP</code>.</dd>
+<dt>Change</dt><dd>Move the guard into one function, for example <code>loadSurvey(name)</code>: <code>pickHost</code>, the 20 s timer, the start id and the 30 s backoff, with the state kept per survey name. <code>startDeep</code> uses it for the base layer. <code>setSurvey</code> uses it and so gets the timeout for free. Phase 2 and phase 3 layers use it too. <code>startDeep</code> keeps only the Aladin start. This is mostly a move of existing lines, not new code.</dd>
+<dt>Benefits</dt><dd><b>Locality</b>: one place for "how a survey start fails". <b>Leverage</b>: three more layers with no new timer code. Tests: the two existing tests ("a failed start waits 30 s", "a start that hangs for 20 s") cover every layer through one <b>interface</b>.</dd>
+</dl>
+<div class="ba">
+<div><b>Before</b><pre>startDeep  pickHost + 20 s + id + 30 s
+setSurvey  pickHost (no guard)
+phase 2    ? copy again</pre></div>
+<div><b>After</b><pre>loadSurvey(name)  pickHost + 20 s + id + 30 s
+startDeep, setSurvey, Pan-STARRS,
+Hubble, Webb  -> loadSurvey</pre></div>
+</div>
+</div>
+
+<div class="card">
+<h3>3. One "phone steers the view" test instead of seven copies</h3>
+<span class="badge b-worth">Worth exploring</span><span class="badge b-yes">Spec-backed: yes</span>
+<dl>
+<dt>Files</dt><dd><code>app/compass.js</code> 214 (<code>pose</code>), 228 (<code>track</code>), 258 (<code>updateHold</code>), 305 (pointerdown), 318 (keydown); <code>app/realsky.js</code> 316 (drag solve), 328 (<code>endDrag</code>).</dd>
+<dt>Problem</dt><dd>The expression <code>S.sensors &amp;&amp; !S.hold</code> (or its inverse) is written seven times in two files. It means one thing: the phone's sensors steer the view. Phase 1 had to find and change each copy. A missed copy is a silent bug, for example a drag that moves the sight-check offsets while the view is held. Phases 2 and 3 do not change this rule, but they raise the zoom and add more users of the held view.</dd>
+<dt>Change</dt><dd>Add one function in <code>compass.js</code>, for example <code>const phoneSteers = () =&gt; S.sensors &amp;&amp; !S.hold</code>. Pass it to <code>RealSky.init</code> in the context object, as <code>camOn</code> is passed today. Replace the seven copies. No new state.</dd>
+<dt>Benefits</dt><dd><b>Locality</b>: the hold rule has one name and one place. Tests do not change, because they already drive hold through <code>S.zoom</code> and fed sensor poses.</dd>
+</dl>
+</div>
+
+<div class="card">
+<h3>4. Sidereal tracking through <code>Sky.unobserve</code> and <code>Sky.observe</code></h3>
+<span class="badge b-worth">Worth exploring</span><span class="badge b-no">Spec-backed: no</span>
+<dl>
+<dt>Files</dt><dd><code>app/compass.js</code> 222-233 (<code>track</code>, <code>trackAt</code>).</dd>
+<dt>Problem</dt><dd><code>track()</code> turns <code>S.manual</code> about the celestial pole with a hand-written Rodrigues rotation and its own sidereal rate. <code>app/sky.js</code> already converts between az/alt and the sky: <code>Sky.unobserve</code> and <code>Sky.observe</code> (used by <code>syncDeep</code>). So the same astronomy exists twice, and the copy in <code>compass.js</code> ignores refraction, which <code>sky.js</code> applies. Near the horizon at 300x (and at 800x in phase 2), that difference can move a target in the view.</dd>
+<dt>Change</dt><dd>Keep the time step and the guards. Replace the rotation with one line: convert <code>S.manual</code> to the sky at the last time with <code>Sky.unobserve</code>, then back at the new time with <code>Sky.observe</code>. This deletes about six lines of vector math. Check first that the round trip has no drift at a fixed <code>?at=</code> time; the existing tracking test covers that.</dd>
+<dt>Benefits</dt><dd>Deletion and reuse. One module owns the sky geometry. The tracking test stays as it is.</dd>
+</dl>
+</div>
+
+<div class="card">
+<h3>5. Move the hold count out of <code>note()</code></h3>
+<span class="badge b-worth">Worth exploring</span><span class="badge b-yes">Spec-backed: partly</span>
+<dl>
+<dt>Files</dt><dd><code>app/realsky.js</code> 234-247 (<code>HOLDS</code>, <code>HELD</code> in <code>note</code>); <code>app/compass.js</code> 256-271 (<code>updateHold</code>).</dd>
+<dt>Problem</dt><dd><code>note()</code> builds text, and also counts hold starts by watching <code>S.hold</code> change between frames. The count works only because <code>note()</code> runs every frame. The real event (hold starts) happens in <code>updateHold</code>, in another file. In phases 2 and 3 <code>note()</code> gains the rung label and the frame name, so its hidden state becomes harder to see.</dd>
+<dt>Change</dt><dd>Count in <code>updateHold</code> where <code>S.hold</code> becomes true (for example <code>S.holds++</code>). <code>note()</code> reads <code>S.holds</code>. Delete <code>HOLDS</code> and <code>HELD</code>. Then <code>note()</code> is a pure text function of the state, and candidate 1 can feed it the stack.</dd>
+<dt>Benefits</dt><dd><b>Locality</b>: the event and its count are in one place. The test "the hold hint shows on the first hold" still passes through the note text.</dd>
+</dl>
+</div>
+
+<div class="card">
+<h3>6. Tests read the note and the opacity, not <code>RealSky.DEEP</code></h3>
+<span class="badge b-spec">Speculative</span><span class="badge b-yes">Spec-backed: yes</span>
+<dl>
+<dt>Files</dt><dd><code>test/realsky-telescope.test.js</code> (13 reads of <code>RS.DEEP</code> or <code>RS.R</code>); <code>app/realsky.js</code> 514 (<code>api</code> exports <code>R</code> and <code>DEEP</code>).</dd>
+<dt>Problem</dt><dd>The new tests are good: they run the real <code>realsky.js</code> with a fake page, a fake clock and a fake Aladin, and they mostly check what the user sees (<code>note()</code>, <code>opacity()</code>, <code>cover()</code>). But some asserts read <code>DEEP.state</code>, <code>retryAt</code> or <code>failed</code>. Candidates 1 and 2 change that state into one entry per survey. Those asserts would then break with no change in behaviour.</dd>
+<dt>Change</dt><dd>When candidate 2 lands, change the internal asserts to the visible result (note text, box opacity, probe count in <code>calls</code>). Keep <code>DEEP</code> in the export only for <code>selfTest</code> and the browser check. Do not do this before candidate 2: today it costs work and gives nothing.</dd>
+<dt>Benefits</dt><dd>"The <b>interface</b> is the test surface." Phase 2 tests can then be one more row in the same style.</dd>
+</dl>
+</div>
+
+<h2>Checked and kept</h2>
+<ul>
+<li><code>RealSky.cover()</code> is a good <b>seam</b>. One number crosses from <code>realsky.js</code> to <code>compass.js</code> and drives the backdrop, the Eye stars and the hold rule. Keep it. Candidate 1 changes only how it is computed.</li>
+<li>The pixel-based skip limits in <code>syncDeep</code> (180-186) hold at every zoom. They need no change for 800x.</li>
+<li><code>cancelDrag()</code> and <code>cancelGesture()</code> are small, but each has two callers with a real reason. They pass the deletion test.</li>
+<li>No framework, no new file and no new dependency is suggested.</li>
+</ul>
+
+<h2>Top recommendation</h2>
+<div class="card top">
+<p><b>Candidate 1: the ladder as data.</b> Do candidate 2 first, as the first commit of the same change, because each layer in the stack needs the same guarded start.</p>
+<p>Reasons:</p>
+<ul>
+<li>It is the only candidate that makes phases 2 and 3 smaller. Each new rung becomes one survey entry plus one call to the shared loader.</li>
+<li>It enforces the spec honesty rule by construction: the note names the layer that the opacity code shows.</li>
+<li>It reuses <code>Hips.CONFIG.surveys</code>, which already holds the names and hosts that <code>sw.js</code> must agree on. Phase 2 must add Pan-STARRS there anyway for the tile roots.</li>
+<li>It is about one function and two table fields. It deletes <code>scope()</code> and the special cases in <code>cover()</code> and <code>note()</code>.</li>
+</ul>
+<p class="muted">Do it at the start of phase 2, not as a separate refactor of phase 1. Phase 1 has one rung, so a stack of one is a hypothetical seam today. The second adapter (Pan-STARRS) makes it real.</p>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default", securityLevel: "strict" });
+</script>
+</body>
+</html>
