@@ -1,6 +1,6 @@
 # Spec: telescope zoom in Sky Compass
 
-Status: **phase 1 built** on this branch (2026-11-15). Phases 2 and 3 are not started. Branch `feature/compass-telescope`, worktree
+Status: **phase 1 built** on this branch (2026-11-15) and checked in a browser. The real-phone test is pending (#71). Phases 2 and 3 are not started. Branch `feature/compass-telescope`, worktree
 `.worktrees/compass-telescope`, made from `feature/compass-pinch-zoom` at `d938fb5`. That branch is not merged yet,
 and this work needs it (it adds `S.zoom`, `setZoom`, the pinch and wheel gestures, and the daily survey check).
 
