@@ -299,6 +299,11 @@ node server.js        # http://localhost:8000 (home), /observatory.html (workspa
 `app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
 appears when `server.js` is running.
 
+**Automatic deploy:** `.github/workflows/pages.yml` publishes `app/` to GitHub Pages
+(`https://kneha07.github.io/WANDERERS/`) on every push to `main`, after each vote count, and by hand from the Actions
+tab. A repository admin turns it on once: Settings → Pages → Build and deployment → Source: **GitHub Actions**. The
+fork copy (`rajryadav4.github.io/wanderers`) still updates only when it is synced by hand.
+
 ### Add or subtract frames
 
 Under the sky viewer, **Show** can subtract any two frames (later minus earlier, green = now, pink = before) or add
