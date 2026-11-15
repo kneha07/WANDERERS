@@ -138,24 +138,30 @@ def split_visits(mjd, gap_days: float = 20.0, max_len_days: float = 12.0) -> np.
     return out
 
 
-def _edges(xy, r, k, group=None):
-    """Symmetric neighbour edges (i, j) with |xy_i - xy_j| <= r, using at most k nearest neighbours per point
-    (bounded work even where a source has hundreds of rows), optionally only between different groups."""
+def _edges(xy, r, k, group=None, chunk=200_000):
+    """Neighbour edges (i, j) with |xy_i - xy_j| <= r, using at most k nearest neighbours per point (bounded work
+    even where a source has hundreds of rows), optionally only between different groups. Queried in chunks with
+    int32 output so a 1-million-detection visit (ecliptic-pole windows) stays within a few hundred MB."""
     n = len(xy)
-    kk = min(k + 1, n)
     if n < 2:
-        return np.zeros(0, np.int64), np.zeros(0, np.int64)
+        return np.zeros(0, np.int32), np.zeros(0, np.int32)
+    if n > 300_000:
+        k = min(k, 10)
+    kk = min(k + 1, n)
     tree = cKDTree(xy)
-    d, j = tree.query(xy, k=kk, distance_upper_bound=r)
-    if kk == 1:
-        j = j[:, None]
-    i = np.broadcast_to(np.arange(n)[:, None], j.shape)
-    ok = j < n
-    ok &= j != i
-    if group is not None:
-        jj = np.where(ok, j, 0)
-        ok &= group[jj] != group[i]
-    return i[ok].astype(np.int64), j[ok].astype(np.int64)
+    out_i, out_j = [], []
+    for s in range(0, n, chunk):
+        _, j = tree.query(xy[s:s + chunk], k=kk, distance_upper_bound=r)
+        if kk == 1:
+            j = j[:, None]
+        i = np.arange(s, s + len(j), dtype=np.int64)[:, None]
+        ok = (j < n) & (j != i)
+        if group is not None:
+            ok &= group[np.where(ok, j, 0)] != group[np.broadcast_to(i, j.shape)]
+        out_i.append(np.broadcast_to(i, j.shape)[ok].astype(np.int32))
+        out_j.append(j[ok].astype(np.int32))
+        del j, ok
+    return np.concatenate(out_i), np.concatenate(out_j)
 
 
 def _components(n, i, j):
