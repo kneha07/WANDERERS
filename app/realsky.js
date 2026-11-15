@@ -159,7 +159,10 @@
       DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: survey, imgFormat: "jpeg" }));
       DEEP.state = "ready"; DEEP.last = null; DEEP.failed = false; note();
     } catch {
-      DEEP.state = "idle"; DEEP.failed = true;
+      // Any failure on the way (the probe, the script, Aladin itself, the first layer) waits 30 s, so a browser
+      // without WebGL2 does not build Aladin every frame. A half-built Aladin is removed: the next try starts fresh.
+      DEEP.state = "idle"; DEEP.failed = true; DEEP.retryAt = Date.now() + 30000;
+      DEEP.aladin = null; $("skyDeep").replaceChildren();
       if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
     }
   }

@@ -26,8 +26,9 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
   const calls = { archive, probes: 0, aladins: 0, views: [], release: null };
   const buttons = { surveySeg: ["visible", "infrared"].map((survey) => ({ dataset: { survey }, classList: { toggle() {} }, setAttribute() {} })) };
   const el = (id) => els[id] || (els[id] = {
-    id, hidden: id === "skyDeep" || id === "dragBar", style: {}, textContent: "", value: "", dataset: {}, listeners: {},
-    classList: { toggle() {} }, setAttribute() {}, querySelectorAll: () => buttons[id] || [], replaceChildren() {}, setPointerCapture() {},
+    id, hidden: id === "skyDeep" || id === "dragBar", style: {}, textContent: "", value: "", dataset: {}, listeners: {}, children: [],
+    classList: { toggle() {} }, setAttribute() {}, querySelectorAll: () => buttons[id] || [], setPointerCapture() {},
+    replaceChildren(...nodes) { this.children = nodes; },
     addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
     dispatch(type, e) { for (const fn of this.listeners[type] || []) fn({ stopImmediatePropagation() {}, ...e }); },
     append(...a) { this.textContent += a.map((x) => (typeof x === "string" ? x : `[${x.textContent}]`)).join(""); },
@@ -49,7 +50,9 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [clock.t])); } static now() { return clock.t; } },
     Hips, SkyView, Sky, Orient,
-    __A: { init: Promise.resolve(), aladin: () => { calls.aladins++; return aladin; }, imageHiPS: () => ({}) },
+    // a build puts Aladin's canvas into #skyDeep; with calls.aladinThrows it then fails (a browser without WebGL2)
+    __A: { init: Promise.resolve(), imageHiPS: () => ({}),
+      aladin: () => { calls.aladins++; el("skyDeep").children.push("aladin canvas"); if (calls.aladinThrows) throw new Error("no WebGL2"); return aladin; } },
   };
   const win = {};
   new Function(...Object.keys(env), "window", SRC)(...Object.values(env), win);
@@ -134,6 +137,18 @@ test("a failed start waits 30 s before the next one; in Deep it falls back to Ey
   const before = d.calls.probes;
   d.RS.setSky("deep"); d.frame(); await d.settle();
   assert.ok(d.calls.probes > before, "choosing Deep tries again at once");
+});
+
+test("Aladin itself failing (no WebGL2) waits 30 s as well: one build and one probe in 20 frames, then a fresh try", async () => {
+  const c = load();
+  c.calls.aladinThrows = true;
+  c.S.zoom = 5;
+  for (let i = 0; i < 20; i++) { c.frame(); await c.settle(); }
+  assert.deepEqual([c.calls.aladins, c.calls.probes], [1, 1]);
+  assert.deepEqual(c.el("skyDeep").children, [], "the half-built Aladin is removed, so the next try starts fresh");
+  assert.match(c.note(), /Telescope photographs are not reachable now\./);
+  c.clock.t += 30001; c.frame(); await c.settle();
+  assert.deepEqual([c.calls.aladins, c.calls.probes], [2, 2], "a second try after 30 s");
 });
 
 test("a start that hangs for 20 s counts as failed, and its late answer changes nothing", async () => {
