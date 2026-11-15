@@ -353,7 +353,7 @@ test("entering or leaving hold first cancels a running 'Drag the sky', so its ol
   assert.equal(cancels, 2, "leaving hold cancels it too");
 });
 
-test("hold mode: a key press during the snap's glide stops the view where it is", async () => {
+test("hold mode: a key press or a drag during the snap's glide stops the view where it is, no longer 'snapped'", async () => {
   const c = await phoneAt(337, 28);
   c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();
   c.frame();
@@ -363,6 +363,22 @@ test("hold mode: a key press during the snap's glide stops the view where it is"
   c.frame();
   assert.deepEqual(c.S.manual, stopped);
   assert.ok(near(stopped, 337 - 2 / 8, 28), `stopped near the phone pose, got ${stopped.az}, ${stopped.alt}`);
+  assert.equal(c.S.snapped, false, "not on the target, so the note warns again that the direction is approximate");
+  c.setZoom(5); c.frame(); c.setZoom(8);                     // a new snap and glide
+  assert.equal(c.S.snapped, true);
+  c.$("hud").dispatch("pointerdown", { pointerId: 1, isPrimary: true, clientX: 200, clientY: 400 });
+  assert.equal(c.S.snapped, false, "a drag stops it too");
+});
+
+test("hold mode: with no sensor pose yet the view is not held; it is held once the pose comes", async () => {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}` });
+  await c.flush(); await c.$("go").onclick();
+  c.S.sensors = true;                                        // the sensor stream started, but no pose has come yet
+  c.setZoom(10); c.frame();
+  assert.equal(c.S.hold, false);
+  aimPhone(c, 100, 20); c.frame();
+  assert.equal(c.S.hold, true);
+  assert.ok(near(c.S.manual, 100, 20), `held where the phone points, got ${c.S.manual.az}, ${c.S.manual.alt}`);
 });
 
 test("the 1x button and Escape take the view back to 1x in one step, and let go of the hold", async () => {

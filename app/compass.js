@@ -255,19 +255,21 @@ $("zoomReset").onclick = () => setZoom(1);      // back to 1x in one step (Escap
 let ease = null;
 function updateHold() {
   const covered = !S.camOn || RealSky.cover() === 1;
-  if (S.sensors && !S.hold && S.zoom >= 8 && covered) {
+  const p = S.sensors && !S.hold && S.zoom >= 8 && covered && F.pointing();     // no pose yet: not held (until a frame has one)
+  if (p) {
     RealSky.cancelDrag();       // first, so Drag the sky's Cancel cannot put its old pose back over the held view
-    const T = S.sel && S.targets.find((t) => t.id === S.sel.id), p = F.pointing();
+    const T = S.sel && S.targets.find((t) => t.id === S.sel.id);
     S.snapped = !!(T && T._sep != null && T._sep <= 6);
-    if (p) S.manual = { az: p.az, alt: p.alt };
+    S.manual = { az: p.az, alt: p.alt };
     if (S.snapped) {
       const to = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
-      if (reduced || !p) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
+      if (reduced) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
     }
     S.hold = true;
     if (navigator.vibrate) navigator.vibrate(30);
   } else if (S.hold && (S.zoom < 6 || !covered)) { RealSky.cancelDrag(); S.hold = false; S.snapped = false; ease = null; }
 }
+const stopGlide = () => { if (ease) { ease = null; S.snapped = false; } };   // a drag or a key: the view is not on the target
 function glide() {
   if (!ease) return;
   const k = Math.min(1, (performance.now() - ease.t0) / 250), q = 1 - (1 - k) ** 3, { from: a, to: b } = ease;   // ease-out
@@ -300,7 +302,7 @@ for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(typ
 $("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
 
-$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY }; ease = null; $("hud").setPointerCapture(e.pointerId); } });
+$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY }; stopGlide(); $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const k = 70 / innerHeight / S.zoom;       // step by step, so the sidereal tracking between two moves is kept
@@ -311,7 +313,7 @@ $("hud").addEventListener("pointermove", (e) => {
 $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
-  ease = null;
+  stopGlide();
   if (e.key === "Escape") { if (![...document.querySelectorAll(".sheet")].some((el) => !el.hidden)) setZoom(1); return; }
   if (S.sensors && !S.hold) return;
   const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
