@@ -76,6 +76,13 @@ class EvidenceCardTests(unittest.TestCase):
             reference={'source': 'Published catalogue', 'catalogued': True}))
         self.assertEqual(c['status'], 'known')
 
+    def test_motion_years_are_calendar_years(self):
+        # SPHEREx in September 2026 (2026.67) is "2026", never a future "2027"; WISE 2010.5 stays "2010"
+        m = dict(motion(), from_year=2010.5, to_year=2026.67)
+        self.assertIn('between 2010 and 2026', evidence.card(target(motion=m))['checks'][0]['text'])
+        still = dict(motion(pixels=1), from_year=2010.5, to_year=2026.67)
+        self.assertEqual(evidence.card(target(motion=still))['checks'][0]['text'], 'No measurable motion between 2010 and 2026')
+
     def test_card_does_not_mutate_input(self):
         t = target(motion=motion())
         original = repr(t)
