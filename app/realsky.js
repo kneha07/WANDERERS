@@ -200,16 +200,19 @@
   // ---------- the telescope view: zooming in fades the photographs in, in every sky mode ----------
   // The amount t is 0 at 3x and 1 at 6x. It never changes the user's own choice (R.sky, R.mix, R.survey).
   const scope = () => Math.max(0, Math.min(1, (C.S.zoom - 3) / 3));
+  // Offline the telescope photographs are not shown (only the few saved orders would load, so the view went black):
+  // the dark backdrop and the drawn stars stay. Deep keeps its photographs: they can come from a saved place.
+  const online = () => navigator.onLine !== false;
   // How much of the view the photographs cover: compass.js fades its dark backdrop by it, drawEye its stars.
-  const cover = () => (DEEP.state === "ready" ? (R.sky === "deep" ? 1 : scope()) : 0);
+  const cover = () => (DEEP.state === "ready" ? (R.sky === "deep" ? 1 : online() ? scope() : 0) : 0);
   // The photographs are wanted in Deep, and from 2x (started early, so they are ready by 3x; on mobile data or with
   // Save-Data on, from 3x, so nothing unseen is fetched). Their opacity is set here every frame, written to the page
   // only when it changes. Aladin must not start in a hidden box, so the box stays shown (at opacity 0 below 3x) while
   // wanted or loading.
   function deepFrame(P, f, W, H, now, L) {
     const net = navigator.connection, from = net && (net.saveData || net.type === "cellular") ? 3 : 2;
-    const want = R.sky === "deep" || C.S.zoom >= from, t = scope();
-    const op = R.sky === "deep" ? (C.camOn() ? R.mix + (1 - R.mix) * t : 1) : t;
+    const want = R.sky === "deep" || (online() && C.S.zoom >= from), t = scope();
+    const op = R.sky === "deep" ? (C.camOn() ? R.mix + (1 - R.mix) * t : 1) : online() ? t : 0;
     const key = want || DEEP.state === "loading" ? op : "hidden";
     if (key !== DEEP.op) { DEEP.op = key; $("skyDeep").hidden = key === "hidden"; $("skyDeep").style.opacity = op; }
     if (want) syncDeep(P, f, W, H, now, L);
@@ -247,13 +250,14 @@
     const F = C.F, S = C.S, t = scope(), pt = SkyView.pointing({ haveSensor: S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
     const loading = DEEP.state === "loading" && (S.zoom >= 3 ? "Loading telescope photographs… " : R.sky === "deep" ? "Loading sky photographs… " : "");
     const state = loading || (R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "");
-    const scoped = t > 0 && DEEP.state === "ready", approx = scoped && S.sensors && !F.compassFrozen && !S.snapped;
+    const scoped = t > 0 && DEEP.state === "ready" && (R.sky === "deep" || online()), approx = scoped && S.sensors && !F.compassFrozen && !S.snapped;
     const text = [R.msg,
       scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
         : (state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky]).trim(),
       approx && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
       // one message per problem: with no connection, that is the reason
-      t > 0 && (navigator.onLine === false ? "No connection: no finer photographs." : DEEP.failed && "Telescope photographs are not reachable now."),
+      t > 0 && (!online() ? (R.sky === "deep" ? "No connection: no finer photographs." : "No connection: telescope photographs are not available.")
+        : DEEP.failed && "Telescope photographs are not reachable now."),
       !approx && pt.text].filter(Boolean).join(" · ");                 // one accuracy claim only
     const pill = cover() > 0;                        // on the photographs: a dark pill keeps the note readable
     if (pill !== PILL) { PILL = pill; $("skyNote").classList.toggle("on-photo", pill); }

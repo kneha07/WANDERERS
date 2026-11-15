@@ -23,7 +23,7 @@ function poseAt(az, alt) {
 // calls.release() is called)
 function load({ sky = "eye", camOn = false, archive = "ok", online = true, connection } = {}) {
   const els = {}, timers = [], clock = { t: Date.parse("2026-11-15T06:00:00Z") };
-  const calls = { archive, probes: 0, aladins: 0, views: [], release: null };
+  const calls = { archive, probes: 0, aladins: 0, views: [], release: null }, nav = { onLine: online, connection };   // nav.onLine can change
   const buttons = { surveySeg: ["visible", "infrared"].map((survey) => ({ dataset: { survey }, classList: { toggle() {} }, setAttribute() {} })) };
   const el = (id) => els[id] || (els[id] = {
     id, hidden: id === "skyDeep" || id === "dragBar", style: {}, textContent: "", value: "", dataset: {}, listeners: {}, children: [],
@@ -47,7 +47,7 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
       if (calls.archive === "hang") return new Promise((ok) => (calls.release = () => ok({ ok: true })));
       return { ok: true };
     },
-    navigator: { onLine: online, connection }, AbortSignal: { timeout: () => undefined }, innerWidth: 390, innerHeight: 844,
+    navigator: nav, AbortSignal: { timeout: () => undefined }, innerWidth: 390, innerHeight: 844,
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [clock.t])); } static now() { return clock.t; } },
     Hips, SkyView, Sky, Orient,
@@ -64,7 +64,7 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
   RS.init({ pose: () => P, focal, loc: () => HERE, camOn: () => camOn, phoneSteers: () => S.sensors && !S.hold, F, S, onStar() {}, openSight() {} });
   const g = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => ((t[k] = v), true) });
   return {
-    RS, S, F, el, calls, timers, clock,
+    RS, S, F, el, calls, timers, clock, nav,
     frame: () => RS.draw(g, P, focal(), 390, 844, NOW, HERE),
     aim: (az, alt) => { P = poseAt(az, alt); },
     settle: async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); },
@@ -222,11 +222,26 @@ test("at 150x and 300x the photographs follow every move of a quarter pixel or m
   assert.ok(synced(() => { c.S.zoom = 280; }), "a pinch from 300x to 280x reaches the photographs");
 });
 
-test("with no connection the note gives one reason: 'No connection', not 'not reachable'", async () => {
+test("offline the telescope view keeps the drawn stars and says why: no photographs, one reason only", async () => {
   const c = load({ online: false, archive: "down" });
   c.S.zoom = 4; c.frame(); await c.settle(); c.frame();
-  assert.match(c.note(), /No connection: no finer photographs\./);
-  assert.doesNotMatch(c.note(), /not reachable/);
+  assert.deepEqual([c.RS.cover(), c.opacity(), c.calls.probes], [0, "hidden", 0], "no photographs, nothing fetched");
+  assert.match(c.note(), /No connection: telescope photographs are not available\./);
+  assert.doesNotMatch(c.note(), /not reachable|finer/);
+
+  const d = load();                                                   // the connection drops after the photographs loaded
+  d.S.zoom = 12; d.frame(); await d.settle(); d.frame();
+  assert.equal(d.RS.cover(), 1);
+  d.nav.onLine = false; d.frame();
+  assert.deepEqual([d.RS.cover(), d.opacity()], [0, "hidden"], "the dark backdrop and the drawn stars come back");
+  assert.match(d.note(), /^Drawn from measured star positions.* · No connection: telescope photographs are not available\./);
+  d.nav.onLine = true; d.frame();
+  assert.deepEqual([d.RS.cover(), d.opacity()], [1, 1], "back online");
+
+  const e = load({ sky: "deep", online: false });                      // Deep keeps its saved, coarse photographs
+  e.frame(); await e.settle(); e.S.zoom = 12; e.frame();
+  assert.deepEqual([e.RS.cover(), e.opacity()], [1, 1]);
+  assert.match(e.note(), /No connection: no finer photographs\./);
 });
 
 test("while the view is held the note says nothing about it: the hint and HELD sit by the crosshair (compass.js)", async () => {
