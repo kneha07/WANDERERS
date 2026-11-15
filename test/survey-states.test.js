@@ -224,3 +224,29 @@ test("app/data/survey/*.json, when present, are files this page can show", async
   assert.deepEqual(p.errors, []); assert.deepEqual(p.document.badDraws, []);
   p.close();
 });
+
+// Gaia (ESA, CDS, IRSA) can be offline during a run: "0 unexplained" must not read as "checked and found nothing".
+test("movers still waiting for the Gaia check are counted next to 'unexplained'", async () => {
+  const s = { ...structuredClone(SUMMARY), movers: 119, unexplained: 0, gaia_unchecked: 119 };
+  const p = await open("", s);
+  assert.match(p.$("statUnex").innerHTML, /^0<span class="sub">no Gaia DR3 counterpart · 119 of 119 movers still to check<\/span>$/);
+  p.close();
+});
+
+test("no pending note once every mover is checked, or when an older summary lacks the count", async () => {
+  for (const extra of [{ gaia_unchecked: 0 }, {}]) {
+    const s = { ...structuredClone(SUMMARY), unexplained: 3, ...extra };
+    if (!("gaia_unchecked" in extra)) delete s.gaia_unchecked;
+    const p = await open("", s);
+    assert.equal(p.$("statUnex").innerHTML, '3<span class="sub">no Gaia DR3 counterpart</span>');
+    assert.deepEqual(p.errors, []);
+    p.close();
+  }
+});
+
+test("a partial Gaia check shows how many movers are left", async () => {
+  const s = { ...structuredClone(SUMMARY), movers: 2500, unexplained: 12, gaia_unchecked: 1234 };
+  const p = await open("", s);
+  assert.match(p.$("statUnex").innerHTML, /^12<span class="sub">no Gaia DR3 counterpart · 1,234 of 2,500 movers still to check<\/span>$/);
+  p.close();
+});

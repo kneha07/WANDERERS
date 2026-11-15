@@ -127,7 +127,7 @@ SUMMARY_KEYS = ["generated", "tiles_done", "tiles_total", "sky_fraction", "sky_d
                 "good_detections", "visit_sources", "tracks", "movers", "unexplained", "runtime_hours",
                 "tiles_per_hour", "detections_per_second", "tiles", "validation", "method", "limits"]
 # Added for the web page on top of the contract: run state, progress target, motion threshold, linked sources.
-SUMMARY_EXTRA_KEYS = ["status", "tiles_planned", "min_pm", "unique_sources"]
+SUMMARY_EXTRA_KEYS = ["status", "tiles_planned", "min_pm", "unique_sources", "gaia_unchecked"]
 STATUSES = ("running", "done")                # running: a run is processing tiles; done: no run is live any more
 LEADERBOARD_KEYS = ["generated", "n_candidates", "candidates"]   # n_candidates = all ranked movers, not the top
 DEFAULT_MIN_PM = 150.0                        # mas/yr; process_tile's default per the contract
@@ -1269,6 +1269,7 @@ def build_summary(totals: dict, rows: list[list[int]], runs: list[dict], validat
         "tiles_planned": max(int(tiles_planned), tiles_done),
         "min_pm": float(min_pm),
         "unique_sources": int(totals.get("n_tracks", 0)),      # every linked track is one distinct source
+        "gaia_unchecked": int(totals.get("gaia_unchecked", 0)),  # movers not (yet) compared with Gaia DR3
     }
 
 
@@ -1305,7 +1306,7 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         if min_pm is None:
             min_pm = core_min_pm()
     deadline = None if gaia_budget_s is None else clock() + max(0.0, gaia_budget_s)
-    totals = {k: 0 for k in TILE_COUNT_KEYS + ["movers", "unexplained"]}
+    totals = {k: 0 for k in TILE_COUNT_KEYS + ["movers", "unexplained", "gaia_unchecked"]}
     rows: list[list[int]] = []
     pool: list[tuple[float, float, str, int, dict]] = []      # (-score, -pm_snr, id, k5, mover): ascending = best
     n_ranked = 0
@@ -1350,6 +1351,7 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
                 stats["unchecked_tiles"] += 1
             for i, m in enumerate(movers):
                 m["gaia"] = dict(gaia[i]) if gaia is not None else dict(GAIA_UNCHECKED)
+            totals["gaia_unchecked"] += sum(1 for m in movers if not m["gaia"].get("checked"))
             try:
                 ranked = rank_callable([dict(m) for m in movers], top=max(len(movers), 1))
                 if not isinstance(ranked, list):

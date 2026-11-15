@@ -650,7 +650,7 @@ def test_summary_schema_matches_contract(env):
     do_publish(env, runs=[{"wall_seconds": 60, "tiles": 2, "detections": 2_000_000}])
     s = strict_load(env.out / "summary.json")
     assert list(s) == R.SUMMARY_KEYS + R.SUMMARY_EXTRA_KEYS            # contract keys, then the page's additions
-    assert R.SUMMARY_EXTRA_KEYS == ["status", "tiles_planned", "min_pm", "unique_sources"]
+    assert R.SUMMARY_EXTRA_KEYS == ["status", "tiles_planned", "min_pm", "unique_sources", "gaia_unchecked"]
     assert s["status"] in ("running", "done") and type(s["tiles_planned"]) is int
     assert type(s["min_pm"]) is float and type(s["unique_sources"]) is int and s["tiles_planned"] >= s["tiles_done"]
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", s["generated"])
@@ -845,3 +845,33 @@ def test_docstring_smoke_command_runs(env):
     assert s["tiles_done"] == 6 and s["movers"] == 9
     assert "tile 3 done" in (out / "run.log").read_text()
     assert sorted(int(f.stem) for f in (out / "tiles").glob("*.json")) == [1, 2, 3, 4, 5, 6]
+
+
+# ------------------------------------------------------------------- movers still waiting for the Gaia check
+def test_gaia_unchecked_counts_every_mover_when_gaia_is_off(env):
+    write_tiles(env.out, [1, 2, 3])
+    s = do_publish(env, use_gaia=False)
+    assert s["movers"] > 0 and s["gaia_unchecked"] == s["movers"]
+    assert s["unexplained"] == 0
+
+
+def test_gaia_unchecked_counts_every_mover_when_gaia_is_down(env):
+    env.set_spec(gaia_down=True)
+    write_tiles(env.out, [4, 5])
+    s = do_publish(env)
+    assert s["gaia_unchecked"] == s["movers"] > 0
+
+
+def test_gaia_unchecked_is_zero_when_every_mover_is_checked(env):
+    write_tiles(env.out, [6, 7])
+    s = do_publish(env)
+    lb = strict_load(env.out / "leaderboard.json")
+    checked = sum(1 for m in lb["candidates"] if m["gaia"]["checked"])
+    assert s["gaia_unchecked"] == s["movers"] - checked
+
+
+def test_gaia_unchecked_is_an_int_in_the_written_summary(env):
+    write_tiles(env.out, [8])
+    do_publish(env, use_gaia=False)
+    s = strict_load(env.out / "summary.json")
+    assert type(s["gaia_unchecked"]) is int and 0 <= s["gaia_unchecked"] <= s["movers"]

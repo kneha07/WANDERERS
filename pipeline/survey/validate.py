@@ -108,7 +108,10 @@ KNOWN_STARS = [
     {"name": "Proxima Centauri", "ra": 217.39232147200883, "dec": -62.67607511676666, "epoch": 2016.0,
      "pmra": -3781.741008265163, "pmdec": 769.4650146478623, "plx": 768.0665391873573, "ref": "Gaia DR3"},
     {"name": "61 Cygni A", "ra": 316.7484792940004, "dec": 38.76386244649797, "epoch": 2016.0,
-     "pmra": 4164.2086922846665, "pmdec": 3249.613883848584, "plx": 285.99494829578117, "ref": "Gaia DR3"},
+     "pmra": 4164.2086922846665, "pmdec": 3249.613883848584, "plx": 285.99494829578117, "ref": "Gaia DR3",
+     "why_missed": "At W1 ≈ 2 it is far brighter than NEOWISE can measure: the single-exposure table holds only "
+                   "scattered-light halo detections around it (cc_flags 'H', W1 11-14), never the star itself, "
+                   "so no search of that table can find it"},
     {"name": "Epsilon Indi B", "ra": 331.07645259656397, "dec": -56.79381206688221, "epoch": 2016.0,
      "pmra": 3981.97666296105, "pmdec": -2466.8318147663504, "plx": 270.6580324694526, "ref": "Gaia DR3"},
 ]
@@ -1065,6 +1068,8 @@ def known_movers(results, known=KNOWN_STARS, radius_arcsec=10.0, pm_tol_frac=0.2
                 best, best_sep = m, sep
         row = {"name": star["name"], "pm_true": round(pm_true, 1), "pm_found": None, "recovered": False,
                "error_pct": None, "pa_error_deg": None, "sep_arcsec": None, "mover_id": None, "ref": star.get("ref")}
+        if best is None and star.get("why_missed"):
+            row["why_missed"] = star["why_missed"]
         if best is not None:
             pmra, pmdec = float(best["pmra"]), float(best["pmdec"])
             pm_f = float(best.get("pm") or math.hypot(pmra, pmdec))
@@ -1259,7 +1264,8 @@ def known_note(row):
     """One plain sentence about a known-star check."""
     where = f" ({row['data']})" if row.get("data") else ""
     if row.get("pm_found") is None:
-        return f"No mover reported within 10″ of the star's predicted position{where}."
+        why = f" {row['why_missed']}." if row.get("why_missed") else ""
+        return f"No mover reported within 10″ of the star's predicted position{where}.{why}"
     v = f", {row['n_visits']} visits" if row.get("n_visits") else ""
     if row.get("recovered"):
         return (f"Found {row['sep_arcsec']:.1f}″ from the predicted position; motion off by "

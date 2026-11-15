@@ -569,3 +569,22 @@ def test_table_reader_splits_by_year_and_loses_nothing(w0855):
     assert reader(10227, "year5") is None  # another tile reads as missing
     mjd = np.concatenate([p.column("mjd").to_numpy() for p in parts if p is not None])
     assert np.array_equal(np.sort(mjd), np.sort(w0855.column("mjd").to_numpy()))
+
+
+# ------------------------------------------------------------- a known star the data cannot show says why
+def test_known_note_explains_a_star_the_table_cannot_hold():
+    row = {"name": "61 Cygni A", "pm_found": None, "data": "survey tile 3325",
+           "why_missed": "At W1 ≈ 2 it is far brighter than NEOWISE can measure"}
+    note = V.known_note(row)
+    assert note.startswith("No mover reported within 10″")
+    assert note.endswith("At W1 ≈ 2 it is far brighter than NEOWISE can measure.")
+
+
+def test_known_note_without_a_reason_is_unchanged():
+    assert V.known_note({"pm_found": None}) == "No mover reported within 10″ of the star's predicted position."
+
+
+def test_61_cygni_a_carries_its_reason():
+    star = next(s for s in V.KNOWN_STARS if s["name"] == "61 Cygni A")
+    assert "halo" in star["why_missed"] and "cc_flags" in star["why_missed"]
+    assert all("why_missed" not in s for s in V.KNOWN_STARS if s["name"] != "61 Cygni A")
