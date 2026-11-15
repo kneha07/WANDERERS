@@ -190,6 +190,17 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
+**Star Fix** (`app/starfix.html`, needs `node start.js` or `node server.js`). Upload original iPhone night-sky photos and
+WANDERERS finds where on Earth they were taken, from the stars only: it recognises the stars (cedar-solve plate solve),
+reads which way was down (the phone's gravity sensor, in the Apple MakerNote) and the exact time, and turns the point
+overhead into a latitude and longitude (astropy). The answer is a sentence ("about 130 km south-east of Geelong"), a
+map with an honest circle, and the distance to the GPS position the phone stored. One photo is right to about 50 to
+150 km; the median of a night's photos is better. `POST /api/star-fix` takes the raw photo bytes and runs
+`pipeline/star_fix.py` with the photo on stdin: nothing is written to disk or stored. The page opens with a built-in
+example and, on a static host, says how to start the local server. Checks:
+`.venv/bin/python -m unittest discover -s tests -p "test_star_fix.py"` (Windows: `.venv\Scripts\python.exe`) and
+`node --test test/starfixcore.test.js test/starfix-server.test.js`. Spec: `docs/specs/star-fix-build.md`.
+
 **The real sky behind the Sky Compass** (`app/realsky.js`), so clouds and city lights do not matter. A switch under the
 buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (HYG via the star database, with a City /
 Suburb / Dark choice), constellation lines (d3-celestial) and the planets (JPL elements); it is drawn, not
@@ -774,17 +785,19 @@ the data providers.
 
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
-            star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
+            star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py · star_fix.py
             make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
             aggregate_votes.py (community classifications)
-app/        index.html (home) · observatory.html (console) · compass.html (phone)
+app/        index.html (home) · observatory.html (console) · compass.html (phone) · starfix.html (Star Fix)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
+            starfix.js · starfixcore.js · starfix.css · data/starfix-sample.json
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
             classify.js · classify.css (community classifications)
             starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
             data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
-server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
+server.js   local demo server (live answers, any coordinates, learning a star, Star Fix, /explore/)
 fields.js   the any-coordinates job service used by server.js
+star-fix-solver.js   the Star Fix solver process (time limit, kill tree, answers) used by server.js
 start.js    one-click start for everything (also start.cmd, start.command)
 backend/    FastAPI live explorer API (port 8001)     web/   React live explorer, served at /explore/
 test/ tests/   Node and Python tests              artifacts/   review records, merge records, screenshots
