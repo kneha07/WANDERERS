@@ -283,7 +283,7 @@ Typed coordinates match a cached target only if the sizes agree; without the ser
 shown with a note that the other size needs the local server. Links can carry it: `?ra=269.4479&dec=4.7461&fov=600`.
 
 ```bash
-python .venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
+.venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
 node --test test/fields.test.js     # job handling, validation and HTTP checks (fake pipeline, no network)
 python3 test/test_fov.py            # field-of-view helpers; no packages needed
 ```
@@ -495,7 +495,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
 - Bright stars (Barnard's Star) saturate SPHEREx at many wavelengths; those points are dropped and the card says so.
 - AllWISE is a 2010–2011 coadd; we treat it as epoch 2010.5.
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
-- Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py`.
+- The public static site shows only the prepared targets. With `node server.js` (or `node start.js`), new coordinates are prepared on demand, and `/explore/` shows any patch live.
 - Through Webb: ESASky's Webb maps hold a subset of the data (to mid-2024), and MAST full previews are too large for
   phones, so many frames show the outline only, with a link to the full image. Frames are matched with the
   catalogue (J2000) position; a fast-moving star can sit a few arcseconds from where Webb saw it.
