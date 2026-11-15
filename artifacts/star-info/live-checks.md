@@ -66,3 +66,7 @@ app and started both servers. `POST /api/field {"ra": 150, "dec": 2.2}` (10h00m0
   tab." and sits at y 72-113 under the top bar, off the image (y 327-897) and the toolbar (`1440-toast.png`).
 - Position lookup (TL M1): SIMBAD rows are picked with planets last and the most studied object within 1" first;
   a mark on a Gaia star faster than 1"/yr is also looked for at J2000 (tests in `backend/test_about.py`).
+- Live, CfA SIMBAD: `ra=269.452077&dec=4.693365` (the reproduction) now gives "Barnard's Star is a red dwarf (spectral
+  type M4V) about 6.0 light-years away." (before: "Barnard's Star c is a planet ..."). The Gaia DR3 2016 position
+  with `pmra=-801.551&pmdec=10362.394&epoch=2016` gives Barnard's Star; the same position without a proper motion
+  finds no object within 5″.
