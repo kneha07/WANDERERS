@@ -454,6 +454,29 @@ Each value comes from the best available source, and the page names it:
 shows catalogue estimates at once and, with `node server.js` running, fetches Gaia and Hypatia data in about 20 s
 (`POST /api/star-profile`).
 
+**Every star has a profile and both paths.** `pipeline/star_profiles_bulk.py` gathers measured basics for all
+12,244 stars in about 160 bulk calls instead of one query per star:
+- Hypatia properties, planets and element abundances: about 120 batched `star` calls and 29 whole-element `data` calls;
+- Gaia DR3 physical parameters and astrometry: 1,000 stars per TAP query, through Gaia's Hipparcos cross-match.
+
+The results go into `app/data/stars/profile_bulk/`, 101 shards keyed by HIP number mod 100, so the page loads about
+85 KB for the star it opens.
+
+| Data | Stars |
+|---|---|
+| Gaia and/or Hypatia measurements | 9,056 |
+| Gaia astrometry | 8,281 |
+| Element abundances | 3,136 |
+| Known planets | 329 |
+| Catalogue estimates only (the rest) | about 3,190 |
+
+Stars without a learnt path get a 1900–2100 path calculated from their measured motion (`app/physicspath.js`; Gaia
+DR3, else Hipparcos via HYG). It is labelled "calculated", not "learnt", and the button to learn it with the ML model
+stays. For Barnard's Star the calculated and learnt paths agree to within 1.5″.
+
+The top of the Star database tab lists the stars that are already fully done (full profile with real spectrum,
+learnt path and pre-made sound), and search results carry "full profile" and "learnt path" badges.
+
 **Starquake sounds** are pre-made for every default star (`node scripts/starquake_defaults.js` writes
 `app/data/starquake/model/`). Any other star's sound is generated in the browser the moment it is opened (about
 50 ms), with its waveform shown. The model uses the star's measured radius and temperature from its profile when
