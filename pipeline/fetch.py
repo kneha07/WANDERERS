@@ -5,7 +5,8 @@
 
 Sources (all public, no login):
   * Gaia DR3 (ESA archive TAP)           -> target position, proper motion, field stars
-  * SPHEREx DR1 spectral images (IRSA)    -> cutouts around the target, every wavelength
+  * SPHEREx spectral images (IRSA)        -> cutouts around the target, every wavelength, from every release in
+                                            app/data/spherex_release.json (pipeline/spherex_releases.py)
   * AllWISE atlas images (IRSA)           -> W1 (3.4 um) and W2 (4.6 um) cutouts, epoch ~2010
 
 IRSA is busy during the hackathon and sometimes answers 502/503, so every request retries
@@ -28,6 +29,7 @@ from astropy.time import Time
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
 from fov import DEFAULT_FOV, fov_of, clamp_fov, position_id
+from spherex_releases import load_release_names, sia_cache_name
 
 warnings.simplefilter("ignore")
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,10 +40,12 @@ FIELD_ARCSEC = DEFAULT_FOV  # default side of the square field we analyse; a tar
 SPX_PIX = 6.15              # SPHEREx pixel scale, arcsec
 KEEP_HDUS = ("IMAGE", "FLAGS", "VARIANCE", "WCS-WAVE")
 MAX_IMAGES = 150            # SPHEREx cutouts per target (see fetch())
-# SPHEREx releases to search, oldest first. New data: add the newest collection name here (IRSA lists them with
-# Irsa.list_collections(servicetype="SIA", filter="spherex")) and re-run fetch + analyze. Duplicate images of the
-# same exposure are kept once (the first release listed wins).
-RELEASES = ["spherex_dr1", "spherex_qr3"]
+# SPHEREx releases to search, oldest first. They come from app/data/spherex_release.json, which
+# pipeline/spherex_releases.py keeps current from IRSA's collection list (a weekly GitHub Actions job runs it, see
+# .github/workflows/spherex-sync.yml). FALLBACK_RELEASES is used when that file is missing or broken. Duplicate
+# images of the same exposure are kept once: the first release listed wins (first_release_wins).
+FALLBACK_RELEASES = ["spherex_dr1", "spherex_qr3"]
+RELEASES = load_release_names(fallback=FALLBACK_RELEASES)
 
 session = requests.Session()
 session.headers["User-Agent"] = "wanderers-spaceapps/0.1"
@@ -161,6 +165,16 @@ def sia(collection, c, out):
     return parse_single_table(str(out)).to_table(use_names_over_ids=True)
 
 
+def first_release_wins(rows, seen):
+    """Indexes of one release's rows whose exposure (obs_id, detector) no earlier release had, then add them to
+    `seen`. Called once per release in RELEASES order, so an exposure that two releases both list is kept from the
+    first one. Rows within one release are not compared with each other (as before this was a function)."""
+    key = lambda r: (str(r["obs_id"]), str(r["energy_bandpassname"]))
+    keep = [i for i, r in enumerate(rows) if key(r) not in seen]
+    seen.update(key(rows[i]) for i in keep)
+    return keep
+
+
 def trim(content):
     """Keep only the HDUs we use, so 240 cutouts stay small on disk."""
     h = fits.open(io.BytesIO(content))
@@ -189,21 +203,19 @@ def fetch(tid):
     ref = meta["ref"]
     print(ref_summary(ref, len(meta["field_stars"])), flush=True)
 
-    # --- SPHEREx DR1: one cutout per spectral image covering the target -------------------
+    # --- SPHEREx (every release in RELEASES): one cutout per spectral image covering the target ---
     c25 = predict(ref, 2025.9)
     from astropy.table import vstack
     tabs, seen = [], set()
     for rel in RELEASES:
         try:
-            tb = sia(rel, c25, d / ("spherex_sia.xml" if rel == "spherex_dr1" else f"{rel}_sia.xml"))
+            tb = sia(rel, c25, d / sia_cache_name(rel))
         except Exception as e:
             print(f"   {rel}: not available ({e})"); continue
         if len(tb) == 0:
             continue
         tb = tb[tb["dataproduct_subtype"] == "science"]
-        keep = [i for i, r in enumerate(tb) if (str(r["obs_id"]), str(r["energy_bandpassname"])) not in seen]
-        for i in keep:
-            seen.add((str(tb[i]["obs_id"]), str(tb[i]["energy_bandpassname"])))
+        keep = first_release_wins(tb, seen)
         if keep:
             tabs.append(tb[keep]); print(f"   {rel}: {len(keep)} images")
     spx = vstack(tabs, metadata_conflicts="silent")
@@ -230,7 +242,7 @@ def fetch(tid):
         # Anything already on disk is free to use, so keep it too.
         pick |= {i for i, r in enumerate(spx) if stem(r) in cached}
         spx = spx[sorted(pick)]
-    print(f"   SPHEREx DR1: {n_all} images, using {len(spx)}", flush=True)
+    print(f"   SPHEREx ({', '.join(RELEASES)}): {n_all} images, using {len(spx)}", flush=True)
     fov = fov_of(t)
     size_px = int(fov / SPX_PIX) + 4
 
