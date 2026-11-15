@@ -73,7 +73,8 @@
     const url = new URL(location); url.searchParams.set("target", id); ["ra", "dec", "fov"].forEach((k) => url.searchParams.delete(k));
     history.replaceState(null, "", url);
     await preload();
-    setupSlider(); initMix(true); renderMeta(); renderMetaBox(); setAladin(); fillCompare(); draw(); evidence(); spectrum();
+    if (S.pickUrlDone) { S.pick = null; const u = new URL(location); u.searchParams.delete("pick"); history.replaceState(null, "", u); }
+    setupSlider(); initMix(true); renderMeta(); renderChanges(); renderMetaBox(); setAladin(); fillCompare(); draw(); evidence(); spectrum();
     showPath({ target: id });
     // starquakes for the five challenge targets (typed-in fields have no star parameters, so no widget)
     if (window.StarquakeUI) {
@@ -166,6 +167,17 @@
         g.fillStyle = "#ffe2b0"; g.font = "12px ui-monospace, monospace"; g.fillText(p.mission === "WISE" ? "2010" : Math.floor(p.year), X(p.x) + 8, Y(p.y) - 6);
       }
     }
+    // A pair from the automatic mover search (pipeline/vet.py): 2010 end, arrow, SPHEREx end.
+    const pk = S.pick && S.t.changes && S.t.changes.items.find((c) => c.n === S.pick);
+    if (pk) {
+      const col = { candidate: "#ffb547", known: "#4fd1a5", target: "#4fd1a5", rejected: "#9aa7c2" }[pk.status];
+      g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(X(pk.x0), Y(pk.y0)); g.lineTo(X(pk.x1), Y(pk.y1)); g.stroke();
+      for (const [x, y, lab] of [[pk.x0, pk.y0, "2010"], [pk.x1, pk.y1, String(Math.floor(pk.year))]]) {
+        g.beginPath(); g.arc(X(x), Y(y), 11, 0, 2 * Math.PI); g.stroke();
+        g.font = "12px ui-monospace, monospace"; g.fillText(lab, X(x) + 14, Y(y) + 4);
+      }
+    }
     g.setTransform(1, 0, 0, 1, 0, 0);
     const seen = f && f.detected === false ? " · not detected at this wavelength" : "";
     const lbl = S.math ? S.math.label : diff ? "Difference: SPHEREx 2026 − 2025 (green = now, pink = before)" : mixed ? S.mixOut.label : f ? `${f.label} · ${labelOf(S.ch)}${seen}` : "";
@@ -191,6 +203,40 @@
       `This is the conservative set from the SPHEREx Explanatory Supplement. The flipbook pictures hide only broken detector pixels, so bright stars stay visible.</p>` +
       (visits ? `<h4>SPHEREx visits at this position</h4><ul class="visits">${visits}</ul>` +
         `<p class="hint">${d.visitImages} images used in all; the pipeline downloads a capped, evenly spread share of the images that overlap the target.</p>` : "");
+  }
+  // ---------- what else moved in this field (pipeline/vet.py grades the automatic mover search) ----------
+  const CH_WORD = { candidate: "Unconfirmed", known: "Known object", target: "The target", rejected: "Ruled out" };
+  function renderChanges() {
+    const ch = S.t.changes, box = $("changes");
+    box.hidden = !ch;
+    if (!ch) return;
+    const out = ch.items.filter((c) => c.status === "rejected").length, kn = ch.found - out - ch.candidates;
+    const pairs = (k) => `${k} pair${k === 1 ? "" : "s"}`;
+    $("chSummary").textContent = !ch.found
+      ? "The search found no pair of dots that looks like a moving object here."
+      : `The search proposed ${pairs(ch.found)} of dots. ${ch.candidates ? `${ch.candidates} still unexplained. ` : "None is left unexplained. "}` +
+        `${kn ? `${kn} known. ` : ""}${out ? `${out} ruled out.` : ""}`;
+    $("chList").innerHTML = ch.items.map((c) => {
+      const co = encodeURIComponent(`${c.ra.toFixed(5)} ${c.dec >= 0 ? "+" : ""}${c.dec.toFixed(5)}`);
+      return `<li class="ch-${c.status}"><button data-n="${c.n}" aria-pressed="false">Show</button>` +
+        `<div><b>${CH_WORD[c.status]}</b> <span class="mono">${c.arcsec_per_yr.toFixed(2)}″/yr if real</span><br>${esc(c.reason)} ` +
+        `<a href="https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${co}&Radius=30&Radius.unit=arcsec" target="_blank" rel="noopener noreferrer">SIMBAD ↗</a>` +
+        (c.status === "candidate" ? ` · <a href="https://www.zooniverse.org/projects/marckuchner/backyard-worlds-planet-9" target="_blank" rel="noopener noreferrer">Report it ↗</a>` : "") +
+        `</div></li>`;
+    }).join("");
+    $("chList").querySelectorAll("button").forEach((b) => (b.onclick = () => {
+      S.pick = S.pick === +b.dataset.n ? null : +b.dataset.n;
+      $("chList").querySelectorAll("button").forEach((x) => { const on = +x.dataset.n === S.pick; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on); });
+      const u = new URL(location); if (S.pick) u.searchParams.set("pick", S.pick); else u.searchParams.delete("pick"); history.replaceState(null, "", u);
+      if (S.pick && S.ch !== "w2" && S.t.frames.w2 && S.t.frames.w2.length) document.querySelector('.channel button[data-ch="w2"]').click();
+      else draw();
+    }));
+    // Shareable: ?target=wise0855&pick=2 opens with that pair drawn.
+    const want = Number(new URLSearchParams(location.search).get("pick"));
+    if (!S.pickUrlDone) { S.pickUrlDone = true; const b = want && $("chList").querySelector(`button[data-n="${want}"]`); if (b) { S.pick = want; b.classList.add("on"); b.setAttribute("aria-pressed", "true"); } }
+    $("chNote").textContent = (ch.target_recovered === false
+      ? "The search did not find this mission's own target, so it also misses real movers. Treat an empty list as “nothing found”, not “nothing there”. " : "") +
+      `${ch.method} ${ch.not_checked}`;
   }
   const labelOf = (ch) => (S.t.channels && S.t.channels[ch]) || (ch === "w2" ? "4.6 µm" : "3.4 µm");
 
@@ -407,9 +453,30 @@
     const icon = { ok: "✓", no: "–", warn: "!" };
     $("checks").innerHTML = ev.checks.map((c) => `<li><span class="${c.state}">${icon[c.state]}</span><span>${c.text}</span></li>`).join("");
     $("numbers").innerHTML = (ev.numbers || []).map((n) => `<div><b>${n.value}</b><span>${n.label}</span></div>`).join("");
+    insights();
     $("explain").textContent = S.ex ? S.ex.summary : "Explanation not generated yet (run pipeline/explain.py).";
     $("qButtons").innerHTML = S.ex && S.ex.qa ? S.ex.qa.map((q, k) => `<button data-k="${k}">${q.q}</button>`).join("") : "";
     $("qButtons").querySelectorAll("button").forEach((b) => (b.onclick = () => ($("answer").textContent = S.ex.qa[+b.dataset.k].a)));
+  }
+
+  // ---------- insights: what the numbers mean, the limits of this view, and where to check (pipeline/evidence.py) ----------
+  function insights() {
+    const ins = S.t.insights, box = $("insights");
+    box.hidden = !ins;
+    if (!ins) return;
+    $("facts").innerHTML = ins.facts.map((f) =>
+      `<li><b>${esc(f.headline)}</b><span>${esc(f.detail)}</span><span class="basis">How: ${esc(f.basis)}</span></li>`).join("");
+    $("limits").innerHTML = ins.limits.map((l) => `<li>${esc(l)}</li>`).join("");
+    // Latest measured position if there is one (fast movers leave the catalogue position behind), else the field centre.
+    const last = [...S.t.track].sort((a, b) => b.year - a.year)[0];
+    const ra = last && last.ra != null ? last.ra : S.t.grid.centre_ra, dec = last && last.dec != null ? last.dec : S.t.grid.centre_dec;
+    const c = encodeURIComponent(`${ra.toFixed(5)} ${dec >= 0 ? "+" : ""}${dec.toFixed(5)}`);
+    const links = [
+      ["SIMBAD (is it a known object?)", `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${c}&Radius=30&Radius.unit=arcsec`],
+      ["Gaia DR3 (VizieR)", `https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=I/355/gaiadr3&-c=${c}&-c.rs=30`],
+      ["Backyard Worlds (report an unknown mover)", "https://www.zooniverse.org/projects/marckuchner/backyard-worlds-planet-9"],
+    ];
+    $("nextLinks").innerHTML = links.map(([t, h]) => `<a href="${h}" target="_blank" rel="noopener noreferrer">${esc(t)} ↗</a>`).join(" · ");
   }
 
   $("askForm").onsubmit = async (e) => {

@@ -87,6 +87,8 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 # 3. independent Gaia facts, then evidence cards + target list
 .venv/bin/python pipeline/gaia_facts.py
 .venv/bin/python pipeline/evidence.py
+# 3b. check the automatic mover search against SIMBAD ("What else moved in this field?")
+.venv/bin/python pipeline/vet.py
 # 4. plain-language explanations (Claude Code CLI, headless; no API key)
 .venv/bin/python pipeline/explain.py
 # 5. predicted star paths (proper motion + parallax; offline, seconds)
@@ -333,7 +335,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · fov.py · gaia_facts.py · star_trajectory.py · stardb.py · star_ml.py · starquake.py
+pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py · star_trajectory.py · stardb.py · star_ml.py · starquake.py
             make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
 app/        index.html (home) · observatory.html (console) · compass.html (phone) · brand.css · theme.js · home.css · home.js
             style.css · app.js · search.js · telescope.js · starpath.js · stardb.js · stars.js · starquake.js · starquake-ui.js · starcore.js · longrange.js

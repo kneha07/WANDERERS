@@ -4655,5 +4655,123 @@
     "value": "7.3 ly"
    }
   ]
+ },
+ "changes": {
+  "found": 4,
+  "candidates": 0,
+  "target_recovered": false,
+  "items": [
+   {
+    "n": 2,
+    "status": "rejected",
+    "reason": "Wrong pairing: one end is the mission target, the other end is a different dot.",
+    "arcsec_per_yr": 11.0,
+    "snr": 25.7,
+    "x0": 43.0,
+    "y0": 71.9,
+    "x1": 115.9,
+    "y1": 29.0,
+    "ra": 133.75396,
+    "dec": -7.26893,
+    "ra0": 133.79477,
+    "dec0": -7.24509,
+    "year": 2025.88,
+    "simbad_checked": true
+   },
+   {
+    "n": 4,
+    "status": "rejected",
+    "reason": "The 2010 end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.",
+    "arcsec_per_yr": 9.67,
+    "snr": 18.7,
+    "x0": 31.9,
+    "y0": 123.1,
+    "x1": 39.0,
+    "y1": 49.0,
+    "ra": 133.79702,
+    "dec": -7.25783,
+    "ra0": 133.80098,
+    "dec0": -7.21669,
+    "year": 2025.88,
+    "simbad_checked": true
+   },
+   {
+    "n": 1,
+    "status": "rejected",
+    "reason": "The SPHEREx end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.",
+    "arcsec_per_yr": 5.85,
+    "snr": 11.5,
+    "x0": 82.9,
+    "y0": 24.8,
+    "x1": 127.9,
+    "y1": 23.1,
+    "ra": 133.74723,
+    "dec": -7.27223,
+    "ra0": 133.7724,
+    "dec0": -7.27126,
+    "year": 2025.88,
+    "simbad_checked": true
+   },
+   {
+    "n": 3,
+    "status": "rejected",
+    "reason": "An end is at the edge of the picture, where a dot can appear or vanish without moving.",
+    "arcsec_per_yr": 8.85,
+    "snr": 6.8,
+    "x0": 46.0,
+    "y0": 113.1,
+    "x1": 106.0,
+    "y1": 145.1,
+    "ra": 133.7595,
+    "dec": -7.20443,
+    "ra0": 133.7931,
+    "dec0": -7.22225,
+    "year": 2025.88,
+    "simbad_checked": true
+   }
+  ],
+  "method": "Dots seen only in WISE 2010 are paired with dots seen only in SPHEREx at 4.6 \u00b5m, 8\u2033 to 190\u2033 apart and of similar brightness. Each pair is then checked against the target's path, Gaia DR3 and SIMBAD.",
+  "not_checked": "Asteroids and comets are not checked. An unconfirmed pair is not a discovery."
+ },
+ "insights": {
+  "facts": [
+   {
+    "id": "speed",
+    "headline": "About 87 km/s across the sky",
+    "detail": "That is 2.9 times the speed of Earth around the Sun. It is sideways speed only: motion toward or away from us does not show in images.",
+    "basis": "4.74 \u00d7 8.27\u2033/yr \u00f7 parallax 0.449\u2033"
+   },
+   {
+    "id": "moon",
+    "headline": "Crosses the width of the full Moon in about 220 years",
+    "detail": "A typical star in these images needs more than 100,000 years, which is why this one stands out in a flipbook.",
+    "basis": "1,800\u2033 \u00f7 8.27\u2033/yr"
+   },
+   {
+    "id": "distance",
+    "headline": "7.3 light-years away: one of the Sun's nearest neighbours",
+    "detail": "The light in these images left it about 7.3 years ago.",
+    "basis": "3.26 \u00f7 parallax (\u2033), Luhman & Esplin 2016, AJ 152, 78"
+   },
+   {
+    "id": "methane",
+    "headline": "Cold enough to hold methane gas",
+    "detail": "Methane survives only in atmospheres below roughly 1,300 K, cooler than any true star. It absorbs light near 3.3 \u00b5m, which is why this object is 5.1\u00d7 brighter at 4\u20134.75 \u00b5m.",
+    "basis": "SPHEREx flux at 4\u20134.75 \u00b5m \u00f7 flux at 3.3 \u00b5m"
+   },
+   {
+    "id": "infrared_only",
+    "headline": "Invisible to Gaia's visible-light camera",
+    "detail": "It shows up only in infrared light. Objects like this are what an infrared survey can find and a visible-light survey cannot.",
+    "basis": "no Gaia DR3 source at the predicted position"
+   }
+  ],
+  "limits": [
+   "Motion: an object must shift 2 SPHEREx pixels (12\u2033) to count as moving. Over these 15.8 years that means faster than 0.78\u2033 per year. Slower objects read as \u201cno measurable motion\u201d.",
+   "SPHEREx alone covers only 12 months here: by the same 2-pixel rule, enough only for motion faster than 12\u2033 per year. The 2010 WISE image is what makes slower motion visible.",
+   "Brightness: compared at 3 SPHEREx visits only. A change between or outside those dates is not seen.",
+   "Solar System: the page checks against Gaia stars only. It does not check asteroids or comets, so a moving dot without a Gaia circle may be a known asteroid.",
+   "Crowding: one SPHEREx pixel is 6.15\u2033 wide, so two close objects can blend into one dot and one spectrum."
+  ]
  }
 }

@@ -182,6 +182,12 @@
         NASA's MAST archive (<span id="webbCount"></span>), then shows the real Webb pixels, with the gold outline marking the frame.
         What Webb is observing right now: <a href="https://spacetelescopelive.org/webb" target="_blank" rel="noopener">Space Telescope Live ↗</a></p>
     </div>
+    <div id="changes" class="changes" hidden>
+      <h3>What else moved in this field? <span class="hint">(automatic search, then checked)</span></h3>
+      <p id="chSummary" class="chsum"></p>
+      <ul id="chList" class="chlist"></ul>
+      <p id="chNote" class="hint"></p>
+    </div>
     <div id="starView" hidden>
       <div class="star-search">
         <label for="starQ">Find a star</label>
@@ -260,6 +266,15 @@
     <div id="verdict" class="verdict"></div>
     <ul id="checks" class="checks"></ul>
     <div id="numbers" class="numbers"></div>
+    <div id="insights" class="insights" hidden>
+      <h3>What this tells us <span class="hint">(worked out from the numbers above)</span></h3>
+      <ul id="facts" class="facts"></ul>
+      <details class="limits">
+        <summary>What this view cannot show</summary>
+        <ul id="limits"></ul>
+      </details>
+      <p class="hint next">Check it yourself: <span id="nextLinks"></span></p>
+    </div>
     <div class="ai">
       <h3>WANDERERS explains <span class="tag-chip ai">AI · Claude</span></h3>
       <p class="hint">Written by Claude from the measurements above. An interpretation, not a measurement.</p>

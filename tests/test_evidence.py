@@ -82,6 +82,56 @@ class EvidenceCardTests(unittest.TestCase):
         evidence.card(t)
         self.assertEqual(repr(t), original)
 
+    def test_known_variable_is_not_called_steady(self):
+        c = evidence.card(target(story='variability'))
+        self.assertEqual(c['classification'], 'Known variable star, quiet in these snapshots')
+        self.assertTrue(any('Catalogued as a variable' in x['text'] for x in c['checks']))
+
+    def test_motion_below_limit_is_labelled(self):
+        c = evidence.card(target(motion=motion(pixels=1.1, speed=0.43, expected=0.02)))
+        self.assertIn('below the detection limit', c['numbers'][0]['label'])
+        self.assertEqual(evidence.card(target(motion=motion()))['numbers'][0]['label'], 'measured motion')
+
+
+class InsightTests(unittest.TestCase):
+    def facts(self, **changes):
+        return {f['id']: f for f in evidence.insights(target(**changes))['facts']}
+
+    def test_speed_from_motion_and_parallax(self):
+        # Barnard's Star: 10.40 arcsec/yr at parallax 0.547 arcsec is about 90 km/s
+        m = {'shift_spherex_pixels': 26.6, 'measured_arcsec_per_yr': 10.40, 'expected_arcsec_per_yr': 10.39,
+             'shift_arcsec': 163.5, 'from_year': 2010.5, 'to_year': 2026.2}
+        f = self.facts(motion=m, reference={'source': 'Gaia DR3', 'parallax': 547.0})
+        self.assertIn('About 90 km/s', f['speed']['headline'])
+        self.assertIn('170 years', f['moon']['headline'])
+        self.assertIn('6.0 light-years', f['distance']['headline'])
+
+    def test_no_speed_without_real_motion_or_parallax(self):
+        self.assertNotIn('speed', self.facts(motion=motion(pixels=1.1), reference={'parallax': 100.0}))
+        f = self.facts(motion=motion(), reference={'parallax': None})
+        self.assertNotIn('speed', f)
+        self.assertIn('moon', f)
+
+    def test_fade_in_percent(self):
+        v = {'delta_mag': 0.34, 'uncertainty_mag': 0.06, 'from': 'Jun 2025', 'to': 'Nov 2025'}
+        self.assertIn('Faded by about 27%', self.facts(variability=v)['change']['headline'])
+        v['delta_mag'] = 0.03
+        self.assertNotIn('change', self.facts(variability=v))
+
+    def test_limits_state_the_motion_floor_and_asteroids(self):
+        m = {'shift_spherex_pixels': 26.6, 'measured_arcsec_per_yr': 10.40, 'expected_arcsec_per_yr': 10.39,
+             'shift_arcsec': 163.5, 'from_year': 2010.5, 'to_year': 2026.2}
+        lim = evidence.insights(target(motion=m, spherex_visits=[{'year': 2025.66}, {'year': 2026.20}]))['limits']
+        self.assertTrue(any('faster than 0.78″ per year' in x for x in lim))
+        self.assertTrue(any('SPHEREx alone covers only 6 months' in x for x in lim))
+        self.assertTrue(any('asteroids' in x for x in lim))
+
+    def test_insights_do_not_mutate_input(self):
+        t = target(motion=motion())
+        original = repr(t)
+        evidence.insights(t)
+        self.assertEqual(repr(t), original)
+
 
 if __name__ == '__main__':
     unittest.main()
