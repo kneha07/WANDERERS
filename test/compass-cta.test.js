@@ -12,7 +12,7 @@ test("console and home page show a real Sky Compass button, not a small text lin
   for (const p of ["observatory.html", "index.html"]) {
     const a = html(p).match(/<a class="btn [^"]*compass-cta"[^>]*href="compass\.html"[^>]*>[\s\S]*?<\/a>/);
     assert.ok(a, `${p}: button`);
-    assert.match(a[0], /See it in the sky/, p);
+    assert.match(a[0], /<span class="cc-text">Visualise with Sky Compass<\/span>/, p);   // one line, same text everywhere
     assert.match(a[0], /<svg class="cc-icon"/, p);
   }
   assert.doesNotMatch(html("observatory.html"), /class="ws-link" href="compass\.html"/);
@@ -22,7 +22,7 @@ test("the button follows the target on screen", async () => {
   const p = openPage("observatory.html", "?target=wise0855");
   await p.settle(150);
   assert.equal(p.$("compassCta").href, "compass.html?target=wise0855");
-  assert.match(p.$("compassCtaSub").textContent, /Find WISE 0855-0714 with your phone/);
+  assert.match(p.$("compassCta").title, /aimed at WISE 0855-0714/);
   assert.deepEqual(p.errors, []);
   p.close();
 });
