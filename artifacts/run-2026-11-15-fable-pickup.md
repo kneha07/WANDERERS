@@ -30,4 +30,5 @@ Go back with `git checkout snapshot-2026-11-15-before-real-sky`, or open a branc
 ## Follow-ups raised
 - #42 real-phone tests, Standard/Sharp saves, per-place Remove (real sky)
 - #44 console `<circle>` NaN on the WISE 0855 page (on main before these PRs)
-- Regenerate the five `explain.json` files with `pipeline/explain.py` (needs the Claude CLI): listed in #43
+- #45 regenerate the five `explain.json` files with `pipeline/explain.py` (needs the Claude CLI; owner decision)
+- #46 `vet.py` crashes on a Windows console when it prints ″ (workaround `PYTHONIOENCODING=utf-8`)
