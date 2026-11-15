@@ -52,13 +52,13 @@ function knownStarKeys() {
   }
   return starKeys;
 }
-function learnStar(job, key) {
-  const p = spawn(PY, ["-u", "pipeline/star_ml.py", key], { cwd: __dirname });
+function learnStar(job, key, script = "star_ml.py", out = "pred") {
+  const p = spawn(PY, ["-u", "pipeline/" + script, key], { cwd: __dirname });
   const onData = (d) => d.toString().split("\n").map((l) => l.trim()).filter(Boolean)
     .forEach((l) => job.log.push(l.replace(/^==\s*/, "").replace(/^!!\s*/, "")));
   p.stdout.on("data", onData); p.stderr.on("data", () => {});
   p.on("close", (code) => {
-    job.status = code === 0 && fs.existsSync(path.join(ROOT, "data", "stars", "pred", key + ".json")) ? "done" : "error";
+    job.status = code === 0 && fs.existsSync(path.join(ROOT, "data", "stars", out, key + ".json")) ? "done" : "error";
     if (job.status === "error" && !job.log.length) job.log.push("the model could not be fitted");
     starBusy = null;
   });
@@ -109,6 +109,18 @@ http.createServer(async (req, res) => {
       if (starBusy) { res.writeHead(409); return res.end(JSON.stringify({ error: "Another star is being learnt; try again in a minute", job: starBusy })); }
       const n = String(++starSeq), job = { status: "running", log: [], started: Date.now() };
       starJobs.set(n, job); starBusy = n; learnStar(job, key);
+      res.writeHead(202); return res.end(JSON.stringify({ job: n }));
+    } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) })); }
+  }
+  // star profile (Gaia + Hypatia + Gaia XP spectrum) for a star that has none yet; shares the one-at-a-time slot
+  if (req.method === "POST" && url.pathname === "/api/star-profile") {
+    res.setHeader("content-type", "application/json");
+    try {
+      const { key } = JSON.parse(await body(req, 500));
+      if (!/^[a-z0-9_]{1,40}$/.test(key || "") || !knownStarKeys().has(key)) throw new Error("unknown star");
+      if (starBusy) { res.writeHead(409); return res.end(JSON.stringify({ error: "Busy with another star; try again shortly", job: starBusy })); }
+      const n = String(++starSeq), job = { status: "running", log: [], started: Date.now() };
+      starJobs.set(n, job); starBusy = n; learnStar(job, key, "star_profile.py", "profile");
       res.writeHead(202); return res.end(JSON.stringify({ job: n }));
     } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) })); }
   }

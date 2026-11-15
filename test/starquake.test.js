@@ -117,3 +117,16 @@ test("WAV encoding: valid 16-bit mono header", () => {
   assert.equal(v.getUint32(24, true), 8000); assert.equal(v.getUint16(34, true), 16); assert.equal(buf.byteLength, 44 + 8);
   assert.equal(v.getInt16(44 + 2 * 3, true), 32767);
 });
+
+test("withProfile: measured radius/temperature replace catalogue guesses; literature and published values win", () => {
+  const prof = { properties: { radius: { value: 0.162, source: "Gaia DR3 FLAME" }, teff: { value: 2829, source: "Gaia DR3 GSP-Phot" } } };
+  const m = Q.withProfile(null, prof);
+  assert.equal(m.R, 0.162); assert.equal(m.teff, 2829);
+  assert.ok(Math.abs(m.M - Math.pow(0.162, 1.25)) < 1e-12); assert.match(m.params_ref, /mass–radius/);
+  assert.equal(Q.withProfile(INFO.hip87937, prof), INFO.hip87937, "literature M and R win");
+  assert.equal(Q.withProfile(INFO.sun, prof), INFO.sun, "published nu_max wins");
+  assert.equal(Q.withProfile(null, { properties: { radius: { value: 25 }, teff: { value: 4300 } } }), null, "giants keep the catalogue estimate");
+  // Proxima with its Gaia radius sounds like the other red dwarfs, not kilohertz-high
+  const d = Q.describe(m, null);
+  assert.ok(Q.speedupFor(d.numax).hz > 300 && Q.speedupFor(d.numax).hz < 1500, String(Q.speedupFor(d.numax).hz));
+});
