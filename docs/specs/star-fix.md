@@ -137,7 +137,7 @@ Which input was wrong (`artifacts/star-fix/truth.py`)? At 19:00 on Phillip Islan
 | 3 | -19 deg | +24 (wrong sign) | 0 | 61 deg |
 | 4 | -17 deg | +13 (wrong sign) | 0 | 50 deg |
 
-- The 7 pm time was right. The idea in 2c that the photos were taken near 18:00 is wrong.
+- The 7 pm time was right. The idea in 2c that the photos were taken near 18:00 is wrong. **Later correction (2f):** the original files show 18:10-18:20, so the time was also about 45 min off.
 - The glow direction is 9-43 deg wrong. Local lights and lit clouds, not the horizon, set the glow.
 - The person held the phone turned 9-23 deg the same way in all four photos. So "image top" is also not "up".
 - Conclusion: "up" is the input that limits the fix. Sky glow is not good enough.
@@ -173,6 +173,59 @@ For the app (upload only), the realistic target is level 1, 30-100 km. That is t
 1. The original photo file, not a copy from a chat app, so EXIF keeps `DateTimeOriginal` and `OffsetTimeOriginal`.
 2. A good "up". Best first: the gravity vector in the file (iPhone Apple MakerNote `AccelerationVector`; check this on a real file), then a sea horizon in the frame (correct for eye-height dip), then the compass heading plus two photos in different directions. Sky glow is the last fallback.
 3. A one-time lens calibration per phone model (SIP distortion), so that stars at the frame edge are usable.
+
+## 2f. Test on 14 original iPhone photos (HEIC, 3 places, owner upload 2026-11-14)
+
+Files: 6 photos from an iPhone 13 (2023-11-26, 04:35-05:12, UTC+8), 8 photos from an iPhone 17 Pro (2026-06-14 18:10-18:20 and 2026-06-19 19:06-19:10, UTC+10).
+The 14 June photos are the originals of `star_image/`. **Correction to 2d:** their real time is 18:10-18:20, not 19:00.
+
+What the original files contain (all 14):
+
+- `DateTimeOriginal` + `OffsetTimeOriginal`: exact local time and time zone.
+- `GPSImgDirection` (true): a compass heading.
+- Apple MakerNote tag `0x0008` `AccelerationVector`: the gravity vector at capture, in CoreMotion device axes (x right, y top of phone, z out of the screen; gravity points down). **This is the "up" we needed.**
+- GPS position. The test hid it in a separate answer file and read it only to score the result.
+
+Method (`artifacts/star-fix/iphone/`): `meta.py` (metadata, GPS hidden) -> `solve_all.py` (plate solve, TAN sky map) -> `fix_heic.py` (up from gravity -> zenith -> latitude, longitude) -> `gerr.py` (score).
+
+Two geometry rules learned:
+
+1. Fit the sky map with its tangent point at the image centre (the lens axis). A tangent point at the centre of the matched stars put "up" 10-13 deg wrong.
+2. Map gravity to the image: portrait: image right = +x, image down = -y. Landscape (left side down): image right = -y, image down = -x. View direction = -z.
+
+Results (blind; scored after against the hidden GPS):
+
+| Place | Photos solved | Per-photo error | Median of the session |
+|---|---|---|---|
+| Hong Kong (Sha Tin area) | 2 of 6 (pre-dawn twilight, few stars) | 50, 55 km | **2 km** |
+| Phillip Island | 4 of 4 | 34-155 km | **53 km** |
+| Gold Coast hinterland | 4 of 4 | 63-105 km, one 641 km | **19 km** |
+
+Sensor accuracy measured against GPS:
+
+| Input | Result |
+|---|---|
+| Gravity vector | 0.3-1.4 deg on 9 of 10 photos; one at 5.8 deg (phone moved during the night-mode capture). 1 deg = 111 km. |
+| EXIF compass heading | Unusable for sky photos: about 180 deg wrong on 7 of 10 (iOS flips it when the camera points above about 45 deg), 45-100 deg wrong on the others. The stars give the azimuth instead. |
+| Focal length from the star solve | 3026-3033 px; the 26 mm-equivalent value gives 3028 px. |
+| Venus (photo 2023 05:12, no star solve) | Altitude from gravity was 4.7 deg low, so its circle of position is 520 km off. Same outlier type as above. |
+
+Conclusions:
+
+- Level 1 of the ladder in 2e (30-100 km per photo) is reached with real files. The median of 4 photos reaches about 20-50 km.
+- Reject outliers by consensus: the median of several photos removed the 641 km photo.
+- Twilight photos with fewer than about 10 stars do not solve. Use a bright planet, the Moon or the Sun for them.
+
+Other clues the owner asked about:
+
+| Clue | Value | How |
+|---|---|---|
+| Building edges | "Up" to about 0.1-0.5 deg, a check on the gravity vector | Vertical vanishing point of straight edges |
+| Mountain skyline | Best path below 10 km: 0.1-1 km in mountain country | Match the skyline to a 30 m elevation model (Copernicus DEM). The star fix limits the search to a 50 km circle, and the stars give the true azimuth of every pixel. |
+| Sea horizon | "Up" to about 0.1 deg | Horizon line minus dip for the eye height |
+| Trees | Little value | Not straight, unknown height |
+| Sun (day) | 1 sight = 1 circle of position (30-150 km wide band with this gravity error) | Altitude from gravity + ephemeris. Fix from two sights 2-3 h apart (running fix), or Sun + Moon at once. Fit the disc centre; the phone saturates. |
+| Moon (day or night) | Same as Sun | Correct the Moon's parallax (up to 1 deg); astropy topocentric coordinates do this. |
 
 ## 3. Options
 
