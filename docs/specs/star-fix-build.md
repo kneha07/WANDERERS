@@ -417,6 +417,36 @@ The page is part of WANDERERS (`BRAND.md`): no new colour, typeface or component
 `app/data/starfix-sample.json`: the four `fix` results of the `20260614_*` photos, as `star_fix.py` returns them,
 but with `gps` set to the public value `{"lat": -38.5, "lon": 145.2}` in every entry. No photo is shipped.
 
+### 10.4 UX mechanics (added 2026-11-15, owner: "enforce the uiux robustness")
+
+The page is one place. It uses no `pushState` and no hash routes. Back from Star Fix is one press to home. Reload shows the example again, because nothing is stored.
+
+```
+home --door--> starfix [example | no server] --choose/drop--> reading (queue) --> done
+done --Add more--> reading ; done --Remove my photos--> example + inline Undo (8 s)
+```
+
+| # | Rule |
+|---|---|
+| U1 | Every chosen file shows as a row ("waiting") within 100 ms, before the first request. |
+| U2 | One request at a time (`photoQueue` in `starfixcore.js`). Dedupe by name + size, also against waiting rows. |
+| U3 | Every request ends: abort at 75 s. A 409/500/504/network failure keeps the File and shows an in-row "Try again". |
+| U4 | Keyed in-place updates. A `<details>` that the person opened or closed keeps its state; focus never jumps. |
+| U5 | No layout shift: the map has a fixed 2:1 box; the example renders only after its data and the city list load. |
+| U6 | The "start WANDERERS" line shows only after `/api/health` fails, never while it is pending. |
+| U7 | "Remove my photos" acts at once, moves focus to the upload control and offers "Undo" for 8 s. No `confirm()`. |
+| U8 | Visible drop state ("Drop to add"). Non-image files and files above 30 MB are refused in the page without a request. |
+| U9 | The circle motion can be interrupted and never queues; off under `prefers-reduced-motion`. |
+| U10 | `aria-live` progress ("Reading photo N of M"), then the headline once. Status is a mark plus words, never colour alone. |
+
+### 10.5 Server quality checks (added 2026-11-15)
+
+Measured with `artifacts/star-fix/compress_test.py` (4 photos × 6 sizes × 4 JPEG qualities; issue #39):
+
+- **Solve gate.** Accept a solve only when Matches ≥ 8, RMSE ≤ 300″ and Prob ≤ 1e-8. A JPEG copy of `20260614_081100956` gave a solve with 15 matches, Prob 2.3e-7 and RMSE 516″: the right sky with the wrong scale and roll, 2800 km off. Good solves have Prob ≤ 2.6e-9 and RMSE ≤ 165″. This is test A17.
+- **`small_photo` warning** when the long side is below 1600 px: "This photo is small. Use the original file for a better result." From 1280 px down, the matches fall to 8–16.
+- **No compression on the device.** From 2048 px up, a JPEG copy at any quality from 0.4 to 0.92 gives the same answer to about 1 to 2 km. But Chromium 156 on Windows cannot decode HEIC (`createImageBitmap` gives `InvalidStateError`), and iPhone HEIC files are 1 to 3 MB. So the 30 MB limit stays. For a hosted version later: resize on the device to 3072 px at quality 0.85, and copy the EXIF block with the original orientation.
+
 ## 11. Tests and acceptance criteria
 
 Commands (Windows, from the worktree root):
