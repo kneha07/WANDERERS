@@ -55,6 +55,8 @@ def test_distance_only_from_a_parallax_measured_to_5_sigma():
      "It is named after E. E. Barnard, who measured its motion in 1916."),
     ("Barnard's Star is a small red dwarf. At a distance of 5.96 light-years it is the fourth-nearest star.", None),
     ("A planet was found around it.", None),  # a discovery verb but no year
+    ("The brown dwarfs were discovered in 2003. ε Indi Ba is an early T dwarf.",  # a sentence can start with a Greek letter
+     "The brown dwarfs were discovered in 2003."),
 ])
 def test_history_sentence_is_the_first_with_a_discovery_verb_and_a_year(extract, sentence):
     assert about.history_sentence(extract) == sentence

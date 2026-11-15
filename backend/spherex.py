@@ -43,7 +43,7 @@ J2016_MJD = 57388.5  # Gaia DR3 reference epoch
 # CDS Sesame and its CfA mirror. CDS now redirects to a mirror that can wait a minute when SIMBAD is down, so each
 # gets one short try. -oxp: XML with proper motion; SNV: SIMBAD, then NED, then VizieR.
 SESAME_URLS = ("https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?", "https://vizier.cfa.harvard.edu/viz-bin/nph-sesame/-oxp/SNV?")
-SESAME_TIMEOUT_S = 8
+SESAME_TIMEOUT_S, MIRROR_DOWN_S = 8, 600  # one short try per mirror; a failed mirror is skipped for 10 minutes
 SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
 S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
@@ -405,12 +405,17 @@ def gaia_field(center, radius_deg):
 def sesame_resolver(name, urls):
     """The first <Resolver> with a position that a Sesame mirror finds for name (its host in the attribute "mirror"),
     or None if no mirror knows it.
-    A mirror that fails or says "nothing found" passes the name to the next one. HTTPException(502) if all fail."""
+    A mirror that fails or says "nothing found" passes the name to the next one. A mirror that failed is skipped for
+    MIRROR_DOWN_S (the last one is always asked). HTTPException(502) if all fail."""
     failed = []
     for url in urls:
+        if time.time() < _down_until.get(url, 0) and url != urls[-1]:  # it failed a few minutes ago
+            failed.append(url.split("/")[2])
+            continue
         try:
             hit = ET.fromstring(http_get(url + quote(name), tries=1, timeout=SESAME_TIMEOUT_S).content).find(".//Resolver[jradeg]")
         except (HTTPException, ET.ParseError) as e:  # no answer, or an HTML error page
+            _down_until[url] = time.time() + MIRROR_DOWN_S
             failed.append(url.split("/")[2])
             log.warning("Sesame %s failed for %r: %s", url.split("/")[2], name, getattr(e, "detail", e))
             continue

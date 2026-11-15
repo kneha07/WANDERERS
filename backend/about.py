@@ -49,8 +49,9 @@ LY_PER_MAS = 3261.56  # light-years for a parallax of 1 mas
 HISTORY_VERB = re.compile(r"\b(discover\w*|found|identified|detected|named|designated|catalogu?ed|measured|observed|"
                           r"announced|recorded|noted|confirmed|classified|reported)\b", re.I)
 YEAR = re.compile(r"\b(1[5-9]\d\d|20\d\d)\b")
-# A sentence ends at . ! ? and a space before a capital, but not after an initial ("E. E. Barnard") or "St." and the like.
-SENTENCE_END = re.compile(r"(?<=[.!?])(?<!\b[A-Z]\.)(?<!\b(?:St|Dr|No|vs|ca)\.)\s+(?=[A-Z0-9\"“(])")
+# A sentence ends at . ! ? and a space before anything but a small letter (a capital, a digit, "ε Indi"), but not
+# after an initial ("E. E. Barnard") or "St." and the like.
+SENTENCE_END = re.compile(r"(?<=[.!?])(?<!\b[A-Z]\.)(?<!\b(?:St|Dr|No|vs|ca)\.)\s+(?=[^a-z\s])")
 PREFIX = re.compile(r"^(NAME|V\*|\*\*|\*)\s+")  # SIMBAD name prefixes: "NAME Barnard's star", "V* R Dra", "* eps Ind B"
 
 

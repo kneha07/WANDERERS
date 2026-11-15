@@ -38,7 +38,7 @@
       "name": "Search button",
       "steps": [{ "fill": "#q", "value": "R Dra" }],
       "button": "#search-btn",
-      "api": "/api/frames",
+      "api": "/api/resolve",
       "method": "GET"
     }
   ],

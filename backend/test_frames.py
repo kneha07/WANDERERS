@@ -215,6 +215,7 @@ def test_a_name_resolves_on_the_next_cds_mirror_when_the_first_one_hangs(monkeyp
             raise spherex.requests.Timeout("the CDS mirror waits for SIMBAD")
         return Xml(SESAME_HIT)
     monkeypatch.setattr(spherex.requests, "get", cds)
+    monkeypatch.setattr(spherex, "_down_until", {})  # no mirror marked down by an earlier test
     spherex.sesame.cache_clear()
     coord, name, pm = spherex.resolve("Wolf 359")
     assert (name, pm, round(coord.ra.deg, 4)) == ("Wolf 359", (-3866.338, -2699.215), 164.1205)
@@ -228,3 +229,18 @@ def test_an_unknown_name_fails_fast_with_a_plain_message(monkeypatch):
         spherex.resolve("zzqx not a star")
     assert e.value.status_code == 400
     assert e.value.detail.startswith("No object called 'zzqx not a star' found.")
+
+
+def test_after_a_mirror_fails_the_next_names_skip_it_for_10_minutes(monkeypatch):
+    asked = []
+    def cds(url, params=None, timeout=None, **kw):
+        asked.append(url.split("/")[2])
+        if "unistra" in url:
+            raise spherex.requests.Timeout("the CDS mirror waits for SIMBAD")
+        return Xml(SESAME_HIT)
+    monkeypatch.setattr(spherex.requests, "get", cds)
+    monkeypatch.setattr(spherex, "_down_until", {})
+    spherex.sesame.cache_clear()
+    spherex.resolve("Wolf 359")
+    spherex.resolve("Wolf 359 again")
+    assert asked == ["cds.unistra.fr", "vizier.cfa.harvard.edu", "vizier.cfa.harvard.edu"]
