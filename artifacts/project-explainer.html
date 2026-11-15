@@ -235,7 +235,7 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
 <!-- EVIDENCE -->
 <section class="sec" aria-labelledby="ev">
   <header><span class="eyebrow">The core logic</span><h2 id="ev">How the evidence card decides</h2>
-  <p class="lede"><code>pipeline/evidence.py</code> asks these questions in order. The first "yes" wins. Confidence counts the key checks for the chosen class: high when all pass (at least 2) or 3 or more pass, medium when 2 pass, low otherwise. It drops one step, with the reason shown, when most SPHEREx points are saturated. Read the printed list of checks, not only the headline.</p></header>
+  <p class="lede"><code>pipeline/evidence.py</code> asks these questions in order. The first "yes" wins. Confidence counts the key checks for the chosen class: high when all pass (at least 2) or 3 or more pass, medium when 2 pass, low otherwise. For the variable and steady classes, it drops one step, with the reason shown, when most SPHEREx points are saturated. Read the printed list of checks, not only the headline.</p></header>
   <div class="ladder">
     <div><span class="q">Cold and red, and it moved?</span><span class="a">Cold brown dwarf</span></div>
     <div><span class="q">Brightness varies between surveys?</span><span class="a">Variable star</span></div>
