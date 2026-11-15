@@ -297,3 +297,47 @@ test("night: refused files are listed but not counted; a photo that disagrees co
   assert.equal(C.night([rows[0], { state: "waiting" }]).pending, true);
   assert.equal(C.night([rows[4]]).c, null);
 });
+
+// ---- night(rows, {cities, example}): everything one answer block shows; the page only writes it out ----
+const row = (result, extra = {}) => ({ result, utc: result && result.utc, state: result ? "done" : "waiting", name: "x.heic", ...extra });
+const at = (lat, lon, utc) => ({ status: "fix", lat, lon, utc, sky: { constellation: "Carina" }, warnings: [] });
+
+test("night: the example block, as one call (A6, A11 words)", () => {
+  const v = C.night(SAMPLE.map((s) => row(s)), { cities: CITIES, example: true });
+  assert.equal(v.day, "14 June 2026");
+  assert.equal(v.headline, "The stars place these photos about 130 km south-east of Geelong, Australia.");
+  assert.deepEqual([v.position, v.radius, v.check, v.hint], ["39.0° S, 145.4° E", "Usually right to about 65 km.", "✓ The phone's GPS recorded a spot 61 km from here.", ""]);
+  assert.deepEqual([v.summary, v.open], ["4 photos used", false]);
+  assert.equal(v.osm, "https://www.openstreetmap.org/?mlat=-39.02&mlon=145.41#map=7/-39.02/145.41");
+  assert.deepEqual(v.rows.map((x) => [x.mark, x.text, x.retry]), SAMPLE.map((s) => ["✓", `Used · stars of ${s.sky.constellation}`, false]));
+});
+
+test("night: the map window is 16 degrees across at least, 40 at most, else 4 x the larger of radius and GPS distance", () => {
+  const v = C.night(SAMPLE.map((s) => row(s)), { cities: CITIES });
+  assert.equal(v.map.span, 16, "65 km and a GPS 61 km away: the 16 degree minimum keeps the coastline readable");
+  near(v.map.r, 65.5, 0.1);
+  const pxPerDeg = 608 / v.map.span, circlePx = v.map.r / 111.195 * pxPerDeg;   // the circle radius on a 608 px wide map
+  assert.ok(circlePx >= 2 * C.RETICLE_PX, `circle ${circlePx.toFixed(1)} px vs reticle ${C.RETICLE_PX} px`);
+  const one = C.night([row(at(-38.5, 145.2, "2026-06-14T08:00:00Z"))]);   // one photo: radius 150 km, no GPS
+  near(one.map.span, 16 * 150 / 111.195, 0.01);
+  const far = C.night([row({ ...at(-38.5, 145.2, "2026-06-14T08:00:00Z"), gps: { lat: -20, lon: 120 } })]);   // GPS thousands of km away
+  assert.equal(far.map.span, 40);
+  assert.equal(C.night([row({ status: "no_solve", stars: 3 })]).map, null, "no place, no map");
+});
+
+test("night: each row says used or not, with a mark and words; only an error row offers Try again", () => {
+  const good = [at(-38.5, 145.2, "2026-06-14T08:10:00Z"), at(-38.9, 145.6, "2026-06-14T08:11:00Z")], far = at(-33.9, 151.2, "2026-06-14T08:12:00Z");
+  const v = C.night([row(good[0]), row(far), row(good[1]), row({ status: "error" }), row(null), row(null, { state: "reading" }), row({ status: "bad_file" })]);
+  assert.deepEqual(v.rows.map((x) => [x.used, x.mark, x.retry]),
+    [[true, "✓", false], [false, "!", false], [true, "✓", false], [false, "!", true], [false, "·", false], [false, "…", false], [false, "!", false]]);
+  assert.equal(v.rows[1].text, "Not used: it disagrees with the other photos");
+  assert.deepEqual([v.used, v.total, v.summary], [2, 6, "Photos"]);
+});
+
+test("night: the list is open while photos are read or one was not used, else closed; the headline waits for a first answer", () => {
+  const ok = row(at(-38.5, 145.2, "2026-06-14T08:10:00Z"));
+  assert.deepEqual([C.night([ok, row(null)]).open, C.night([ok]).open, C.night([ok, row({ status: "no_solve" })]).open], [true, false, true]);
+  assert.equal(C.night([row(null), row(null, { state: "reading" })]).headline, "", "no sentence before the first answer");
+  assert.equal(C.night([row({ status: "no_solve" }), row(null)]).headline, "No place found from these photos yet.");
+  assert.equal(C.night([row({ status: "no_solve" })]).headline, "No place found from these photos.");
+});

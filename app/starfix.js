@@ -20,11 +20,6 @@
   const setKm = (el, t) => {   // the same, with each km value in the mono face of measured values
     if (el.textContent !== t) el.replaceChildren(...t.split(/(\d+)(?= km)/).map((s, i) => (i % 2 ? Object.assign(document.createElement("span"), { className: "mono", textContent: s }) : s)));
   };
-  const isUsed = (r, outliers) => !!r.result && r.result.status === "fix" && !outliers.includes(r.result);
-  const fmtDate = (local) => {   // the photo's own calendar date, not the date where the browser is
-    const [y, m, d] = local.slice(0, 10).split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-  };
 
   // ---- one answer block per night, made once and then updated in place ----
   function makeBlock(isExample) {
@@ -38,34 +33,24 @@
     return b;
   }
 
-  function fill(b, rows) {
-    const { c, outliers, used, total, pending, gps, local } = C.night(rows);
-    const h = C.headline(c, c && C.nearestCity(c.lat, c.lon, cities), gps, used, b.isExample, pending);
-    setText(b.day, local ? fmtDate(local) : "");
-    setText(b.head, c || rows.some((r) => r.result) ? h.headline : "");   // no sentence before the first answer of this night
-    setText(b.pos, h.position || ""); setKm(b.radius, h.radius || ""); setKm(b.check, h.check || ""); setText(b.hint, h.hint || "");
-    b.map.hidden = b.osm.hidden = !c;
-    if (c) {
-      const lat = c.lat.toFixed(2), lon = c.lon.toFixed(2);
-      b.canvas.setAttribute("aria-label", h.headline);
-      b.link.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=7/${lat}/${lon}`;
-      b.gpsKey.hidden = !gps; b.gps = gps;
-      // window: half-height 4 x the larger of the radius and the GPS distance; 16 to 40 degrees across, 2:1.
-      // 16 at least: a closer crop of the 2048 px day.jpg blurs the coastline and the place is lost
-      const span = Math.min(40, Math.max(16, 16 * Math.max(c.radiusKm, gps ? C.distKm(gps, c) : 0) / 111.19));
-      draw(b, { lat: c.lat, lon: c.lon, r: c.radiusKm, span });
+  function fill(b, rows) {   // the rules are in StarFixCore.night(); this only writes its answer into the block
+    const v = C.night(rows, { cities, example: b.isExample });
+    setText(b.day, v.day); setText(b.head, v.headline); setText(b.pos, v.position);
+    setKm(b.radius, v.radius); setKm(b.check, v.check); setText(b.hint, v.hint);
+    b.map.hidden = b.osm.hidden = !v.map;
+    if (v.map) {
+      b.canvas.setAttribute("aria-label", v.headline);
+      b.link.href = v.osm;
+      b.gpsKey.hidden = !v.gps; b.gps = v.gps;
+      draw(b, v.map);
     }
-    rows.forEach((r, i) => {
-      const e = rowFor(r), out = outliers.includes(r.result);
+    v.rows.forEach((x, i) => {
+      const e = rowFor(x.row);
       if (b.list.children[i] !== e.li) b.list.insertBefore(e.li, b.list.children[i] || null);   // moves only when its place changed
-      setText(e.mark, !r.result ? (r.state === "reading" ? "…" : "·") : isUsed(r, outliers) ? "✓" : "!");
-      setText(e.text, C.describe(r.result || { status: r.state }, out));
-      e.retry.hidden = !r.result || r.result.status !== "error";
+      setText(e.mark, x.mark); setText(e.text, x.text); e.retry.hidden = !x.retry;
     });
-    setText(b.summary, C.photosLine(used, total, pending));
-    // Until the person opens or closes the list: open while photos are read or when one was not used, else closed.
-    const open = pending || rows.some((r) => r.result && !isUsed(r, outliers));
-    if (!b.touched && b.details.open !== open) b.details.open = open;
+    setText(b.summary, v.summary);
+    if (!b.touched && b.details.open !== v.open) b.details.open = v.open;   // until the person opens or closes the list
   }
 
   function rowFor(r) {
@@ -140,7 +125,8 @@
     const cx = x(s.lon), cy = y(s.lat);   // the answer: a solid point with a four-tick reticle, as in the emblem ("now")
     g.beginPath(); g.arc(cx, cy, 2.5 * k, 0, 2 * Math.PI); g.fill();
     g.beginPath();
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.moveTo(cx + dx * 5 * k, cy + dy * 5 * k); g.lineTo(cx + dx * 9 * k, cy + dy * 9 * k); }
+    const t = C.RETICLE_PX * k;   // ticks from 5 px to the reticle size (9 px), the size night() tests the circle against
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.moveTo(cx + dx * 5 * k, cy + dy * 5 * k); g.lineTo(cx + dx * t, cy + dy * t); }
     g.stroke();
     if (b.gps) {   // what the phone recorded: a hollow ring
       g.strokeStyle = tok("--viewer-ink"); g.beginPath(); g.arc(x(b.gps.lon), y(b.gps.lat), 5 * k, 0, 2 * Math.PI); g.stroke();

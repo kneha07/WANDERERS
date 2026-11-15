@@ -105,21 +105,45 @@
     return out;
   }
 
-  // One night of rows -> what its block shows. Refused files (not a photo, too large) are listed but are not photos of
-  // the night, so they are not counted. A photo that disagrees (outlier) counts as a photo, but not as used.
-  const REFUSED = ["bad_file", "too_large"];
-  function night(rows) {
-    const fixes = rows.filter((r) => r.result && r.result.status === "fix").map((r) => r.result);
-    const c = fixes.length ? combine(fixes) : null, outliers = c ? c.outliers : [];
-    const first = (k) => (rows.find((r) => r.result && r.result[k]) || { result: {} }).result[k] || null;
-    return { c, outliers, used: fixes.length - outliers.length, pending: rows.some((r) => !r.result), gps: first("gps"), local: first("local"),
-      total: rows.filter((r) => !(r.result && REFUSED.includes(r.result.status))).length };
-  }
-
   // Summary of the photo list of one night, and the progress line.
   const photosLine = (used, total, pending) => (pending ? "Photos"
     : `${used === total ? "" : used + " of "}${total} photo${total === 1 ? "" : "s"} used`);
   const reading = (n, m) => `Reading photo ${n} of ${m}`;
+
+  const fmtDay = (local) => {   // the photo's own calendar date ("14 June 2026"), not the date where the browser is
+    const [y, m, d] = local.slice(0, 10).split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  };
+  const RETICLE_PX = 9;   // the reticle's ticks end this far from the answer on the page's map (CSS px)
+
+  // One night of page rows -> everything its answer block shows; the page only writes it out (spec 8, 10.2).
+  // Refused files (not a photo, too large) are listed but are not photos of the night, so they are not counted.
+  // A photo that disagrees (outlier) counts as a photo, but not as used. opts: cities (rows of data/earth/cities.json),
+  // example (the built-in example says "The phone's GPS").
+  const REFUSED = ["bad_file", "too_large"];
+  function night(rows, { cities = null, example = false } = {}) {
+    const fixes = rows.filter((r) => r.result && r.result.status === "fix").map((r) => r.result);
+    const c = fixes.length ? combine(fixes) : null, outliers = c ? c.outliers : [];
+    const first = (k) => (rows.find((r) => r.result && r.result[k]) || { result: {} }).result[k] || null;
+    const isUsed = (r) => !!r.result && r.result.status === "fix" && !outliers.includes(r.result);
+    const gps = first("gps"), local = first("local"), pending = rows.some((r) => !r.result), used = fixes.length - outliers.length;
+    const total = rows.filter((r) => !(r.result && REFUSED.includes(r.result.status))).length;
+    const h = headline(c, c && nearestCity(c.lat, c.lon, cities), gps, used, example, pending);
+    const lat = c && c.lat.toFixed(2), lon = c && c.lon.toFixed(2);
+    return { c, outliers, used, total, pending, gps, local,
+      day: local ? fmtDay(local) : "",
+      headline: c || rows.some((r) => r.result) ? h.headline : "",   // no sentence before the first answer of this night
+      position: h.position || "", radius: h.radius || "", check: h.check || "", hint: h.hint || "",
+      // map window: half-height 4 x the larger of the radius and the GPS distance; 16 to 40 degrees across, 2:1.
+      // 16 at least: a closer crop of the 2048 px day.jpg blurs the coastline and the place is lost
+      map: c && { lat: c.lat, lon: c.lon, r: c.radiusKm, span: Math.min(40, Math.max(16, 16 * Math.max(c.radiusKm, gps ? distKm(gps, c) : 0) / (R * DEG))) },
+      osm: c ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=7/${lat}/${lon}` : "",
+      rows: rows.map((r) => ({ row: r, used: isUsed(r), retry: !!r.result && r.result.status === "error",
+        mark: !r.result ? (r.state === "reading" ? "…" : "·") : isUsed(r) ? "✓" : "!",
+        text: describe(r.result || { status: r.state }, outliers.includes(r.result)) })),
+      summary: photosLine(used, total, pending),
+      open: pending || rows.some((r) => r.result && !isUsed(r)) };   // the list until the person opens or closes it
+  }
 
   // ---- the photo list and its queue: one request at a time, in order. No DOM and no fetch: the page passes
   // send(file, signal) -> Promise of a result, and onChange(), which runs after every change of the list.
@@ -177,6 +201,6 @@
     return { rows, add, retry, clear, restore, progress: () => ({ n, m, active: m > 0 }) };
   }
 
-  const api = { distKm, sessions, combine, circle, describe, nearestCity, headline, night, photosLine, reading, photoQueue };
+  const api = { distKm, sessions, combine, circle, describe, nearestCity, headline, night, photosLine, reading, photoQueue, RETICLE_PX };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.StarFixCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

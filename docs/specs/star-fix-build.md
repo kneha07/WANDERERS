@@ -241,7 +241,7 @@ Input: the `fix` results of the page. Functions:
 | `circle(lat, lon, km, n = 64)` | Points of the error circle, by the destination-point formula, for the map |
 | `describe(result, isOutlier)` | The row text for one photo: the exact sentences of the table in section 10.2 |
 | `headline(combined, city, gps, count, example, pending)` | The headline, the "Usually right to about N km" line and the check line, by the rules in section 10.2 |
-| `night(rows)` | One night of page rows -> `{c, outliers, used, total, pending, gps, local}`: the counts of 10.2 (refused files not counted, outliers not used) |
+| `night(rows, {cities, example})` | One night of page rows -> everything its answer block shows: `day`, `headline` (empty before the first answer), `position`, `radius`, `check`, `hint`, `map` (`{lat, lon, r, span}`, the window rule of 10.2) and `osm`, `rows` (`{row, used, mark, text, retry}`), `summary`, `open` (the list default), and the counts `used`, `total`, `pending` (refused files not counted, outliers not used). The page only writes it out (architecture pass). |
 | `photoQueue(send, onChange)` | The photo list and its one-at-a-time queue (10.4); `add(files)` returns the names that were already in the list |
 
 The radius rule covers the truth in all three sample sessions (radius 53, 65 and 107 km; truth at 3, 61 and 10 km).
