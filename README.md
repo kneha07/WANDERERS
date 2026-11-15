@@ -38,6 +38,19 @@ that with real infrared data spanning 2010 to 2026, then goes one step further: 
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
 evidence on screen. Unmatched objects are called **candidates, never discoveries**.
 
+## The challenge requirements, one by one
+
+Each row says what WANDERERS does, where to see it on the live site, and where the code and tests are.
+
+| # | Requirement | What WANDERERS does | See it live | Code |
+|---|---|---|---|---|
+| 1 | **Automatic SPHEREx data updates**, showing the current release and the last sync | `pipeline/spherex_releases.py` asks NASA IRSA which SPHEREx releases exist and records how recent our prepared targets are. Every page shows one line, e.g. *SPHEREx Quick Release 3 · data through Sep 2026 · last synced 15 Nov 2026 · checked …*, and says when a newer release has data our targets lack. A weekly GitHub Action re-runs the pipeline when a release appears and opens a pull request with the refreshed data. | [Home](https://rajryadav4.github.io/wanderers/) and [explorer](https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855): the "SPHEREx data" line | `pipeline/spherex_releases.py`, `.github/workflows/spherex-sync.yml`, `app/release.js`, `app/data/spherex_release.json` · [details](#keeping-the-spherex-data-current) |
+| 2 | **Combine the six SPHEREx detectors**, with a switch between individual and combined | A combined channel, *All 6 detectors combined (0.75–5.0 µm)*: each detector's co-add is divided by its own noise, then summed, so no detector dominates and faint objects gain signal-to-noise. The explorer switches between **Individual detectors** (D1–D6) and **Combined (all 6)**; the choice is kept in the link. | [WISE 0855, combined](https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855&ch=all) | `pipeline/analyze.py`, `app/app.js`, `app/frameinfo.js` · [details](#frame-details-and-data-flags) |
+| 3 | **Contamination and observation metadata**, clearly visible | Every frame shows mission, instrument, detectors and wavelength range, the wavelength at the target, observing dates, images stacked, flags at the target and in the aperture, saturation, bad pixels and SPHEREx's own quality flag. It ends with a verdict, **good / caution / poor**, and the reason. Flag meanings come from the FITS headers. Survey candidates carry tile-edge, crowded, saturated and artefact flags. | [Explorer](https://rajryadav4.github.io/wanderers/observatory.html?target=barnard): "Data quality" panel under the flipbook | `pipeline/analyze.py`, `app/frameinfo.js` · [details](#frame-details-and-data-flags) |
+| 4 | **Citizen-science classification**, aggregated across users | Every target and every survey candidate can be marked **Moving / Variable / Stationary / Artifact / Unsure**. A vote counts on the page at once. **Send my vote** files it through a GitHub issue form. A GitHub Action counts everyone's votes (one per person per object, newest wins) and shows a consensus once at least 3 people agree by 60%. | [Explorer](https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855): "Classify this object"; [survey](https://rajryadav4.github.io/wanderers/survey.html): any candidate | `app/classify.js`, `.github/ISSUE_TEMPLATE/classification.yml`, `pipeline/aggregate_votes.py`, `.github/workflows/classifications.yml` · [details](#community-classifications-citizen-science) |
+| 5 | **Large-scale candidate discovery and ranking** | The Sky Survey checks each mover against Gaia DR3 and ranks it with a transparent score. It also offers filters, a high-confidence preset, CSV/JSON export, links to other archives at the right epoch, and `promote.py` to send a candidate through the full WANDERERS pipeline. | [Sky Survey](https://rajryadav4.github.io/wanderers/survey.html) | `pipeline/survey/` · [details](#sky-survey-from-the-ranked-list-to-a-person-investigating) |
+| 6 | **Automated search of a billion-plus objects**: data in, movers out, ranked for people | The sky is cut into 12,288 HEALPix tiles. For each tile the pipeline reads every NEOWISE single-exposure detection from 2014 to 2024 straight from NASA's AWS copy (about 15 million per tile). It then links the detections into ten-year tracks, fits their motion, rejects artefacts, checks Gaia, and ranks what is left for people to inspect. It runs unattended and resumes after interruptions. Before trusting it we checked it: hidden fake movers, empty skies, and real fast stars it was not told about. The [live page](https://rajryadav4.github.io/wanderers/survey.html) shows how much of the sky is done; more than 10 billion detections had been processed when this was written. | [Sky Survey](https://rajryadav4.github.io/wanderers/survey.html): counts, sky map, validation, ranked list | `pipeline/survey/` (`tiles.py`, `link.py`, `rank.py`, `run.py`, `validate.py`) · [contract](docs/survey-contract.md) |
+
 ### Sixteen years in one picture
 
 ```mermaid
@@ -552,6 +565,27 @@ node --test test/starprofile.test.js                     # colours, Sun ratios =
 ```
 
 ### Frame details and data flags
+
+**Six detectors, one at a time or combined.** SPHEREx sees 0.75–5.0 µm with six detectors (D1–D6), each covering
+one slice of the spectrum. Under the 3.4 / 4.6 µm channel buttons, the **SPHEREx detectors** switch picks
+**Individual detectors** (choose D1–D6) or **Combined (all 6)**. The combined image stacks the six detectors' co-adds
+of each survey visit: each is background-subtracted and divided by its own robust noise (median and MAD), then they
+are summed and divided by √(number of detectors with data). The picture is in units of the noise, no detector
+dominates, and a source seen by several detectors gains signal-to-noise. Motion is still measured at matched
+wavelengths (3.4 and 4.6 µm), because the combined image mixes wavelengths. The choice is in the link
+(`?ch=d1` … `?ch=d6`, `?ch=all`).
+
+**Data quality of every frame.** A panel under the flipbook follows the frame being shown:
+- **What:** mission and instrument, detectors and wavelength range, the wavelength at the target, first and last
+  observation (UTC), and the number of images stacked.
+- **Contamination:** SPHEREx flags at the target pixel and inside the 3-pixel photometry aperture, saturation
+  (OVERFLOW at the target), the number of bad or flagged pixels near the target, and SPHEREx's own L2 quality flag.
+- **Verdict:** **good / caution / poor**, with the reason. A combined frame is judged from its six detector co-adds.
+  WISE and NEOWISE frames have no flag planes, so only blank pixels and a saturated core are checked, and the panel
+  says so.
+
+The image table shows readable flag chips (hover for the meaning, taken from the FITS header's flag descriptions) and
+a legend.
 
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
 how many SPHEREx images were stacked, whether the object was seen and how strongly), how many SPHEREx spectrum
