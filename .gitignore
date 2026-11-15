@@ -9,3 +9,6 @@ data/cache/
 .DS_Store
 data/*.log
 data/*.sh
+
+# browser-check profiles (test/browser/realsky.mjs); they can hold synced account data
+artifacts/real-sky/prof*/
