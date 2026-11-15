@@ -1,6 +1,6 @@
 """HTTP API for the live SPHEREx explorer. Run from the repo root: uvicorn backend.app:app --port 8001
 
-WANDERERS server.js (port 8000) proxies /api/frames and /api/live-health to this server.
+WANDERERS server.js (port 8000) proxies /api/frames, /api/resolve, /api/about and /api/live-health to this server.
 Every error answer is JSON {"detail": "..."} (docs/blink/api.md).
 """
 import logging
@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from backend.spherex import get_frames
+from backend.spherex import get_frames, resolve
 
 app = FastAPI(title="SPHEREx blink")
 log = logging.getLogger(__name__)
@@ -40,6 +40,15 @@ def checked(q):
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/api/resolve")
+def resolve_name(q: str = Query(min_length=1, max_length=200)):
+    """Name or RA/Dec -> position, in a few seconds. The web app calls this first, so a wrong name fails fast and
+    the wait text can name the real step (looking up the name, then getting the images)."""
+    coord, name, pm = resolve(checked(q))
+    return {"query": q, "name": name, "ra": round(float(coord.ra.deg), 6), "dec": round(float(coord.dec.deg), 6),
+            "pm": {"pmra": pm[0], "pmdec": pm[1]} if pm else None}
 
 
 @app.get("/api/frames")

@@ -194,3 +194,37 @@ def test_a_network_error_is_retried_but_a_program_error_is_not(sky):
     with pytest.raises(HTTPException) as e:
         spherex.get_frames("10 21", fov=2, per_group=2)
     assert (e.value.status_code, len(reads)) == (502, 4)  # 4 images, one read each, not 3
+
+
+SESAME_HIT = b"""<?xml version="1.0"?><Sesame><Target><name>Wolf 359</name>
+<Resolver name="Sc=Simbad"><oname>Wolf  359</oname><jradeg>164.1205</jradeg><jdedeg>7.0146</jdedeg>
+<pm><pmRA>-3866.338</pmRA><pmDE>-2699.215</pmDE></pm></Resolver></Target></Sesame>"""
+SESAME_NONE = b"""<?xml version="1.0"?><Sesame><Target><name>zzqx</name><INFO> *** Nothing found *** </INFO></Target></Sesame>"""
+
+
+class Xml:
+    def __init__(self, content):
+        self.ok, self.status_code, self.content = True, 200, content
+
+
+def test_a_name_resolves_on_the_next_cds_mirror_when_the_first_one_hangs(monkeypatch):
+    asked = []
+    def cds(url, params=None, timeout=None, **kw):
+        asked.append((url.split("/")[2], timeout))
+        if "unistra" in url:
+            raise spherex.requests.Timeout("the CDS mirror waits for SIMBAD")
+        return Xml(SESAME_HIT)
+    monkeypatch.setattr(spherex.requests, "get", cds)
+    spherex.sesame.cache_clear()
+    coord, name, pm = spherex.resolve("Wolf 359")
+    assert (name, pm, round(coord.ra.deg, 4)) == ("Wolf 359", (-3866.338, -2699.215), 164.1205)
+    assert asked == [("cds.unistra.fr", 8), ("vizier.cfa.harvard.edu", 8)]  # one short try per mirror
+
+
+def test_an_unknown_name_fails_fast_with_a_plain_message(monkeypatch):
+    monkeypatch.setattr(spherex.requests, "get", lambda url, **kw: Xml(SESAME_NONE))
+    spherex.sesame.cache_clear()
+    with pytest.raises(HTTPException) as e:
+        spherex.resolve("zzqx not a star")
+    assert e.value.status_code == 400
+    assert e.value.detail.startswith("No object called 'zzqx not a star' found.")

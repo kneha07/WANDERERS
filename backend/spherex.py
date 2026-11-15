@@ -40,7 +40,10 @@ from scipy.optimize import curve_fit
 PIXEL_ARCSEC = 6.15
 CENTER_MJD = 61041.0  # epoch J2026.0: cutouts are centered on the target's position at this date
 J2016_MJD = 57388.5  # Gaia DR3 reference epoch
-SESAME_URL = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?"
+# CDS Sesame and its CfA mirror. CDS now redirects to a mirror that can wait a minute when SIMBAD is down, so each
+# gets one short try. -oxp: XML with proper motion; SNV: SIMBAD, then NED, then VizieR.
+SESAME_URLS = ("https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?", "https://vizier.cfa.harvard.edu/viz-bin/nph-sesame/-oxp/SNV?")
+SESAME_TIMEOUT_S = 8
 SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
 S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
@@ -399,17 +402,35 @@ def gaia_field(center, radius_deg):
     return stars
 
 
+def sesame_resolver(name, urls):
+    """The first <Resolver> with a position that a Sesame mirror finds for name, or None if no mirror knows it.
+    A mirror that fails or says "nothing found" passes the name to the next one. HTTPException(502) if all fail."""
+    failed = []
+    for url in urls:
+        try:
+            hit = ET.fromstring(http_get(url + quote(name), tries=1, timeout=SESAME_TIMEOUT_S).content).find(".//Resolver[jradeg]")
+        except (HTTPException, ET.ParseError) as e:  # no answer, or an HTML error page
+            failed.append(url.split("/")[2])
+            log.warning("Sesame %s failed for %r: %s", url.split("/")[2], name, getattr(e, "detail", e))
+            continue
+        if hit is not None:
+            return hit
+    if len(failed) == len(urls):
+        raise HTTPException(502, f"CDS Sesame did not answer ({', '.join(failed)}). Try again in a minute.")
+    return None
+
+
 @lru_cache(maxsize=256)
 def sesame(name):
     """Name -> (ra, dec, name, (pmra, pmdec) or None) from CDS Sesame; J2000 degrees, mas/yr. None if unknown."""
-    hit = ET.fromstring(http_get(SESAME_URL + quote(name)).content).find(".//Resolver[jradeg]")
+    hit = sesame_resolver(name, SESAME_URLS)
     if hit is None:
         return None
     try:
         pm = (float(hit.findtext("pm/pmRA")), float(hit.findtext("pm/pmDE")))
     except (TypeError, ValueError):  # no proper motion known
         pm = None
-    oname = (hit.findtext("oname") or name).removeprefix("NAME ")
+    oname = " ".join((hit.findtext("oname") or name).removeprefix("NAME ").split())  # the CfA mirror pads: "Wolf  359"
     return float(hit.findtext("jradeg")), float(hit.findtext("jdedeg")), oname, pm
 
 
@@ -425,7 +446,8 @@ def resolve(q):
         return c, None, None
     hit = sesame(q.strip())
     if hit is None:
-        raise HTTPException(400, f"Could not find '{q.strip()}'. Type RA and Dec instead, for example 269.45 4.69.")
+        raise HTTPException(400, f"No object called '{q.strip()}' found. Try another name or type RA/Dec, for example"
+                                 " 17h57m48s +04d41m36s.")
     ra, dec, name, pm = hit
     return SkyCoord(ra, dec, unit=u.deg), name, pm
 
