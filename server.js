@@ -4,10 +4,12 @@
 // Claude Code CLI in headless mode (`claude -p`): no API key needed, it uses your Claude Code login.
 // Bound to 127.0.0.1 only. The deployed static site works without this server (pre-written answers).
 const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
+const { pipeline } = require("stream");
 const ROOT = path.join(__dirname, "app"), PORT = process.env.PORT || 8000;
 const fields = require("./fields").createFieldService();
 // "Explore any patch" live mode: the React app (web/, built to web/dist) and its FastAPI server (backend/, port 8001).
-const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = "http://127.0.0.1:8001";
+const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = process.env.WANDERERS_LIVE || "http://127.0.0.1:8001";
+const LIVE_ROUTES = new Set(["/api/frames", "/api/resolve", "/api/about"]);
 const LIVE_DOWN = "The live SPHEREx server is not running. Start it with: node start.js " +
   "(or: backend/.venv/bin/python -m uvicorn backend.app:app --port 8001).";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
@@ -136,10 +138,15 @@ http.createServer(async (req, res) => {
     return;
   }
   // live mode API: proxy to the FastAPI server; /api/live-health maps to its /api/health
-  if (req.method === "GET" && (url.pathname === "/api/frames" || url.pathname === "/api/live-health")) {
-    const target = LIVE + (url.pathname === "/api/frames" ? url.pathname + url.search : "/api/health");
-    http.get(target, (r) => { res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" }); r.pipe(res); })
-      .on("error", () => { res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN })); });
+  if (req.method === "GET" && (LIVE_ROUTES.has(url.pathname) || url.pathname === "/api/live-health")) {
+    const target = LIVE + (LIVE_ROUTES.has(url.pathname) ? url.pathname + url.search : "/api/health");
+    // pipeline, not pipe: if the backend dies mid-answer the browser's response is destroyed (no endless wait),
+    // and if the browser goes away the upstream request is destroyed too.
+    http.get(target, (r) => { res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" }); pipeline(r, res, () => {}); })
+      .on("error", () => {
+        if (res.headersSent) return res.destroy();
+        res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN }));
+      });
     return;
   }
   // live mode app: web/dist under /explore/, no directory traversal, unknown routes fall back to index.html
