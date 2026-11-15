@@ -26,7 +26,7 @@ The panel did one debate round. The reviewers agree on everything except the sev
 ## Branches not merged
 
 - `feature/compass-telescope`: project_manager rates pinned head `7058588` FAIL. Another session is still working on the branch; its head is now `4e40a1d`. Review again at the final head after a PR is opened. Real-phone test: #71.
-- `docs/project-explainer` (`64cb979`): see `review-tech_lead-project-explainer-64cb979.md`.
+- `docs/project-explainer`: tech_lead rates pinned head `64cb979` FAIL. The branch moved to `8587114`. The page misses Star Fix (#64) and SPHEREx (#65), the spectrum claim is too wide, and the confidence rule is wrong. See `review-tech_lead-project-explainer-64cb979.md`, which also holds the `log.md` conflict resolution.
 
 ## Checks
 
