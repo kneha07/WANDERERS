@@ -117,3 +117,18 @@ test("a phone with only the absolute (compass) orientation stream gets motion co
   assert.equal(c.$("calib").hidden, false, "calibration offered instead of drag mode");
   assert.doesNotMatch(c.$("guideSub").textContent, /No motion sensors/);
 });
+
+test("a sight check rejected for a tilt mismatch leaves the compass in charge", () => {
+  const c = loadCompass({ intro: "fail" });
+  aimPhone(c, 100, 10);
+  assert.ok(!c.F.compassFrozen);
+  c.$("lmCoords").value = "47.6205, -122.3493";
+  c.$("lmUse").click();                          // enter aim mode, then aim "at Vega 70 deg up" while pointing 10 deg up
+  c.S.aim = { label: "Vega", az: 100, alt: 70 };
+  c.$("aimGo").click();
+  assert.match(c.$("aimMsg").textContent, /higher or lower than Vega/);
+  assert.equal(c.F.fineAz, 0);
+  assert.equal(c.F.fineAlt, 0);
+  assert.ok(!c.F.compassFrozen, "a rejected sight check must not freeze the compass");
+  assert.equal(c.$("aimBar").hidden, false, "still aiming, so the user can try again or cancel");
+});
