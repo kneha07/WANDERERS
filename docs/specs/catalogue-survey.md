@@ -1,6 +1,6 @@
 # Catalogue survey: from "pick a field" to a ranked candidate queue
 
-Date: 2026-11-15. Base: `origin/main` at `ca220c7`. Status: design, not built. Tracking: issue #60 (build decision), issue #59 (step 0).
+Date: 2026-11-15. Base: `origin/main` at `ca220c7`. Status: design, not built. Build spec: [catalogue-survey-build.md](catalogue-survey-build.md). Tracking: issue #60 (build decision), issue #59 (step 0).
 
 ## 1. The gap, evaluated
 
