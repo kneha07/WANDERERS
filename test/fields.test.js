@@ -132,6 +132,10 @@ const post = (base, p, body) => fetch(base + p, { method: "POST", headers: { "co
 test("HTTP: /api/field rejects bad input without starting work", async () => {
   await withServer(async (base) => {
     assert.equal((await post(base, "/api/field", "{")).status, 400);
+    for (const body of ["null", "[]", "5"]) {                       // valid JSON, but not an object: a client error, not a 500
+      const r = await post(base, "/api/field", body);
+      assert.equal(r.status, 400, body); assert.match((await r.json()).error, /ra and dec must be numbers/, body);
+    }
     assert.equal((await post(base, "/api/field", { ra: "10", dec: 5 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 400, dec: 5 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 10, dec: -100 })).status, 400);
@@ -185,7 +189,8 @@ test("job ids with a field-of-view suffix are accepted, junk is not", () => {
 
 test("ids match pipeline/fov.py (Python) for many positions and sizes", { skip: spawnSync("python3", ["--version"]).status !== 0 && "python3 not available" }, () => {
   const { svc } = fake(tmp()), cases = [];
-  for (const [ra, dec] of [[133.7951, -7.2451], [76.9564, 30.4014], [0, 0], [248.16734, 66.75501], [10.00005, -0.00004], [359.9999, -89.9999]])
+  for (const [ra, dec] of [[133.7951, -7.2451], [76.9564, 30.4014], [0, 0], [248.16734, 66.75501], [10.00005, -0.00004], [359.9999, -89.9999],
+                           [1.03125, -7.03125], [10.09375, 0.15625]])   // exact ties: toFixed rounds them away from zero
     for (const fov of [60, 120, 300, 600, 900]) cases.push([ra, dec, fov]);
   const code = "import sys, json\nsys.path.insert(0, 'pipeline')\nimport fov\n" +
     "print(json.dumps([fov.position_id(r, d, f) for r, d, f in json.loads(sys.argv[1])]))";

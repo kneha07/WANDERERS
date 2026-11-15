@@ -69,12 +69,13 @@ def grade(t, lookups=None):
     """Grade every mover of one target. lookups: {mover index: {"start": [...], "end": [...]}} from simbad_cone, or None."""
     npix = t["grid"]["npix"]
     track = sorted((p for p in t.get("track") or [] if (p.get("ch") or "w2") == "w2"), key=lambda p: p["year"])
+    # The two epochs a mover links: WISE 2010 and SPHEREx. NEOWISE (2014-2024) lies in between, so it is neither.
     t_old = [(p["x"], p["y"]) for p in track if p.get("mission") == "WISE"]
-    t_new = [(p["x"], p["y"]) for p in track if p.get("mission") != "WISE"]
+    t_new = [(p["x"], p["y"]) for p in track if p.get("mission") == "SPHEREx"]
     ghosts = t.get("ghosts") or {}
-    old_png = {f["png"] for f in (t.get("frames") or {}).get("w2", []) if f.get("mission") == "WISE"}
-    g_old = [tuple(g[:2]) for k, v in ghosts.items() if k in old_png for g in v]
-    g_new = [tuple(g[:2]) for k, v in ghosts.items() if k not in old_png for g in v]
+    mission = {f["png"]: f.get("mission") for fs in (t.get("frames") or {}).values() for f in fs}
+    g_old = [tuple(g[:2]) for k, v in ghosts.items() if mission.get(k) == "WISE" for g in v]
+    g_new = [tuple(g[:2]) for k, v in ghosts.items() if mission.get(k) == "SPHEREx" for g in v]
     out = []
     for i, m in enumerate(t.get("movers_experimental") or []):
         ra0, dec0 = start_radec(m)

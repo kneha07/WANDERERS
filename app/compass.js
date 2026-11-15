@@ -61,7 +61,7 @@ fetch("data/index.json").then((r) => r.json()).then((list) => {
   S.targets = list;
   const want = new URLSearchParams(location.search).get("target");
   S.sel = list.find((t) => t.id === want) || null;
-  renderTargets();
+  renderTargets(); if (S.sel) $("aboutBtn").hidden = false;
   const wantStar = new URLSearchParams(location.search).get("star");     // e.g. compass.html?star=Sirius from the console
   if (wantStar) StarSearch.load().then(() => { const st = StarSearch.search(wantStar, 1)[0]; if (st) { selectStar(st); $("findIn").value = st.name; } });
 });
@@ -87,7 +87,9 @@ $("go").onclick = async () => {
     }
   } catch (e) { /* not available */ }
   window.addEventListener("deviceorientation", (e) => { F.feed(e); S.sensors = S.sensors || e.beta != null; }, true);
-  window.addEventListener("deviceorientationabsolute", (e) => F.feed({ alpha: e.alpha, beta: e.beta, gamma: e.gamma, absolute: true }), true);
+  window.addEventListener("deviceorientationabsolute", (e) => {   // phones without a gyroscope only have this stream
+    F.feed({ alpha: e.alpha, beta: e.beta, gamma: e.gamma, absolute: true }); S.sensors = S.sensors || e.beta != null;
+  }, true);
   if ($("useCam").checked) startCamera();
   locate();
   $("landing").hidden = true;
@@ -131,7 +133,10 @@ function locate() {
       S.regionPromise = regionImage(S.loc.lat, S.loc.lon);
       placeResolve(S.place);
     }
-  }, () => { S.locNote = "location declined: using Seattle"; placeResolve(null); },
+  }, (err) => {   // also called for a later timeout while a GPS fix is already in use: keep that note then
+    if (!S.loc) S.locNote = err && err.code === 1 ? "location declined: using Seattle" : "no GPS fix yet: using Seattle";
+    placeResolve(null);
+  },
   { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 
@@ -181,7 +186,10 @@ function showCalibration() {
 $("calDone").onclick = () => { $("calib").hidden = true; };
 $("calSkip").onclick = () => { F.cancelCalibration(); $("calib").hidden = true; };
 $("calEnough").onclick = () => F.finishCalibrationNow();
-$("recalBtn").onclick = () => showCalibration();
+$("recalBtn").onclick = () => {   // calibration needs the motion sensors; without them it would wait forever
+  if (S.sensors) return showCalibration();
+  $("guideSub").textContent = "Calibration needs a phone's motion sensors: open this page on your phone. Here, drag the sky or use the arrow keys.";
+};
 let lastStops = -1;
 function calibrationTick() {
   const c = F.calibrationState();
@@ -215,7 +223,7 @@ $("hud").addEventListener("pointerdown", (e) => { if (!S.sensors) { drag = { x: 
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const k = 70 / innerHeight;
-  S.manual.az = (drag.az - (e.clientX - drag.x) * k + 360) % 360;
+  S.manual.az = ((drag.az - (e.clientX - drag.x) * k) % 360 + 360) % 360;   // a long drag can pass a full turn
   S.manual.alt = Math.max(-85, Math.min(85, drag.alt + (e.clientY - drag.y) * k));
 });
 $("hud").addEventListener("pointerup", () => (drag = null));
@@ -348,7 +356,14 @@ function draw() {
     seg(pts.filter((p) => p.year <= S.trail.now), "rgba(124,196,255,.9)", []);
     seg(pts.filter((p) => p.year >= S.trail.now), "rgba(126,231,135,.9)", [7, 5]);
     g.font = "600 11px 'JetBrains Mono', monospace"; g.textAlign = "left"; g.textBaseline = "middle";
-    const lab = (p, txt, col) => { if (p && p.q) { g.fillStyle = col; g.beginPath(); g.arc(p.q[0], p.q[1], 3, 0, 7); g.fill(); g.fillText(txt, p.q[0] + 6, p.q[1]); } };
+    const boxes = [];   // thin the labels: a year whose text would overlap one already drawn is left out (its dot stays)
+    const lab = (p, txt, col) => {
+      if (!p || !p.q) return;
+      g.fillStyle = col; g.beginPath(); g.arc(p.q[0], p.q[1], 3, 0, 7); g.fill();
+      const b = [p.q[0] + 6, p.q[1] - 8, g.measureText(txt).width, 16];
+      if (boxes.some((o) => b[0] < o[0] + o[2] + 4 && o[0] < b[0] + b[2] + 4 && b[1] < o[1] + o[3] && o[1] < b[1] + b[3])) return;
+      boxes.push(b); g.fillText(txt, p.q[0] + 6, p.q[1]);
+    };
     const h = S.trail.half, yrTxt = (y) => (y <= 0 ? `${Math.round(1 - y).toLocaleString()} BCE` : `${Math.round(y)} CE`);
     lab(pts[0], yrTxt(pts[0].year), "#7cc4ff"); lab(pts.at(-1), yrTxt(pts.at(-1).year), "#7ee787");
     lab(pts[Math.round(pts.length / 4)], yrTxt(pts[Math.round(pts.length / 4)].year), "#7cc4ff");
@@ -495,7 +510,7 @@ function telemetry(now, L, P) {
   const cal = F.compassFrozen ? "SIGHT ✓" : F.calibrated ? (F.result ? F.result.quality.toUpperCase() : "OK") : S.sensors ? "NOT CALIBRATED" : "DRAG MODE";
   $("telemetry").innerHTML = [
     ["LAT", `${Math.abs(L.lat).toFixed(3)}°${L.lat >= 0 ? "N" : "S"}`], ["LON", `${Math.abs(L.lon).toFixed(3)}°${L.lon >= 0 ? "E" : "W"}`],
-    ["LOCAL", `${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ${tz.split("/").pop().replace("_", " ")}`],
+    ["LOCAL", `${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ${tz.split("/").pop().replace(/_/g, " ")}`],
     ["UTC", now.toISOString().slice(11, 19)], ["LST", hm(lst)], ["DECL", `${F.decl >= 0 ? "+" : ""}${F.decl.toFixed(1)}°`], ["CAL", cal],
   ].map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
   if (!$("info").hidden) renderInfo(now, L, lst, tz);
@@ -508,13 +523,8 @@ function crosshairRaDec(P, now, L, lst) {
   const la = L.lat * D2R, al = P.alt * D2R, az = P.az * D2R;
   const dec = Math.asin(Math.sin(la) * Math.sin(al) + Math.cos(la) * Math.cos(al) * Math.cos(az)) / D2R;
   const H = Math.atan2(-Math.sin(az) * Math.cos(al), Math.cos(la) * Math.sin(al) - Math.sin(la) * Math.cos(al) * Math.cos(az)) / D2R;
-  let ra = ((lst - H) % 360 + 360) % 360, r0 = ra, d0 = dec;
-  const J = Sky.jd(now);
-  for (let i = 0; i < 2; i++) {          // undo precession (catalogue frames are J2000)
-    const p = Sky.precess(r0, d0, J);
-    r0 = ((r0 - ((p.ra - ra + 540) % 360 - 180)) % 360 + 360) % 360; d0 = d0 - (p.dec - dec);
-  }
-  return { ra: r0, dec: d0 };
+  const ra = ((lst - H) % 360 + 360) % 360;
+  return Sky.unprecess(ra, dec, Sky.jd(now));   // undo precession exactly (catalogue frames are J2000)
 }
 let webbReady = null;
 function webbTick(P, now, L, lst) {
@@ -525,8 +535,9 @@ function webbTick(P, now, L, lst) {
   S.webbAround = Webb.near(c.ra, c.dec, 40, 80);
   // The chip must not change under your finger: keep the frame it shows until you move clearly away (4.5 deg),
   // and when choosing a new one inside the crosshair (3 deg), prefer frames with a real Webb image and a real name.
+  // (measured directly: in crowded fields such as COSMOS, 500+ frames lie within 4.5 deg, far more than the 60 listed)
   const cands = Webb.near(c.ra, c.dec, 4.5, 60);
-  let here = S.webbHere && cands.find((p) => p.obs === S.webbHere.obs);
+  let here = S.webbHere && Webb.sep(c.ra, c.dec, S.webbHere.ra, S.webbHere.dec) <= 4.5 ? S.webbHere : null;
   if (!here) {
     const inside = cands.filter((p) => p.dist <= 3);
     here = inside.sort((a, b) => Webb.appeal(a, a.dist) - Webb.appeal(b, b.dist))[0] || null;
@@ -580,19 +591,22 @@ async function openWebb(ra, dec, label, frames, focus) {
   $("wSub").textContent = contains ? `RA ${StarSearch.hms(ra)}  Dec ${StarSearch.dms(dec)} · the red cross is ${label}; the gold outline is the Webb frame shown`
     : `${label && label !== Webb.name(focus) ? `${label} is ${Webb.sep(ra, dec, focus.ra, focus.dec).toFixed(2)}° away. ` : ""}Frame centre RA ${StarSearch.hms(focus.ra)}  Dec ${StarSearch.dms(focus.dec)}`;
   $("wCount").textContent = `${(await Webb.load()).count.toLocaleString()} frames`;
+  const path = contains && S.sel && window.PathView ? await PathView.sky(pathQuery(S.sel)).catch(() => null) : null;
   const show = async (p) => {
     $("wFrames").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.obs === p.obs));
     const d = Webb.describe(p);
+    // the red cross goes where the star was when Webb took this frame (catalogue positions are for 2000 or 2016)
+    const then = p.mjd ? pathAt(path, 2000 + (p.mjd - 51544.5) / 365.25) : null;
     $("wNote").innerHTML = `<b>${Webb.esc(d.title)}</b><br>${Webb.esc(d.line)}` + ({ preview: "<br>Showing Webb's own image of this frame (MAST preview, placed on the sky with its WCS).",
        live: "<br>Showing ESA ESASky's live Webb map: zoom in for full resolution.",
        outline: `<br><span class="warn">No Webb pixels can be streamed for this frame yet, so the gold outline shows exactly where Webb looked.
        Open the full Webb image below.</span>` })[Webb.source(p)] +
+      (then ? `<br>The red cross is ${Webb.esc(label)} on ${Webb.dateOf(p.mjd)}, moved from its catalogue position by its known motion.` : "") +
       `<div class="webb-links"><a href="${Webb.full(p)}" target="_blank" rel="noopener">Full Webb image (large) ↗</a>
        <a href="${Webb.progUrl(p)}" target="_blank" rel="noopener">Programme ${Webb.esc(p.pid)} at STScI ↗</a></div>`;
     try {
       await Webb.render($("wView"), contains ? ra : p.ra, contains ? dec : p.dec, [p, ...list.filter((x) => x !== p)],
-        { label, mark: { ra, dec }, path: contains && S.sel && window.PathView ? await PathView.sky(pathQuery(S.sel)).catch(() => null) : null,
-          base: $("wBase").value, webbOpacity: +$("wOpacity").value });
+        { label, mark: then || { ra, dec }, path, base: $("wBase").value, webbOpacity: +$("wOpacity").value });   // path: drawn when the star is in the frame
     } catch (e) { $("wView").innerHTML = `<p class="small warn" style="padding:12px">Sky viewer could not load: ${Webb.esc(e.message)}</p>`; }
   };
   $("wFrames").innerHTML = list.slice(0, 12).map((p) => {
@@ -635,6 +649,15 @@ function showDetails(T) {
 }
 // which star the path model should use: a prepared target by id, else the star found by name
 function pathQuery(T) { return T.star && !T.star.wanderers ? { star: T.star } : { target: (T.star && T.star.wanderers) || T.id }; }
+// position on a PathView.sky() path at a decimal year (linear between its points); null when no path is known
+function pathAt(path, year) {
+  const P = path && path.pts;
+  if (!P || P.length < 2 || !Number.isFinite(year)) return null;
+  let i = P.findIndex((q) => q.year >= year);
+  i = i < 0 ? P.length - 1 : Math.max(1, i);
+  const a = P[i - 1], b = P[i], k = (year - a.year) / (b.year - a.year);
+  return { ra: (a.ra + (((b.ra - a.ra + 540) % 360) - 180) * k + 360) % 360, dec: a.dec + (b.dec - a.dec) * k };
+}
 $("aboutBtn").onclick = () => S.sel && showDetails(S.sel);
 $("dClose").onclick = () => { $("details").hidden = true; };
 
@@ -643,7 +666,9 @@ function renderTargets() {
     `<button data-id="${t.id}" class="${S.sel && S.sel.id === t.id ? "on" : ""}" role="option"><b>${t.name}</b><span id="tp_${t.id}">${t.teaser}</span></button>`).join("");
   $("targets").querySelectorAll("button").forEach((b) => (b.onclick = () => {
     S.sel = S.targets.find((t) => t.id === b.dataset.id); renderTargets(); $("aboutBtn").hidden = false;
-    const u = new URL(location); u.searchParams.set("target", S.sel.id); history.replaceState(null, "", u);
+    const u = new URL(location); u.searchParams.set("target", S.sel.id);
+    if (S.sel.found) u.searchParams.set("star", S.sel.name); else u.searchParams.delete("star");   // no stale ?star=
+    history.replaceState(null, "", u);
   }));
 }
 
@@ -666,6 +691,7 @@ $("northBtn").onclick = () => {
 // Aim mode: the sheet closes, a big gold crosshair asks you to put it on the real object, and nothing changes
 // until you tap Calibrate (then applyFine). Cancel leaves north as it was.
 function startAim(x) {
+  clearTimeout(S.aimDone); $("aimCancel").hidden = false;
   S.aim = x; $("north").hidden = true; $("aimBar").hidden = false; document.body.classList.add("aiming");
   $("aimTitle").textContent = x.dir ? `Point the camera ${x.dir}` : `Aim at ${x.label}`;
   $("aimText").textContent = x.dir ? `Hold the phone upright with the camera facing exactly ${x.dir} (along a street or wall you know), then tap Calibrate.`
@@ -674,21 +700,21 @@ function startAim(x) {
   $("aimMsg").textContent = S.sensors ? "" : "This needs a phone's motion sensors (open this page on your phone).";
   $("aimMsg").className = "small"; $("aimGo").disabled = false; $("aimGo").textContent = "Calibrate";
 }
-function endAim() { S.aim = null; $("aimBar").hidden = true; document.body.classList.remove("aiming"); }
+function endAim() { clearTimeout(S.aimDone); S.aim = null; $("aimBar").hidden = true; $("aimCancel").hidden = false; document.body.classList.remove("aiming"); }
 $("aimCancel").onclick = endAim;
 $("aimGo").onclick = () => {
   if (!S.aim) return endAim();
   if ($("aimGo").textContent === "Done") return endAim();
   const ok = applyFine(S.aim, $("aimMsg"));
   $("aimMsg").className = "small " + (ok ? "ok" : "warn");
-  if (ok) { $("aimGo").textContent = "Done"; $("aimCancel").hidden = true; setTimeout(() => { if ($("aimGo").textContent === "Done") { endAim(); $("aimCancel").hidden = false; } }, 4000); }
+  if (ok) { $("aimGo").textContent = "Done"; $("aimCancel").hidden = true; S.aimDone = setTimeout(endAim, 4000); }
 };
 function applyFine(x, out = $("northMsg")) {
   if (!S.sensors) { out.textContent = "This needs a phone's motion sensors (open this page on your phone)."; return false; }
-  const before = { az: F.fineAz, alt: F.fineAlt }, r = F.fineTune(x.az, x.alt);
+  const before = { az: F.fineAz, alt: F.fineAlt, frozen: F.compassFrozen }, r = F.fineTune(x.az, x.alt);
   if (!r) { out.textContent = "The motion sensors are not ready yet. Hold still a moment and try again."; return false; }
   if (Math.abs(r.dAlt) > 20) {
-    F.fineAz = before.az; F.fineAlt = before.alt;
+    F.fineAz = before.az; F.fineAlt = before.alt; F.compassFrozen = before.frozen;   // a rejected aim changes nothing
     out.textContent = `That is ${Math.round(Math.abs(r.dAlt))}° higher or lower than ${x.label} really is. Is the crosshair on it? Aim again and tap Calibrate.`;
     return false;
   }

@@ -142,7 +142,7 @@ function createFieldService(opts = {}) {
     const fail = (e) => send(e.status || 500, { error: e.status ? e.message : "Server error." });
     if (req.method === "POST" && url.pathname === "/api/field") {
       readJson(req).then((b) => {
-        if (typeof b.ra !== "number" || typeof b.dec !== "number") throw httpError(400, "ra and dec must be numbers.");
+        if (!b || typeof b.ra !== "number" || typeof b.dec !== "number") throw httpError(400, "ra and dec must be numbers.");   // null is valid JSON
         if (b.fov !== undefined && typeof b.fov !== "number") throw httpError(400, "fov must be a number.");
         const r = start(b.ra, b.dec, b.fov === undefined ? DEFAULT_FOV : b.fov); send(r.status === "ready" ? 200 : 202, r);
       }).catch(fail);

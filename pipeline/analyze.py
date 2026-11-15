@@ -94,6 +94,17 @@ def year_of(mjd):
     return float(Time(mjd, format="mjd").jyear)
 
 
+def last_visit(visits):
+    """Visit to compare with the first one for a brightness change: the latest big one (30+ images), else the
+    latest. Never the first visit itself, which would compare a visit with itself and always read as 'steady'."""
+    return max(range(1, len(visits)), key=lambda i: (len(visits[i]) >= 30, i)) if len(visits) >= 2 else None
+
+
+def east_arcsec(ca, cb, dec_deg):
+    """Eastward offset from ca to cb in arcsec on the sky (RA difference x cos dec), the short way across RA 0h."""
+    return float((cb.ra - ca.ra).wrap_at(180 * u.deg).to(u.arcsec).value * np.cos(np.radians(dec_deg)))
+
+
 def load_spherex(tid, ref):
     """Read every cached SPHEREx cutout: epoch, detector, target pixel, wavelength there."""
     out = []
@@ -176,9 +187,9 @@ def centroid(img, x0, y0, r=3.5):
     return float((v * xx).sum() / v.sum()), float((v * yy).sum() / v.sum())
 
 
-def saturated_core(img, x0, y0, r):
-    """Centre of the blank (NaN) saturated core touching the predicted position, or None.
-    Archives blank pixels that saturated; for very bright stars that hole is the star."""
+def blank_core(img, x0, y0, r):
+    """The largest blank (NaN) region touching the predicted position: (x, y of its centre, pixels, touches the
+    image border), or None. Archives blank pixels that saturated; for very bright stars that hole is the star."""
     bad = ~np.isfinite(np.asarray(img, float))
     if not bad.any():
         return None
@@ -190,9 +201,29 @@ def saturated_core(img, x0, y0, r):
         return None
     k = max(near, key=lambda i: (lab == i).sum())
     m = lab == k
-    if m.sum() < 3 or m.sum() > 400:       # a lone dead pixel or an image edge, not a star
+    border = bool(m[0].any() or m[-1].any() or m[:, 0].any() or m[:, -1].any())
+    return float(xx[m].mean()), float(yy[m].mean()), int(m.sum()), border
+
+
+def saturated_core(img, x0, y0, r):
+    """Centre of the blank (NaN) saturated core touching the predicted position, or None."""
+    b = blank_core(img, x0, y0, r)
+    if b is None or b[2] < 3 or b[2] > 400:   # a lone dead pixel or an image edge, not a star
         return None
-    return float(xx[m].mean()), float(yy[m].mean())
+    return b[0], b[1]
+
+
+def core_has_pixels(img, x0, y0, r):
+    """Is any pixel within r of (x0, y0) not blank? (detection_snr reports 0.0 when none is.)"""
+    yy, xx = np.indices(np.shape(img))
+    return bool(np.isfinite(np.asarray(img, float)[np.hypot(xx - x0, yy - y0) <= r]).any())
+
+
+def saturated_beyond_measure(img, x0, y0, r):
+    """A blank core too big (over 400 pixels) to take its centre as the position, but clearly a star: away from
+    the image border. Such a frame shows the object (saturated), it just gives no position."""
+    b = blank_core(img, x0, y0, r)
+    return b is not None and b[2] > 400 and not b[3]
 
 
 def stretch(a):
@@ -303,7 +334,7 @@ def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=(), pat
         movers.append({"x0": a[0], "y0": a[1], "x1": b[0], "y1": b[1], "snr": round(min(a[2], b[2]), 1),
                        "arcsec_per_yr": float(ca.separation(cb).arcsec / dt),
                        "ra": float(cb.ra.deg), "dec": float(cb.dec.deg), "year": y_new,
-                       "pmra": float((cb.ra - ca.ra).to(u.mas).value * np.cos(np.radians(cb.dec.deg)) / dt),
+                       "pmra": east_arcsec(ca, cb, cb.dec.deg) * 1000 / dt,
                        "pmdec": float((cb.dec - ca.dec).to(u.mas).value / dt),
                        "gaia_source_id": gid, "explained_by_gaia": gid is not None})
     return movers
@@ -457,9 +488,14 @@ def analyze(tid):
         f["detected"] = snr >= 5            # only measure a position where the object is clearly there
         f["snr"] = round(snr, 1)
         c = centroid(f["img"], float(px), float(py), r=rad) if f["detected"] else None
-        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if f["mission"] in ("WISE", "NEOWISE") else None
+        wise = f["mission"] in ("WISE", "NEOWISE")
+        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if wise else None
         if hole is not None:                # very bright star: the archive blanks its saturated core,
             c, f["detected"], f["saturated_core"] = hole, True, True   # so the hole's centre is its position
+        elif wise and saturated_beyond_measure(f["img"], float(px), float(py), rad + 2):
+            f["detected"], f["saturated_core"] = True, True   # seen (saturated); the hole is too big for a position
+        if f.get("saturated_core") and not core_has_pixels(f["img"], float(px), float(py), rad):
+            f["snr"] = None                 # no unsaturated pixel at the target: a signal-to-noise cannot be measured
         if c is None:
             continue
         meas = gw.pixel_to_world(*c)
@@ -481,7 +517,7 @@ def analyze(tid):
         a, b = first[0], max(last, key=lambda p: p["year"])
         ca, cb = SkyCoord(a["ra"] * u.deg, a["dec"] * u.deg), SkyCoord(b["ra"] * u.deg, b["dec"] * u.deg)
         dt = b["year"] - a["year"]
-        dra = (cb.ra - ca.ra).to(u.arcsec).value * np.cos(np.radians(ca.dec.deg))
+        dra = east_arcsec(ca, cb, ca.dec.deg)
         ddec = (cb.dec - ca.dec).to(u.arcsec).value
         expected = np.hypot(ref["pmra"] or 0, ref["pmdec"] or 0) / 1000
         motion = {"from_year": a["year"], "to_year": b["year"], "shift_arcsec": float(np.hypot(dra, ddec)),
@@ -518,7 +554,7 @@ def analyze(tid):
         # to PSF-wing photometry. Compare the first and the last big visit, wavelength bin by bin.
         saturated = len(good) < 0.3 * max(len(pts), 1)
         key, use = ("wing", [p for p in pts if np.isfinite(p["wing"])]) if saturated else ("flux_mjy", good)
-        last = max(range(len(visits)), key=lambda i: (len(visits[i]) >= 30, i))
+        last = last_visit(visits)
         ratios = []
         for lo, hi in zip(edges[:-1], edges[1:]):
             a = [p[key] for p in use if lo <= p["lam"] < hi and p["visit"] == 0]

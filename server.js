@@ -186,7 +186,7 @@ http.createServer(async (req, res) => {
   let p;
   try { p = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname))); }
   catch { res.writeHead(400); return res.end("bad URL"); }   // malformed %-escape must not crash the server
-  if (!p.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+  if (p !== ROOT && !p.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }   // not app_old/, app.bak/...
   fs.readFile(p, (err, data) => {
     if (err) { res.writeHead(404); return res.end("not found"); }
     res.writeHead(200, { "content-type": TYPES[path.extname(p)] || "application/octet-stream" }); res.end(data);

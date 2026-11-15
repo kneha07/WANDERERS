@@ -130,6 +130,16 @@ class CommittedPredictionTests(unittest.TestCase):
         self.assertAlmostEqual(p["learnt"]["pmra_mas_yr"], -8123.0, delta=0.01 * 8123)
         self.assertNotIn("2MASS", p["model"]["catalogues"])
 
+    def test_wanderers_positions_are_labelled_by_mission(self):
+        # the time-lapse now has NEOWISE frames (2014-2024): they must not be filed as SPHEREx measurements
+        obs = M.wanderers_obs({"wanderers": "barnard", "dist_pc": 1.83})
+        by = {}
+        for o in obs:
+            by.setdefault(o["catalogue"].rsplit(" ", 1)[0], []).append(o["epoch"])
+        self.assertEqual(set(by), {"WANDERERS WISE", "WANDERERS NEOWISE", "WANDERERS SPHEREx"})
+        self.assertTrue(all(2013 < y < 2025 for y in by["WANDERERS NEOWISE"]))
+        self.assertTrue(all(y > 2025 for y in by["WANDERERS SPHEREx"]))
+
     def test_barnards_star_perspective_acceleration(self):
         p = json.loads((PRED / "hip87937.json").read_text())
         self.assertTrue(p["model"]["chosen_features"].startswith("accel"))

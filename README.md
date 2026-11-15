@@ -7,12 +7,13 @@
 **Live:** https://rajryadav4.github.io/wanderers/ · **Sky Compass (phone):** https://rajryadav4.github.io/wanderers/compass.html
 
 <p align="center">
-  <img alt="NASA Space Apps 2026" src="https://img.shields.io/badge/NASA%20Space%20Apps-2026-0B3D91?style=for-the-badge&logo=nasa&logoColor=white">
+  <img alt="NASA Space Apps 2026" src="https://img.shields.io/badge/NASA%20Space%20Apps-2026-0B3D91?style=for-the-badge">
   <img alt="Challenge: Planet X and SPHEREx" src="https://img.shields.io/badge/Challenge-Planet%20X%20%26%20SPHEREx-5B21B6?style=for-the-badge">
   <img alt="Candidate, never discovery" src="https://img.shields.io/badge/Rule-candidate%2C%20never%20discovery-C2410C?style=for-the-badge">
 </p>
 <p align="center">
-  <img alt="Data: SPHEREx" src="https://img.shields.io/badge/data-SPHEREx%20DR1-1D4ED8">
+  <img alt="Data: SPHEREx" src="https://img.shields.io/badge/data-SPHEREx%20DR1%20%2B%20QR3-1D4ED8">
+  <img alt="Data: NEOWISE" src="https://img.shields.io/badge/data-NEOWISE%202014--2024-1D4ED8">
   <img alt="Data: WISE" src="https://img.shields.io/badge/data-WISE%20%2F%20AllWISE-1D4ED8">
   <img alt="Data: Gaia DR3" src="https://img.shields.io/badge/data-Gaia%20DR3-1D4ED8">
   <img alt="Data: JWST via MAST" src="https://img.shields.io/badge/data-JWST%20%28MAST%29-1D4ED8">
@@ -37,6 +38,7 @@ evidence on screen. Unmatched objects are called **candidates, never discoveries
 timeline
   title The same patch of sky, seen at three moments
   2010 : WISE (AllWISE atlas, epoch 2010.5) : 3.4 and 4.6 µm images
+  2014-2024 : NEOWISE : a new image every six months, same 3.4 and 4.6 µm bands
   2016 : Gaia DR3 reference epoch : positions and motions of every field star
   2025 : SPHEREx first all-sky survey : 102 colours, 0.75 to 5 µm
   2026 : SPHEREx next survey : compared wavelength by wavelength
@@ -106,12 +108,13 @@ mindmap
       Sky Compass
 ```
 
-1. **Flipbook across 16 years.** WISE (2010) and SPHEREx (2025, 2026) images of the same patch, matched by
-   wavelength (4.6 µm and 3.4 µm channels), so you compare like with like.
+1. **Flipbook across 16 years.** WISE (2010), NEOWISE (one image every six months, 2014–2024) and SPHEREx
+   (2025, 2026) images of the same patch, matched by wavelength (4.6 µm and 3.4 µm channels), so you compare
+   like with like.
 2. **Gaia "ghosts".** Circles show where every star Gaia knows about *should* be in each frame. Anything that
    moves without a ghost is unexplained.
 3. **Measured path.** The target's position is measured in every frame and compared with the catalogue motion.
-4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (hundreds of them), each
+4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (up to 150 per target), each
    placed at the wavelength that image recorded there, gives a 0.75–5 µm spectrum. Water, methane and CO/CO₂
    bands are marked.
 5. **Brightness change.** The two SPHEREx sky surveys are compared wavelength by wavelength.
@@ -158,8 +161,8 @@ The five challenge test targets are the five "missions": Barnard's Star, R Draco
 Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `observatory.html?target=wise0855&ch=w2` (older links to `/?target=…` redirect there). Brand, logo files and the Day/Night palette: [BRAND.md](BRAND.md).
 
 **Any coordinates.** Type an RA/Dec (degrees or `08h55m10.83s` / `-07d14m42.5s`). On the demo server
-(`node server.js`) WANDERERS fetches a quick look of that patch (about 36 SPHEREx cutouts plus WISE and
-Gaia), measures it and plays it as a flipbook in a few minutes. The public static site cannot do this by
+(`node server.js`) WANDERERS prepares that patch (up to 150 SPHEREx cutouts plus WISE, NEOWISE and Gaia),
+measures it and plays it as a flipbook; this takes about 12–15 minutes while IRSA is busy. The public static site cannot do this by
 itself because IRSA does not allow direct browser requests (no CORS), so it shows the prepared patches.
 
 **Sky Compass** (`app/compass.html`, an extra for phones). The intro uses only real imagery: the NASA Blue Marble /
@@ -517,7 +520,8 @@ node --test test/starprofile.test.js                     # colours, Sun ratios =
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
 how many SPHEREx images were stacked, whether the object was seen and how strongly), how many SPHEREx spectrum
 measurements were left out because of flagged pixels, and the SPHEREx visits at that position. It shows only what
-the pipeline recorded: a flagged / not-flagged count, not a count per flag type.
+the pipeline recorded: a flagged / not-flagged count. A second panel lists every SPHEREx image with the flags set
+at the target, counted per flag type.
 
 ```bash
 node --test test/frameinfo.test.js   # includes checks on every committed target
@@ -587,12 +591,40 @@ photometry with local background, and per-pixel solid angle from each image's WC
 - Bright stars (Barnard's Star) saturate SPHEREx at many wavelengths; those points are dropped and the card says so.
 - AllWISE is a 2010–2011 coadd; we treat it as epoch 2010.5.
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
+- Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py` (or `node server.js`).
+  On the public site any other position shows the live sky map, which is one combined image, not a time-lapse.
+- A usable SPHEREx spectrum exists for only some targets: very bright stars (Barnard's Star, R Draconis and
+  others) saturate SPHEREx, and their spectra are left out on purpose.
+- The automatic "what else moved" search finds its own target in only some of the fields where the target moves;
+  the page says so, and an empty list means "nothing found", not "nothing there".
+- In single NEOWISE exposures the brightest stars saturate: their frames are marked "saturated" and give no
+  position (61 Cygni, R Draconis).
 - The public static site shows only the prepared targets. With `node server.js` (or `node start.js`), new coordinates are prepared on demand, and `/explore/` shows any patch live.
 - Through Webb: ESASky's Webb maps hold a subset of the data (to mid-2024), and MAST full previews are too large for
   phones, so many frames show the outline only, with a link to the full image. Frames are matched with the
   catalogue (J2000) position; a fast-moving star can sit a few arcseconds from where Webb saw it.
 - Kapteyn's Star and Luhman 16 were first added with hand-typed coordinates that were 17-30″ off; they now use the
   Gaia DR3 position (Luhman 16: Gaia position with the published motion from Bedin et al. 2017).
+
+## Use of AI
+
+Much of the code, tests and documentation in this repository was written with AI assistance (Claude Code,
+by Anthropic), directed, reviewed and tested on real phones by the team. On the site, the plain-language
+explanations and the "Ask WANDERERS" answers are generated by Claude from the measured numbers and are labelled
+"AI · Claude". Every measurement (motion, brightness, spectrum, evidence checks, paths) comes from the
+pipeline code and public data, not from AI.
+
+WANDERERS is a NASA Space Apps Challenge project. It is not affiliated with or endorsed by NASA, ESA or any of
+the data providers.
+
+## References
+
+- **Data:** see "Data (all public)" above. Star names: HYG database (astronexus), CC BY-SA 4.0.
+- **Python:** Astropy, astroquery, PyVO, reproject, astropy-healpix, NumPy, SciPy, Matplotlib, scikit-learn,
+  PyArrow, pygeomag.
+- **Browser:** Aladin Lite (CDS, Strasbourg), three.js; the live explorer uses React, Vite and FastAPI.
+- **Inspiration:** WiseView (the Backyard Worlds blink tool) and the Backyard Worlds: Planet 9 project, which the
+  page links to for reporting candidates; the IRSA SPHEREx tutorial notebooks for the methods.
 
 ## Repo layout
 
