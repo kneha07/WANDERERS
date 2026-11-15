@@ -636,10 +636,12 @@ def check(path=None, *, data_dir=DATA, cache_dir=None, now=None, ask=None, s3=No
     return status, changed, True
 
 
-def mark_synced(path=None, *, since=None, data_dir=DATA, cache_dir=CACHE, now=None, git=git_last_commit):
+def mark_synced(path=None, *, since=None, data_dir=DATA, cache_dir=CACHE, now=None, git=git_last_commit, only=None):
     """After fetch.py and analyze.py rebuilt the prepared targets: record the sync time, which releases each target
     was searched in (from the fresh cache) and the new data dates. A target counts as rebuilt when its target.json
-    was written at or after `since` (ISO time); `synced` moves only if at least one was. Returns (status, rebuilt)."""
+    was written at or after `since` (ISO time); `synced` moves only if at least one was. `only` (target ids) limits
+    that to the targets fetch.py and analyze.py were run for: evidence.py and vet.py rewrite every target.json, so a
+    rebuild of some targets would otherwise count them all. Returns (status, rebuilt)."""
     now = now or now_utc()
     previous = read_status(path) or {}
     targets = prepared_targets(data_dir)
@@ -648,6 +650,8 @@ def mark_synced(path=None, *, since=None, data_dir=DATA, cache_dir=CACHE, now=No
         rebuilt = [t for t in targets if (Path(data_dir) / t / "target.json").stat().st_mtime >= t0 - 1]
     else:
         rebuilt = list(targets)
+    if only:
+        rebuilt = [t for t in rebuilt if t in set(only)]
     names = load_release_names(path, fallback=fetch_fallback_releases())
     kw = {}
     if rebuilt:
@@ -758,6 +762,7 @@ def main(argv=None):
                                                                     "(an S3 bucket listing does not count)")
     p.add_argument("--no-s3", action="store_true", help="check: do not list the S3 bucket when IRSA is down")
     p.add_argument("--since", default=None, help="synced: count targets whose target.json was written after this")
+    p.add_argument("--targets", nargs="*", default=None, help="synced: only these targets were rebuilt (default: all)")
     p.add_argument("--write-defs", action="store_true", help="targets: restore missing target_def.json files")
     p.add_argument("--title", action="store_true", help="show: print a one-line title instead of the summary")
     a = p.parse_args(argv)
@@ -777,7 +782,7 @@ def main(argv=None):
         print("\n".join(prepared_targets(a.data)))
         return 0
     if a.command == "synced":
-        status, rebuilt = mark_synced(a.file, since=a.since, data_dir=a.data, cache_dir=cache or CACHE)
+        status, rebuilt = mark_synced(a.file, since=a.since, data_dir=a.data, cache_dir=cache or CACHE, only=a.targets)
         print(summary(status))
         print(f"rebuilt: {', '.join(rebuilt) or 'none (synced time not changed)'}")
         if a.github_output:

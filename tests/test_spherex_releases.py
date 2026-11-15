@@ -529,6 +529,14 @@ def test_mark_synced_without_a_rebuild_keeps_the_old_time(data, status_file):
     assert rebuilt == [] and st["synced"] == "2026-11-15T06:10:33Z"
 
 
+def test_mark_synced_counts_only_the_targets_named(data, status_file):
+    sr.check(status_file, data_dir=data, now=NOW, ask=down, git=no_git)
+    st, rebuilt = sr.mark_synced(status_file, since="2000-01-01T00:00:00Z", data_dir=data, cache_dir=None,
+                                 now=LATER, git=no_git, only=["beta"])
+    assert rebuilt == ["beta"] and st["rebuilt_targets"] == ["beta"] and st["not_rebuilt"] == ["alpha"]
+    assert "rebuilt 1 of 2" in st["synced_source"]
+
+
 def test_target_definition_from_a_gaia_target():
     t = {"name": "Kapteyn's Star", "kind": "Halo star", "story": "explore", "fov_arcsec": 300.0,
          "reference": {"source": "Gaia DR3", "source_id": 4810594479418041856, "ra": 77.9, "dec": -45.0}}

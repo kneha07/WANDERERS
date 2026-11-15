@@ -247,7 +247,7 @@ def find_images(rel, ref, c25, d, log=say):
             IRSA_DOWN["sia"] = True
             log(f"   {rel}: IRSA SIA failed ({e}); falling back to the S3 bucket's image index")
     else:
-        log(f"   {rel}: IRSA SIA failed earlier in this run; using the S3 bucket's image index")
+        log(f"   {rel}: IRSA SIA failed earlier in this run (or --s3); using the S3 bucket's image index")
     return s3_search(rel, ref, c25, d), "S3 index"
 
 
@@ -445,6 +445,12 @@ def add_position(ra, dec, name=None, fov=None):
 if __name__ == "__main__":
     if "--max" in sys.argv:                 # quick look: fewer SPHEREx cutouts per target
         MAX_IMAGES = max(12, int(sys.argv[sys.argv.index("--max") + 1]))
+        del sys.argv[sys.argv.index("--max"):sys.argv.index("--max") + 2]
+    if "--s3" in sys.argv:                  # IRSA up and down: take SPHEREx from the S3 bucket without asking IRSA
+        sys.argv.remove("--s3")
+        IRSA_DOWN.update(sia=True, cutout=True)
+        print("SPHEREx from the S3 bucket (--s3): cached IRSA SIA answers are used, other searches go to the S3 "
+              "image index, and every cutout is read from S3", flush=True)
     if "--ra" in sys.argv:
         a = sys.argv
         ra, dec = float(a[a.index("--ra") + 1]), float(a[a.index("--dec") + 1])
