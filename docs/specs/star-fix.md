@@ -142,7 +142,7 @@ Which input was wrong (`artifacts/star-fix/truth.py`)? At 19:00 on Phillip Islan
 - The person held the phone turned 9-23 deg the same way in all four photos. So "image top" is also not "up".
 - Conclusion: "up" is the input that limits the fix. Sky glow is not good enough.
 
-## 8. What accuracy needs: the budget down to metres
+## 2e. What accuracy needs: the budget down to metres
 
 Rule of thumb: 1 arcsec of error in the zenith = 31 m. 1 s of clock error = 15 arcsec x cos(latitude) = 360 m at Phillip Island.
 
