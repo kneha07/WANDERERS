@@ -178,8 +178,10 @@
     if (DEEP.survey !== R.survey) { setSurvey(R.survey); return; }
     const c = Sky.unobserve(P.az, P.alt, now, L.lat, L.lon), rot = Sky.zenithAngle(P.az, P.alt, now, L.lat, L.lon) - rollOf(P);
     const fov = (2 * Math.atan(W / 2 / f)) / D2R, last = DEEP.last;
-    if (last && Math.abs(last.fov - fov) < 0.01 && Math.abs(((rot - last.rot + 540) % 360) - 180) < 0.05 &&
-        Math.hypot((c.ra - last.c.ra) * Math.cos(c.dec * D2R), c.dec - last.c.dec) < 0.01) return;
+    // Skip only a change too small to see: the centre moves under 0.25 px, the scale under 1e-4, and the turn moves
+    // a screen corner under 0.25 px. Limits in pixels, not degrees, so they hold at every zoom (300x: 1 deg = 3827 px).
+    if (last && Math.abs(last.fov - fov) < 1e-4 * fov && Math.abs(((rot - last.rot + 540) % 360) - 180) < 0.25 / Math.hypot(W / 2, H / 2) / D2R &&
+        Math.hypot((c.ra - last.c.ra) * Math.cos(c.dec * D2R), c.dec - last.c.dec) < 0.25 / (f * Math.tan(D2R))) return;
     DEEP.last = { c, rot, fov };
     DEEP.aladin.setFoV(fov); DEEP.aladin.gotoRaDec(c.ra, c.dec); DEEP.aladin.setRotation(-rot);
   }

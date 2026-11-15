@@ -157,6 +157,19 @@ test("the note zoomed in names the survey and says 'archive photograph'; 'approx
   assert.doesNotMatch(c.note(), approx, "after a sight check");
 });
 
+test("at 150x and 300x the photographs follow every move of a quarter pixel or more: small steps and a pinch", async () => {
+  const c = load();
+  c.S.zoom = 300; c.frame(); await c.settle(); c.frame();
+  const synced = (move) => { c.calls.views.length = 0; move(); c.frame(); return c.calls.views.length > 0; };
+  let az = CAPELLA.az;
+  for (const z of [150, 300]) {
+    c.S.zoom = z; c.frame();
+    for (let i = 1; i <= 3; i++) assert.ok(synced(() => c.aim((az += 0.003), CAPELLA.alt)), `${z}x: 0.003 deg step ${i} (several pixels)`);
+    assert.equal(synced(() => c.aim(az + 1e-6, CAPELLA.alt)), false, `${z}x: a move far under a quarter pixel is skipped`);
+  }
+  assert.ok(synced(() => { c.S.zoom = 280; }), "a pinch from 300x to 280x reaches the photographs");
+});
+
 test("with no connection the note gives one reason: 'No connection', not 'not reachable'", async () => {
   const c = load({ online: false, archive: "down" });
   c.S.zoom = 4; c.frame(); await c.settle(); c.frame();
