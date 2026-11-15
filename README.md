@@ -573,7 +573,7 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 
 | Source | Used for |
 |---|---|
-| NASA SPHEREx DR1 spectral images (IRSA) | 2025 and 2026 images, spectrum, brightness change |
+| NASA SPHEREx spectral images, DR1 and QR3 (IRSA; releases tracked in `app/data/spherex_release.json`) | 2025 and 2026 images, spectrum, brightness change |
 | NASA WISE / AllWISE atlas (IRSA) | 2010 images at 3.4 and 4.6 µm |
 | ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
@@ -592,6 +592,43 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
 turned off, the conservative bad-pixel flag set from the SPHEREx Explanatory Supplement, 3-pixel aperture
 photometry with local background, and per-pixel solid angle from each image's WCS.
+
+### Keeping the SPHEREx data current
+
+SPHEREx data reaches the public in releases at NASA IRSA (today Data Release 1 and Quick Release 3, which gets new
+images every week). Which releases exist, and how recent our prepared targets are, is kept in
+`app/data/spherex_release.json`, written by `pipeline/spherex_releases.py`:
+
+```bash
+.venv/bin/python pipeline/spherex_releases.py           # ask IRSA, update app/data/spherex_release.json
+.venv/bin/python pipeline/spherex_releases.py show      # what the file says
+.venv/bin/python pipeline/spherex_releases.py synced    # after rebuilding targets with fetch.py + analyze.py
+```
+
+- **Releases** come from IRSA's SIA collection list (astroquery `Irsa.list_collections(servicetype="SIA",
+  filter="spherex")`, then IRSA TAP if that fails), oldest data first: data releases, then quick releases.
+  `pipeline/fetch.py` searches them in that order and keeps the first copy of an exposure that two releases share.
+  If the file is missing or broken, `fetch.py` uses its built-in list (`spherex_dr1`, `spherex_qr3`).
+- **data through** is the newest SPHEREx image date in `app/data/<target>/target.json` (nothing is downloaded for
+  it); **last synced** is when the targets were last rebuilt; **checked** is when IRSA last answered.
+- **New data**: a release newer than the one a target was built from (the file records, per target, which releases
+  `fetch.py` searched, from the IRSA answers it cached).
+- **IRSA down** (it often answers 502): the last known file is kept, only `last_attempt` and `error` change, and the
+  script exits normally. With no file yet it writes one from what is known locally and says the online check failed.
+
+The explorer and the home page show this as one line, for example *SPHEREx Quick Release 3 · data through Sep 2026 ·
+last synced 15 Nov 2026 · checked 15 Nov 2026*, with a short note when new data is available (`app/release.js`; the
+line stays hidden if the file cannot be read).
+
+**Automatic updates.** [`.github/workflows/spherex-sync.yml`](.github/workflows/spherex-sync.yml) runs every Monday
+and can be started by hand (Actions > spherex-sync > Run workflow; tick **rebuild** to rebuild even without a new
+release; a rebuild needs IRSA to answer). When a new release appears, or on a rebuild request, it re-runs `fetch.py`, `analyze.py`, `gaia_facts.py`,
+`evidence.py` and `vet.py` for every prepared target and opens a pull request from the `spherex-sync` branch with the
+refreshed `app/data` (it never pushes to `main`; `explain.json` and `trajectory.json` are not regenerated). When only
+the status file changed it opens a pull request with that file alone; when nothing changed, or IRSA is down, it does
+nothing. While its pull request is open, scheduled runs do not rebuild again. One repository setting is needed:
+Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests". Pull requests opened by
+the workflow do not start the `checks` workflow by themselves: close and reopen the pull request to run them.
 
 ## Honest limits
 

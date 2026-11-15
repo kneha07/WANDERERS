@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: an IRSA TAP answer that lists one more release. spherex_qr4 is HYPOTHETICAL: no such release was
+     known when this was written. It tests what happens when IRSA adds a release; it is not a claim that it exists. -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+ <RESOURCE type="results">
+  <INFO name="QUERY_STATUS" value="OK"/>
+  <TABLE>
+   <FIELD name="collection" datatype="char" arraysize="*"/>
+   <DATA>
+    <TABLEDATA>
+     <TR><TD>spherex_dr1</TD></TR>
+     <TR><TD>spherex_dr1_deep</TD></TR>
+     <TR><TD>spherex_qr3</TD></TR>
+     <TR><TD>spherex_qr3_deep</TD></TR>
+     <TR><TD>spherex_qr4</TD></TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

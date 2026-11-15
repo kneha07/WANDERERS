@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: a well-formed IRSA TAP answer with no rows (for example while the archive is being reloaded). -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+ <RESOURCE type="results">
+  <INFO name="QUERY_STATUS" value="OK"/>
+  <TABLE>
+   <FIELD name="collection" datatype="char" arraysize="*"/>
+   <DATA>
+    <TABLEDATA>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>
