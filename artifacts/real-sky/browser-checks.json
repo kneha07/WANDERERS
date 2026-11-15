@@ -1,5 +1,5 @@
 {
- "when": "2026-11-15T18:57:12.908Z",
+ "when": "2026-11-15T19:14:39.258Z",
  "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
@@ -114,8 +114,8 @@
    "label": "Standard, 34° S",
    "lat": -33.9,
    "order": 2,
-   "seconds": 18,
-   "plan": "Latitude 34° S, Visible: 60 pictures, about 2.9 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
+   "seconds": 14,
+   "plan": "Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
    "msg": "Saved for latitude 34° S. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
    "tiles": 248
   }
@@ -209,7 +209,7 @@
   {
    "name": "service worker trim keeps the 5 newest pictures, oldest dropped first",
    "ok": true,
-   "detail": "43 → 5"
+   "detail": "42 → 5"
   },
   {
    "name": "service worker drops the recent cache once it is older than the age limit",
@@ -239,7 +239,7 @@
   {
    "name": "a reissued survey: its recent pictures are dropped and the new date is recorded",
    "ok": true,
-   "detail": "8 → 0, {\"at\":1794769089643,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "8 → 0, {\"at\":1794770169886,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "Eye, dark site: about 2,500 stars above the horizon",
@@ -354,12 +354,12 @@
   {
    "name": "a reissued survey: the saved pictures are fetched again in place",
    "ok": true,
-   "detail": "spoiled tile 3 → 54011 bytes, 65 → 65 files, {\"at\":1794769119291,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "spoiled tile 3 → 48299 bytes, 65 → 65 files, {\"at\":1794770197000,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "save Standard, 34° S: finished",
    "ok": true,
-   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (18 s; Latitude 34° S, Visible: 60 pictures, about 2.9 MB (92% of the whole s)"
+   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (14 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
   },
   {
    "name": "Standard, 34° S: about 190 tiles of its own on top",
@@ -394,7 +394,7 @@
   {
    "name": "offline with nothing saved: falls back to Eye and says so",
    "ok": true,
-   "detail": "0.7 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
+   "detail": "2.0 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
   }
  ]
 }
