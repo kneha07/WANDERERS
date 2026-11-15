@@ -132,3 +132,35 @@ test("a sight check rejected for a tilt mismatch leaves the compass in charge", 
   assert.ok(!c.F.compassFrozen, "a rejected sight check must not freeze the compass");
   assert.equal(c.$("aimBar").hidden, false, "still aiming, so the user can try again or cancel");
 });
+
+test("after a sight check, tapping Done and aiming again right away still offers Cancel", () => {
+  const c = loadCompass({ intro: "fail" });
+  aimPhone(c, 100, 10);
+  const [north, east] = c.dirs;
+  north.click();                                   // "This is North" -> aim mode
+  c.$("aimGo").click();                            // Calibrate succeeds
+  assert.equal(c.$("aimGo").textContent, "Done");
+  assert.equal(c.$("aimCancel").hidden, true);
+  c.$("aimGo").click();                            // Done, before the 4 s auto-close
+  assert.equal(c.$("aimBar").hidden, true);
+  east.click();                                    // a new aim within 4 s
+  assert.equal(c.$("aimBar").hidden, false);
+  assert.equal(c.$("aimGo").textContent, "Calibrate");
+  assert.equal(c.$("aimCancel").hidden, false, "Cancel must be offered on the new aim");
+  c.runTimers();                                   // the first aim's auto-close must not end the new aim
+  assert.equal(c.$("aimBar").hidden, false);
+  c.$("aimCancel").click();
+  assert.equal(c.$("aimBar").hidden, true);
+  assert.equal(c.body.classList.contains("aiming"), false);
+});
+
+test("a successful sight check closes itself after 4 s and restores Cancel", () => {
+  const c = loadCompass({ intro: "fail" });
+  aimPhone(c, 100, 10);
+  c.dirs[0].click();
+  c.$("aimGo").click();
+  c.runTimers();
+  assert.equal(c.$("aimBar").hidden, true);
+  assert.equal(c.$("aimCancel").hidden, false);
+  assert.equal(c.F.compassFrozen, true);
+});
