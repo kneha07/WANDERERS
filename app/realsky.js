@@ -252,7 +252,6 @@
       scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
         : (state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky]).trim(),
       scoped && S.sensors && !F.compassFrozen && !S.snapped && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
-      S.hold && (S.holds > 1 ? "View held." : "View held. Drag to move. Pinch out to follow the phone again."),   // the hint once
       // one message per problem: with no connection, that is the reason
       t > 0 && (navigator.onLine === false ? "No connection: no finer photographs." : DEEP.failed && "Telescope photographs are not reachable now."),
       pt.text].filter(Boolean).join(" · ");

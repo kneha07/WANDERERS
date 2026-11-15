@@ -356,6 +356,23 @@ test("entering or leaving hold first cancels a running 'Drag the sky', so its ol
   assert.equal(cancels, 2, "leaving hold cancels it too");
 });
 
+test("hold mode: the first hold shows its hint under the crosshair for 4 s; HELD shows by the 1x button while held", async () => {
+  const c = await phoneAt(100, 20);
+  const shown = () => [!c.$("holdHint").hidden, !c.$("heldMark").hidden];
+  assert.deepEqual(shown(), [false, false], "not held");
+  c.setZoom(10);
+  assert.deepEqual(shown(), [true, true], "first hold: the hint and HELD");
+  c.runTimers(4000);
+  assert.deepEqual(shown(), [false, true], "after 4 s the hint goes, HELD stays");
+  c.setZoom(5);
+  assert.deepEqual(shown(), [false, false], "let go: neither");
+  c.setZoom(10);
+  assert.deepEqual(shown(), [false, true], "a later hold: HELD only");
+  const d = await phoneAt(100, 20);
+  d.setZoom(10); d.setZoom(5);
+  assert.equal(d.$("holdHint").hidden, true, "the hint also goes when the first hold ends before 4 s");
+});
+
 test("hold mode: a key press or a drag during the snap's glide stops the view where it is, no longer 'snapped'", async () => {
   const c = await phoneAt(337, 28);
   c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();

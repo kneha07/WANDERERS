@@ -254,7 +254,8 @@ $("zoomReset").onclick = () => setZoom(1);      // back to 1x in one step (Escap
 // Checked in setZoom and every frame (the sensors or the photographs can start after the zoom).
 // Snap: a selected target within 6 deg ("Locked on") is centred instead of the noisy phone pose. The view glides
 // there in 250 ms (glide(), in the draw loop), or jumps with reduced motion. A drag or a key press stops the glide.
-let ease = null;
+// While held, HELD shows by the 1x button; on the first hold of a visit a hint shows under the crosshair for 4 s.
+let ease = null, hintTimer = 0;
 function updateHold() {
   const covered = !S.camOn || RealSky.cover() === 1;
   const p = phoneSteers() && S.zoom >= 8 && covered && F.pointing();     // no pose yet: not held (until a frame has one)
@@ -267,9 +268,13 @@ function updateHold() {
       const to = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
       if (reduced) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
     }
-    S.hold = true; S.holds++;   // the count of holds in this visit: the note shows its hint on the first only
+    S.hold = true; S.holds++; $("heldMark").hidden = false;
+    if (S.holds === 1) { $("holdHint").hidden = false; hintTimer = setTimeout(() => ($("holdHint").hidden = true), 4000); }
     if (navigator.vibrate) navigator.vibrate(30);
-  } else if (S.hold && (S.zoom < 6 || !covered)) { RealSky.cancelDrag(); S.hold = false; S.snapped = false; ease = null; }
+  } else if (S.hold && (S.zoom < 6 || !covered)) {
+    RealSky.cancelDrag(); S.hold = false; S.snapped = false; ease = null;
+    $("heldMark").hidden = true; $("holdHint").hidden = true; clearTimeout(hintTimer);
+  }
 }
 const stopGlide = () => { if (ease) { ease = null; S.snapped = false; } };   // a drag or a key: the view is not on the target
 function glide() {
