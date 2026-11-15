@@ -205,7 +205,7 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
-**Star Fix** (`app/starfix.html`, needs `node start.js` or `node server.js`). Upload original iPhone night-sky photos and
+**Star Fix** (`app/starfix.html`, needs `start.cmd` or `node start.js`, which install the plate solver; plain `node server.js` works only after that). Upload original iPhone night-sky photos and
 WANDERERS finds where on Earth they were taken, from the stars only: it recognises the stars (cedar-solve plate solve),
 reads which way was down (the phone's gravity sensor, in the Apple MakerNote) and the exact time, and turns the point
 overhead into a latitude and longitude (astropy). The answer is a sentence ("about 130 km south-east of Geelong"), a

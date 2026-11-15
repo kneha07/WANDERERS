@@ -14,7 +14,7 @@
   earth.src = "data/earth/day.jpg";
 
   const send = (file, signal) => fetch("api/star-fix", { method: "POST", body: file, signal })
-    .then((r) => (r.ok ? r.json() : { status: "error" }));   // 409, 500, 504: "Could not read this photo" + Try again
+    .then((r) => (r.ok ? r.json() : r.json().then((b) => (b.status === "setup" ? b : { status: "error" }), () => ({ status: "error" }))));   // 500 setup: how to start the app; 409, other 500, 504: "Could not read this photo" + Try again
   const q = C.photoQueue(send, sync);
   const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
   const setKm = (el, t) => {   // the same, with each km value in the mono face of measured values
