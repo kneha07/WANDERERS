@@ -165,6 +165,23 @@ test("example buttons round to the next minute instead of showing 60 seconds", a
   p.close();
 });
 
+test("typed coordinates hide the previous star's path card on every tab", async (t) => {
+  const p = open("?target=barnard");
+  t.after(p.close);
+  await p.settle(200);
+  assert.equal(p.$("pathCard").hidden, false, "Barnard's Star has a path card");
+  typeCoords(p, "10", "20");                                   // not cached: the sky map opens there
+  await p.settle(50);
+  for (const tab of ["map", "webb", "flip", "map"]) {
+    p.window.WANDERERS.selectTab(tab);
+    assert.equal(p.$("pathCard").hidden, true, `${tab}: no path is known for typed coordinates`);
+  }
+  p.window.WANDERERS.openTarget("wise0855");                   // a target again: its card comes back
+  await p.settle(200);
+  assert.equal(p.$("pathCard").hidden, false);
+  assert.match(p.$("pathBody").innerHTML, /wanderers_wise0855/);
+});
+
 test("coordinates: a target just across RA 0h is still matched", async () => {
   const files = { "data/index.json": [{ id: "barnard", name: "Near zero", teaser: "", ra: 359.998, dec: 10, fov: 300 }] };
   const p = open("?target=barnard", { files });
