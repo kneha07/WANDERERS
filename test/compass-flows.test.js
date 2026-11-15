@@ -296,6 +296,19 @@ test("hold mode: from 8x the view stops following the phone, and below 6x it fol
   assert.ok(near(c.pose(), 140, 35), `follows the phone again, got ${c.pose().az}, ${c.pose().alt}`);
 });
 
+test("hold mode: one finger and the arrow keys move the held view, slower when zoomed in", async () => {
+  const c = await phoneAt(100, 20);
+  c.setZoom(10);
+  const { az, alt } = c.S.manual, hud = c.$("hud");
+  hud.dispatch("pointerdown", { pointerId: 1, isPrimary: true, clientX: 0, clientY: 400 });
+  hud.dispatch("pointermove", { pointerId: 1, clientX: 844, clientY: 400 });     // a screen height: 70 deg, divided by the zoom
+  hud.dispatch("pointerup", { pointerId: 1, clientX: 844, clientY: 400 });
+  assert.ok(Math.abs(Orient.wrap180(c.S.manual.az - (az - 7))) < 1e-9, `drag: ${az} -> ${c.S.manual.az}`);
+  for (const fn of c.windowListeners.keydown) fn({ key: "ArrowUp", target: { tagName: "BODY" } });
+  assert.ok(Math.abs(c.S.manual.alt - (alt + 0.2)) < 1e-9, `arrow key: 2 deg divided by the zoom, ${alt} -> ${c.S.manual.alt}`);
+  assert.deepEqual([c.pose().az, c.pose().alt], [c.S.manual.az, c.S.manual.alt]);
+});
+
 test("location note: a later GPS timeout does not claim the location was declined", async () => {
   const run = async (events) => {
     const geolocation = { watchPosition: (ok, fail) => { for (const e of events) e.code ? fail(e) : ok({ coords: { latitude: 47.6, longitude: -122.3, accuracy: 12, altitude: null } }); } };

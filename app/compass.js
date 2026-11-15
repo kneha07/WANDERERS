@@ -266,7 +266,7 @@ for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(typ
 $("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
 
-$("hud").addEventListener("pointerdown", (e) => { if (!S.sensors && !pinch) { drag = { x: e.clientX, y: e.clientY, az: S.manual.az, alt: S.manual.alt }; $("hud").setPointerCapture(e.pointerId); } });
+$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY, az: S.manual.az, alt: S.manual.alt }; $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const k = 70 / innerHeight / S.zoom;
@@ -275,8 +275,8 @@ $("hud").addEventListener("pointermove", (e) => {
 });
 $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
-  if (S.sensors || e.target.tagName === "INPUT") return;
-  const s = e.shiftKey ? 10 : 2;
+  if ((S.sensors && !S.hold) || e.target.tagName === "INPUT") return;
+  const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
   if (e.key === "ArrowLeft") S.manual.az = (S.manual.az - s + 360) % 360;
   if (e.key === "ArrowRight") S.manual.az = (S.manual.az + s) % 360;
   if (e.key === "ArrowUp") S.manual.alt = Math.min(85, S.manual.alt + s);
