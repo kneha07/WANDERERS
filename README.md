@@ -33,7 +33,7 @@ evidence on screen. Unmatched objects are called **candidates, never discoveries
    Runs entirely in the browser, so it works on the public site for any RA/Dec.
 
 The five challenge test targets are the five "missions": Barnard's Star, R Draconis, RW Aurigae,
-Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `?target=wise0855&ch=w2`.
+Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `observatory.html?target=wise0855&ch=w2` (older links to `/?target=…` redirect there). Brand, logo files and the Day/Night palette: [BRAND.md](BRAND.md).
 
 **Any coordinates.** Type an RA/Dec (degrees or `08h55m10.83s` / `-07d14m42.5s`). On the demo server
 (`node server.js`) WANDERERS fetches a quick look of that patch (about 36 SPHEREx cutouts plus WISE and
@@ -62,7 +62,7 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python pipeline/star_trajectory.py
 
 # view it
-node server.js        # http://localhost:8000, live "Ask WANDERERS" via claude -p
+node server.js        # http://localhost:8000 (home), /observatory.html (workspace), live "Ask WANDERERS" via claude -p
 # or any static server on app/, e.g.  python3 -m http.server -d app 8000
 ```
 
@@ -239,7 +239,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
 
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py
-app/        index.html · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
+app/        index.html (home) · observatory.html · brand.css · theme.js · home.css · home.js · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
 ```
