@@ -11,6 +11,51 @@ that with real infrared data spanning 2010 to 2026, then goes one step further: 
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
 evidence on screen. Unmatched objects are called **candidates, never discoveries**.
 
+<p align="center">
+  <img src="docs/img/home-night.jpg" alt="WANDERERS home page, Night theme" width="49%">
+  <img src="docs/img/home-day.jpg" alt="WANDERERS home page, Day theme" width="49%">
+</p>
+<p align="center">
+  <img src="docs/img/obs-night.jpg" alt="Observatory: evidence, what else moved, learnt star path, Claude's explanation (Night)" width="49%">
+  <img src="docs/img/obs-day.jpg" alt="Observatory in the Day theme" width="49%">
+</p>
+<sub>Real screenshots of `main`: the home page and the observatory, in the Night and Day themes. The data in them is real (WISE, SPHEREx, Gaia).</sub>
+
+## Quick start
+
+| I want to… | Do this |
+|---|---|
+| **Look around** | Open the live site (top of this page). Nothing to install. |
+| **Run it locally** | `node server.js`, then open <http://localhost:8000>. |
+| **Run everything** (any coordinates, live explorer) | `node start.js`, or double-click `start.cmd` / `start.command`. It sets up Python and the web build for you. |
+| **Rebuild the data** | See [Run it](#run-it). `app/data/` is committed, so you only need this to change the data. |
+| **Run the tests** | `for f in test/*.test.js; do node --test "$f"; done` and `python3 -m unittest discover -s tests -p "test_*.py"` |
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  you["Your browser"]
+  site["app/ site<br/>home, observatory, Starquakes,<br/>Through Webb, Sky Compass"]
+  srv["server.js :8000<br/>optional: live features"]
+  api["backend/ :8001<br/>live explorer API"]
+  pipe["pipeline/ (Python)<br/>fetch, analyze, evidence, vet,<br/>explain, star paths"]
+  data[("app/data/<br/>committed, so a clone just works")]
+  ext["NASA IRSA and MAST, ESA Gaia,<br/>SIMBAD, CDS, HYG"]
+
+  you --> site
+  site -->|"reads"| data
+  site -.->|"any coordinates, Ask,<br/>learn a star"| srv
+  you -->|"/explore/"| srv --> api
+  srv -->|"runs"| pipe
+  pipe -->|"writes"| data
+  pipe --> ext
+  api --> ext
+```
+
+Dashed line: needs `server.js`. A plain static host shows everything that only reads `app/data/`. The full picture
+(every route, the data flow step by step, where files live) is in [docs/architecture.md](docs/architecture.md).
+
 ## What it does
 
 1. **Flipbook across 16 years.** WISE (2010) and SPHEREx (2025, 2026) images of the same patch, matched by
@@ -31,6 +76,11 @@ evidence on screen. Unmatched objects are called **candidates, never discoveries
 9. **Live sky map for any coordinates.** Aladin Lite on IRSA's SPHEREx DR1 all-sky cube with a slider
    through all 102 SPHEREx wavelengths (cold brown dwarfs appear only at the long end), plus AllWISE colour.
    Runs entirely in the browser, so it works on the public site for any RA/Dec.
+10. **What else moved in this field?** An automatic search pairs dots seen only in WISE 2010 with dots seen only
+    in SPHEREx, checks each pair against the target's path, Gaia DR3 and SIMBAD (`pipeline/vet.py`), and lists what
+    is left. An unconfirmed pair is not a discovery.
+11. **Insights and limits.** Each evidence card adds plain-language facts (for example, "about 510 light-years
+    away") and a "What this view cannot show" box, with links to check the result yourself.
 
 The five challenge test targets are the five "missions": Barnard's Star, R Draconis, RW Aurigae,
 Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `observatory.html?target=wise0855&ch=w2` (older links to `/?target=…` redirect there). Brand, logo files and the Day/Night palette: [BRAND.md](BRAND.md).
@@ -335,12 +385,20 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py · star_trajectory.py · stardb.py · star_ml.py · starquake.py
+pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
+            star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
             make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
-app/        index.html (home) · observatory.html (console) · compass.html (phone) · brand.css · theme.js · home.css · home.js
-            style.css · app.js · search.js · telescope.js · starpath.js · stardb.js · stars.js · starquake.js · starquake-ui.js · starcore.js · longrange.js
-            compass.js · orient.js · sky.js · intro.js
-            data/<target>/ · data/stars/ · data/starquake/ · stars.json · webb.json · webb/ (generated)
-server.js   local demo server with live Claude answers
-docs/field-shift/   our earlier Field Shift plan
+app/        index.html (home) · observatory.html (console) · compass.html (phone)
+            brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
+            starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
+            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js
+            data/<target>/ · data/stars/ · data/starquake/ · stars.json · webb.json · declination.json
+server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
+fields.js   the any-coordinates job service used by server.js
+start.js    one-click start for everything (also start.cmd, start.command)
+backend/    FastAPI live explorer API (port 8001)     web/   React live explorer, served at /explore/
+test/ tests/   Node and Python tests              artifacts/   review records, merge records, screenshots
+docs/       architecture.md · demo-script.md · blink/ · research/ · HANDOFF.md · product-gaps.md · field-shift/ (earlier plan)
 ```
+
+More: [docs/architecture.md](docs/architecture.md) (diagrams and routes) · [BRAND.md](BRAND.md) · [docs/demo-script.md](docs/demo-script.md).
