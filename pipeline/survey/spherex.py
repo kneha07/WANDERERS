@@ -707,6 +707,8 @@ def centroid(values: np.ndarray, xi: np.ndarray, eta: np.ndarray, bkg: np.ndarra
             return res
         nx = float(np.sum(D[sel] * xi[sel]) / F)
         ny = float(np.sum(D[sel] * eta[sel]) / F)
+        if math.hypot(nx - cx, ny - cy) > R_AP * pix_arcsec:   # outside the pixels it was computed from: noise
+            return res
         ex = math.sqrt(float(np.sum(((xi[sel] - nx) * sD[sel]) ** 2))) / F
         ey = math.sqrt(float(np.sum(((eta[sel] - ny) * sD[sel]) ** 2))) / F
         res = (nx, ny, math.hypot(ex, ey) / math.sqrt(2.0))
