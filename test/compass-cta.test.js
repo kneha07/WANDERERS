@@ -34,11 +34,20 @@ test("after typed coordinates it falls back to the plain Sky Compass", async () 
   p.close();
 });
 
-test("on the home page the button sits in the hero, right after How It Works, not at the bottom", () => {
+test("the home hero is the chooser: exactly three doors, Observatory, Sky Compass, Star Fix (A12)", () => {
   const h = html("index.html");
   const hero = h.match(/<div class="cta">([\s\S]*?)<\/div>\s*<dl class="hero-stats"/);
   assert.ok(hero, "hero buttons");
   const links = [...hero[1].matchAll(/<a class="btn [^"]*"[^>]*href="([^"]+)"/g)].map((x) => x[1]);
-  assert.deepEqual(links, ["observatory.html", "#how", "compass.html"]);
+  assert.deepEqual(links, ["observatory.html", "compass.html", "starfix.html"]);
+  const doors = [...hero[1].matchAll(/<a class="(btn [^"]*)"[\s\S]*?<b>([^<]+)<\/b><small>([^<]+)<\/small><\/span><\/a>/g)].map((x) => [x[1].includes("btn-primary"), x[2], x[3]]);
+  assert.deepEqual(doors, [
+    [true, "Explore the Sky", "Observatory · watch 16 years of sky change"],
+    [false, "See it in the sky", "Sky Compass · point your phone up"],
+    [false, "Find where you were", "Star Fix · upload a star photo"],
+  ]);
+  assert.equal((hero[1].match(/<svg class="cc-icon"/g) || []).length, 3, "the same two-line style for all three");
+  assert.match(h.match(/<nav class="site-nav"[\s\S]*?<\/nav>/)[0], /<a href="#how">How It Works<\/a>/, "How It Works stays in the top navigation");
   assert.equal((h.match(/See it in the sky/g) || []).length, 1, "only one copy on the page");
+  assert.match(h.match(/<footer[\s\S]*<\/footer>/)[0], /<a href="starfix\.html">Star Fix<\/a>/, "footer link");
 });
