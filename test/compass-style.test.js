@@ -38,6 +38,15 @@ test("the radar panel stays dark: its canvas labels are drawn in light colours",
   assert.ok(bg && Math.max(+bg[1], +bg[2], +bg[3]) < 60, "dark radar background");
 });
 
+test("on the photographs the note's dark pill keeps 4.5:1 contrast, even over a white star", () => {
+  const pill = rule(css, ".sky-note.on-photo") || "";
+  const bg = pill.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/), fg = pill.match(/color:\s*(#[0-9a-fA-F]{6})/);
+  assert.ok(bg && fg, "the pill has an rgba background and a hex text colour");
+  const a = +bg[4], onWhite = "#" + [1, 2, 3].map((i) => Math.round(+bg[i] * a + 255 * (1 - a)).toString(16).padStart(2, "0")).join("");
+  const ratio = (lum(fg[1]) + 0.05) / (lum(onWhite) + 0.05);
+  assert.ok(ratio >= 4.5, `contrast ${ratio.toFixed(1)}:1 over a white star`);
+});
+
 test("the details sheet's path card styles apply (#dPath is itself the .path-card)", () => {
   assert.match(html, /id="dPath" class="path-card"/);
   assert.doesNotMatch(css, /#dPath \.path-card/, "a descendant selector never matches the element itself");

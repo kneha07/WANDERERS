@@ -27,7 +27,8 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
   const buttons = { surveySeg: ["visible", "infrared"].map((survey) => ({ dataset: { survey }, classList: { toggle() {} }, setAttribute() {} })) };
   const el = (id) => els[id] || (els[id] = {
     id, hidden: id === "skyDeep" || id === "dragBar", style: {}, textContent: "", value: "", dataset: {}, listeners: {}, children: [],
-    classList: { toggle() {} }, setAttribute() {}, querySelectorAll: () => buttons[id] || [], setPointerCapture() {},
+    classes: new Set(), setAttribute() {}, querySelectorAll: () => buttons[id] || [], setPointerCapture() {},
+    get classList() { const k = this.classes; return { toggle: (c, on) => ((on ?? !k.has(c)) ? k.add(c) : k.delete(c)), contains: (c) => k.has(c) }; },
     replaceChildren(...nodes) { this.children = nodes; },
     addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
     dispatch(type, e) { for (const fn of this.listeners[type] || []) fn({ stopImmediatePropagation() {}, ...e }); },
@@ -234,6 +235,17 @@ test("the hold hint shows on the first hold of a visit (S.holds, counted by comp
   assert.ok(!c.note().includes("View held"), "not held: no hold text");
   Object.assign(c.S, { hold: true, holds: 2 }); c.frame();
   assert.ok(c.note().includes("View held.") && !c.note().includes(hint), c.note());
+});
+
+test("the note sits on a dark pill while the photographs cover the view, so it can be read on them", async () => {
+  const c = load();
+  const pill = () => c.el("skyNote").classList.contains("on-photo");
+  c.frame();
+  assert.equal(pill(), false, "1x: drawn stars, no photographs");
+  c.S.zoom = 12; c.frame(); await c.settle(); c.frame();
+  assert.equal(pill(), true, "12x: on the photographs");
+  c.S.zoom = 1; c.frame();
+  assert.equal(pill(), false, "back at 1x");
 });
 
 test("Drag the sky aims a held view and leaves the sight-check offsets and the compass alone", async () => {

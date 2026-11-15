@@ -240,7 +240,7 @@
     $("mix").value = Math.round(R.mix * 100);
     DEEP.last = null; DEEP.op = null; NOTE = ""; note();              // the next frame sets the photographs' opacity
   }
-  let NOTE = "";
+  let NOTE = "", PILL = null;
   // The note always names what is on screen. Zoomed in, it names the survey, says it is an archive photograph,
   // and says when the direction is only approximate (no sight check, no snap to a target).
   function note() {
@@ -256,6 +256,8 @@
       // one message per problem: with no connection, that is the reason
       t > 0 && (navigator.onLine === false ? "No connection: no finer photographs." : DEEP.failed && "Telescope photographs are not reachable now."),
       pt.text].filter(Boolean).join(" · ");
+    const pill = cover() > 0;                        // on the photographs: a dark pill keeps the note readable
+    if (pill !== PILL) { PILL = pill; $("skyNote").classList.toggle("on-photo", pill); }
     const key = text + pt.needsCal;
     if (key === NOTE) return;
     NOTE = key;
