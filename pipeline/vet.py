@@ -153,4 +153,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # A Windows console is cp1252 by default and cannot print ″ (issue #46): write UTF-8, and never crash on a character.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     main()
