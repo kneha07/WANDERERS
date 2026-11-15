@@ -104,6 +104,11 @@ describe('a fast mover near typed coordinates', () => {
       'A fast-moving star (Gaia DR3 4472832130942575872, 10.4″/yr) is 270″ from here. Typed coordinates from an old catalogue may miss it — search it by name.',
     )
   })
+  it('says nothing when the typed position is where the star is now (2026)', () => {
+    const star = { source_id: '1', ra: 269.44850253, dec: 4.73942005, pmra: -801.551, pmdec: 10362.394, gmag: 8.2, xy: [] }
+    const now = { ra: 269.44850253 - (0.801551 * 10) / 3600 / Math.cos((4.73942 * Math.PI) / 180), dec: 4.73942005 + (10.362394 * 10) / 3600 }
+    expect(fastHint({ pm: null, center: now, gaia: { release: 'Gaia DR3', epoch_mjd: 57388.5, stars: [star] } }, null)).toBe(null)
+  })
   it('says nothing for a named target or without a fast mover', () => {
     expect(fastHint({ ...typed, pm: { pmra: 1, pmdec: 1 } }, { fast_movers: [{ name: 'x', pm_arcsec_yr: 2, sep_arcsec: 3 }] })).toBe(null)
     expect(fastHint(typed, { fast_movers: [] })).toBe(null)

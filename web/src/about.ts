@@ -16,7 +16,7 @@ export type About = {
   papers: number | null
   sources: { label: string; url: string }[]
   notes: string[]
-  fast_movers?: { name: string; pm_arcsec_yr: number; sep_arcsec: number }[] // only for a position
+  fast_movers?: { name: string; pm_arcsec_yr: number; sep_arcsec: number }[] | null // a position only; null: the search failed
 }
 
 type Measured = Pick<Result, 'pixel_arcsec' | 'pm' | 'detectors'> & {
@@ -106,7 +106,7 @@ export function fastHint(r: Pick<Result, 'pm' | 'center' | 'gaia'>, about: Pick<
   const near = (r.gaia?.stars ?? [])
     .filter((s) => s.pmra != null && s.pmdec != null && Math.hypot(s.pmra, s.pmdec) > 1000)
     .map((s) => ({ s, path: pathNear(s as { ra: number; dec: number; pmra: number; pmdec: number }, epoch, r.center) }))
-    .filter((x) => x.path[0] <= 60)
+    .filter((x) => x.path[0] <= 60 && x.path[1] > 5) // not when the typed position is where the star is now
     .sort((a, b) => a.path[0] - b.path[0])[0]
   return near ? hint(`Gaia DR3 ${near.s.source_id}`, Math.hypot(near.s.pmra!, near.s.pmdec!) / 1000, near.path[1]) : null
 }
