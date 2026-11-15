@@ -242,19 +242,33 @@ const ZOOM_MAX = 300;
 function setZoom(z) {
   S.zoom = Math.max(S.camOn ? 1 : 0.5, Math.min(ZOOM_MAX, z));
   $("cam").style.transform = S.zoom === 1 ? "" : `scale(${S.zoom})`;
+  $("zoomReset").hidden = S.zoom === 1;
   updateHold();
 }
+$("zoomReset").onclick = () => setZoom(1);      // back to 1x in one step (Escape too, on a keyboard)
 // Hold mode (the mount): from 8x the phone's sensors jitter by more than the view, so the view stops following
 // the phone and uses S.manual, like drag mode. It lets go below 6x (the gap stops flicker).
-// Snap: a selected target within 6 deg ("Locked on") is centred instead of the noisy phone pose.
+// Snap: a selected target within 6 deg ("Locked on") is centred instead of the noisy phone pose. The view glides
+// there in 250 ms (glide(), in the draw loop), or jumps with reduced motion. A drag or a key press stops the glide.
+let ease = null;
 function updateHold() {
   if (S.sensors && !S.hold && S.zoom >= 8) {
     const T = S.sel && S.targets.find((t) => t.id === S.sel.id), p = F.pointing();
     S.snapped = !!(T && T._sep != null && T._sep <= 6);
-    if (S.snapped) S.manual = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
-    else if (p) S.manual = { az: p.az, alt: p.alt };
+    if (p) S.manual = { az: p.az, alt: p.alt };
+    if (S.snapped) {
+      const to = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
+      if (reduced || !p) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
+    }
     S.hold = true;
-  } else if (S.hold && S.zoom < 6) { S.hold = false; S.snapped = false; }
+    if (navigator.vibrate) navigator.vibrate(30);
+  } else if (S.hold && S.zoom < 6) { S.hold = false; S.snapped = false; ease = null; }
+}
+function glide() {
+  if (!ease) return;
+  const k = Math.min(1, (performance.now() - ease.t0) / 250), q = 1 - (1 - k) ** 3, { from: a, to: b } = ease;   // ease-out
+  S.manual = k < 1 ? { az: (a.az + wrap180(b.az - a.az) * q + 360) % 360, alt: a.alt + (b.alt - a.alt) * q } : b;
+  if (k === 1) ease = null;
 }
 const fingers = new Map();
 let pinch = null;
@@ -282,7 +296,7 @@ for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(typ
 $("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
 
-$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY }; $("hud").setPointerCapture(e.pointerId); } });
+$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY }; ease = null; $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const k = 70 / innerHeight / S.zoom;       // step by step, so the sidereal tracking between two moves is kept
@@ -292,7 +306,10 @@ $("hud").addEventListener("pointermove", (e) => {
 });
 $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
-  if ((S.sensors && !S.hold) || e.target.tagName === "INPUT") return;
+  if (e.target.tagName === "INPUT") return;
+  ease = null;
+  if (e.key === "Escape") { if (![...document.querySelectorAll(".sheet")].some((el) => !el.hidden)) setZoom(1); return; }
+  if (S.sensors && !S.hold) return;
   const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
   if (e.key === "ArrowLeft") S.manual.az = (S.manual.az - s + 360) % 360;
   if (e.key === "ArrowRight") S.manual.az = (S.manual.az + s) % 360;
@@ -326,7 +343,7 @@ function loop() { draw(); calibrationTick(); requestAnimationFrame(loop); }
 
 function draw() {
   const W = innerWidth, H = innerHeight, now = nowDate(), L = loc();
-  track(now, L);
+  track(now, L); glide();
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.clearRect(0, 0, W, H);
   const P = pose(), f = focalPx(W, H), cx = W / 2, cy = H / 2;

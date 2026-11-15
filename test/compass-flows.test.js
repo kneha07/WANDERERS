@@ -9,6 +9,7 @@ const APP = path.join(__dirname, "..", "app");
 const Orient = require("../app/orient.js");
 const Sky = require("../app/sky.js");
 const HIDDEN = new Set([...fs.readFileSync(path.join(APP, "compass.html"), "utf8").matchAll(/<[^>]*\bid="([^"]+)"[^>]*\shidden[\s>]/g)].map((m) => m[1]));
+const SHEETS = [...fs.readFileSync(path.join(APP, "compass.html"), "utf8").matchAll(/<div id="([^"]+)" class="sheet\b/g)].map((m) => m[1]);
 
 // ---- a fake browser: just enough DOM for compass.js ----
 function fakeElement(id) {
@@ -49,7 +50,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const body = fakeElement("body");
   const document = {
     getElementById: $, body,
-    querySelectorAll: (sel) => (sel === ".dirs button" ? dirs : []),
+    querySelectorAll: (sel) => (sel === ".dirs button" ? dirs : sel === ".sheet" ? SHEETS.map($) : []),
     createElement: () => fakeElement(), addEventListener() {},
   };
   const loc = new URL("https://wanderers.test/compass.html" + search);
@@ -319,8 +320,41 @@ test("hold mode: a selected target within 6 deg of the crosshair is centred, not
   const T = c.S.sel;
   assert.ok(T._sep > 1 && T._sep <= 6, `crosshair ${T._sep} deg from the target`);
   c.setZoom(8);
+  assert.ok(near(c.S.manual, 337, 28), "the view glides from where the phone points");
+  c.frame();                                                 // 250 ms later (each reading of the test clock is 300 ms on)
   assert.deepEqual(c.S.manual, { az: T._az, alt: T._alt });
   assert.equal(c.S.snapped, true);
+});
+
+test("hold mode: a key press during the snap's glide stops the view where it is", async () => {
+  const c = await phoneAt(337, 28);
+  c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();
+  c.frame();
+  c.setZoom(8);
+  for (const fn of c.windowListeners.keydown) fn({ key: "ArrowLeft", target: { tagName: "BODY" } });
+  const stopped = { ...c.S.manual };
+  c.frame();
+  assert.deepEqual(c.S.manual, stopped);
+  assert.ok(near(stopped, 337 - 2 / 8, 28), `stopped near the phone pose, got ${stopped.az}, ${stopped.alt}`);
+});
+
+test("the 1x button and Escape take the view back to 1x in one step, and let go of the hold", async () => {
+  const c = await phoneAt(100, 20), buzz = [];
+  c.window.navigator.vibrate = (ms) => buzz.push(ms);
+  assert.equal(c.$("zoomReset").hidden, true, "no button at 1x");
+  c.setZoom(12);
+  assert.equal(c.$("zoomReset").hidden, false, "shown when zoomed");
+  assert.deepEqual([c.S.hold, buzz], [true, [30]], "held, with a short buzz");
+  c.$("zoomReset").click();
+  assert.deepEqual([c.S.zoom, c.S.hold, c.$("zoomReset").hidden], [1, false, true]);
+  const esc = (tagName) => { for (const fn of c.windowListeners.keydown) fn({ key: "Escape", target: { tagName } }); };
+  c.setZoom(4);
+  esc("INPUT");
+  assert.equal(c.S.zoom, 4, "not while typing");
+  c.$("info").hidden = false; esc("BODY");
+  assert.equal(c.S.zoom, 4, "not while a sheet is open");
+  c.$("info").hidden = true; esc("BODY");
+  assert.equal(c.S.zoom, 1);
 });
 
 test("from 8x a dragged or held view turns with the sky, so a star stays in the view (sidereal tracking)", async () => {

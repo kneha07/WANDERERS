@@ -124,8 +124,8 @@
 
   // ---------- Deep: survey photographs under the canvas ----------
   // retryAt: no new start before this time (30 s after a failed one). failed: the last start failed (for the note).
-  // op: the opacity last written to #skyDeep, or "hidden".
-  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null, retryAt: 0, failed: false, op: null };
+  // op: the opacity last written to #skyDeep, or "hidden". start: the id of the latest start.
+  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null, retryAt: 0, failed: false, op: null, start: 0 };
   async function pickHost(name) {
     for (const h of surveyOf(name).hosts) {
       if (await fetch(h + "/properties", { signal: AbortSignal.timeout(6000) }).then((r) => r.ok).catch(() => false)) return h;
@@ -134,23 +134,27 @@
   }
   async function startDeep() {
     if (DEEP.state !== "idle" || Date.now() < DEEP.retryAt) return;
+    const id = ++DEEP.start, survey = R.survey, late = setTimeout(() => id === DEEP.start && failDeep(), 20000);   // a start that hangs has failed
     DEEP.state = "loading"; note();
     try {
-      const base = await pickHost(R.survey);
-      DEEP.base = base; DEEP.survey = R.survey;
-      const A = (await import(ALADIN_URL)).default; await A.init; DEEP.A = A;
+      const base = await pickHost(survey);
+      const A = (await import(ALADIN_URL)).default; await A.init;
+      if (id !== DEEP.start) return;                  // given up on after 20 s: a late answer changes nothing
+      DEEP.base = base; DEEP.survey = survey; DEEP.A = A;
       // log: false. By default Aladin Lite reports this page's full address to a CDS logging server on start.
       DEEP.aladin = A.aladin("#skyDeep", { survey: base, projection: "TAN", fov: 60, cooFrame: "ICRSd", log: false,
         showReticle: false, showLayersControl: false, showGotoControl: false, showFullscreenControl: false, showCooGridControl: false,
         showSimbadPointerControl: false, showProjectionControl: false, showFrame: false, showZoomControl: false, showCooLocation: false,
         showFov: false, showStatusBar: false, showShareControl: false, showContextMenu: false, showSettingsControl: false });
-      DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: R.survey, imgFormat: "jpeg" }));
+      DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: survey, imgFormat: "jpeg" }));
       DEEP.state = "ready"; DEEP.last = null; DEEP.failed = false; note();
-    } catch {
-      // Wait 30 s before the next start, so a failure while zoomed in does not retry every frame.
-      DEEP.state = "idle"; DEEP.retryAt = Date.now() + 30000; DEEP.failed = true;
-      if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
-    }
+    } catch { if (id === DEEP.start) failDeep(); }
+    finally { clearTimeout(late); }
+  }
+  // A failed start waits 30 s before the next one, so a failure while zoomed in does not retry every frame.
+  function failDeep() {
+    DEEP.start++; DEEP.state = "idle"; DEEP.retryAt = Date.now() + 30000; DEEP.failed = true;
+    if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
   }
   async function setSurvey(name) {
     R.survey = SURVEYS[name] ? name : "visible"; store("wanderers.skySurvey", R.survey); setSky(R.sky);
@@ -226,15 +230,16 @@
   // and says when the direction is only approximate (no sight check, no snap to a target).
   function note() {
     const F = C.F, S = C.S, t = scope(), pt = SkyView.pointing({ haveSensor: S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
-    const state = R.sky === "deep" && DEEP.state === "loading" ? "Loading sky photographs… " : R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "";
+    const loading = DEEP.state === "loading" && (S.zoom >= 3 ? "Loading telescope photographs… " : R.sky === "deep" ? "Loading sky photographs… " : "");
+    const state = loading || (R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "");
     const scoped = t > 0 && DEEP.state === "ready";
     const text = [R.msg,
       scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
-        : state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky],
+        : (state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky]).trim(),
       scoped && S.sensors && !F.compassFrozen && !S.snapped && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
       S.hold && "View held. Drag to move. Pinch out to follow the phone again.",
-      t > 0 && navigator.onLine === false && "No connection: no finer photographs.",
-      t > 0 && DEEP.failed && "Telescope photographs are not reachable now.",
+      // one message per problem: with no connection, that is the reason
+      t > 0 && (navigator.onLine === false ? "No connection: no finer photographs." : DEEP.failed && "Telescope photographs are not reachable now."),
       pt.text].filter(Boolean).join(" · ");
     const key = text + pt.needsCal;
     if (key === NOTE) return;
