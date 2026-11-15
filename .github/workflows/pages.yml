@@ -1,0 +1,46 @@
+# Publishes the static site (app/) to GitHub Pages every time main changes, so a merged pull request is live a minute
+# or two later with no copying by hand. The site is served at https://kneha07.github.io/WANDERERS/.
+#
+# One-time setup (a repository admin): Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Until that is set, the deploy step fails with "Pages site not found" and nothing else is affected.
+#
+# Triggers:
+#  - a push to main (every merged pull request);
+#  - the "classifications" workflow finishing: it commits new vote counts to main with GITHUB_TOKEN, and pushes made
+#    with that token do not start other workflows, so its completion is the signal instead;
+#  - by hand (Actions → pages → Run workflow).
+# Only app/ is published: no pipeline, backend, tests or secrets. app/ is plain static files (no build step).
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [classifications]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false   # never stop a deploy half-way; the next one follows
+
+jobs:
+  deploy:
+    name: Publish app/ to GitHub Pages
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }    # workflow_run would otherwise check out the commit before the vote update
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: app }
+      - id: deployment
+        uses: actions/deploy-pages@v4
