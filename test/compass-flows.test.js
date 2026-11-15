@@ -285,3 +285,48 @@ test("picking a target from the list after a star search drops the stale ?star="
   assert.equal(c.location.searchParams.get("target"), "found");
   assert.equal(c.location.searchParams.get("star"), "Vega");
 });
+
+test("Webb sheet: the red cross for a searched star sits where the star was on the frame's date", async () => {
+  const vega = { name: "Vega", ra: 279.23473, dec: 38.78369, pmra: 200.94, pmdec: 286.23, alt: [], spect: "A0Va", mag: 0.03 };
+  const at = (y) => ({ year: y, ra: vega.ra + vega.pmra * (y - 2000) / 3.6e6 / Math.cos(vega.dec * Math.PI / 180), dec: vega.dec + vega.pmdec * (y - 2000) / 3.6e6 });
+  const pathView = { sky: async () => ({ now: 2026.9, pts: [1990, 2000, 2010, 2020, 2030, 2040].map(at) }), render: async () => null, trail: async () => null };
+  const frame = { obs: "jw01234-o001_t001_nircam", ra: 279.2355, dec: 38.7845, r: 0.05, inst: "NIRCam", target: "VEGA", pid: "1234", mjd: 60100,
+    hull: [279.2, 38.75, 279.27, 38.75, 279.27, 38.82, 279.2, 38.82] };
+  const rendered = [];
+  const webb = { load: async () => ({ count: 1 }), framesAt: () => [frame], near: () => [], best: (f) => f, describe: () => ({ title: "Debris disk", line: "NIRCam" }),
+    source: () => "outline", esc: (t) => String(t), full: () => "#", progUrl: () => "#", thumb: () => "#", name: (q) => q.target,
+    dateOf: (mjd) => new Date((mjd - 40587) * 86400000).toISOString().slice(0, 10), sep: () => 0, appeal: () => 0,
+    render: async (el, ra, dec, frames, opts) => { rendered.push(opts); }, setOpacity() {}, setBase() {} };
+  const c = loadCompass({ intro: "fail", webb, pathView });
+  await c.flush();
+  c.pickStar(vega);
+  c.$("aboutBtn").click();
+  for (let i = 0; i < 5; i++) await c.flush();
+  c.$("dWebb").querySelector("button").onclick();
+  for (let i = 0; i < 5; i++) await c.flush();
+  assert.equal(rendered.length, 1, "the Webb view was drawn");
+  const year = 2000 + (frame.mjd - 51544.5) / 365.25, want = at(year), m = rendered[0].mark;
+  const arcsec = (a, b) => Math.hypot((a.ra - b.ra) * Math.cos(b.dec * Math.PI / 180), a.dec - b.dec) * 3600;
+  assert.ok(arcsec(m, want) < 0.01, `mark ${arcsec(m, want).toFixed(3)}" from the 2023 position`);
+  assert.ok(arcsec(m, vega) > 7, "moved off the J2000 catalogue position (Vega: about 8 arcsec by 2023)");
+  assert.match(c.$("wNote").innerHTML, /red cross is Vega on 2023-06-05/);
+});
+
+test("Webb sheet: without a known motion the red cross stays on the catalogue position", async () => {
+  const star = { name: "Nomotion", ra: 10, dec: 20, alt: [] };
+  const frame = { obs: "jw1", ra: 10, dec: 20, r: 0.05, inst: "NIRCam", target: "X", pid: "1", mjd: 60100, hull: [9.9, 19.9, 10.1, 19.9, 10.1, 20.1, 9.9, 20.1] };
+  const rendered = [];
+  const webb = { load: async () => ({ count: 1 }), framesAt: () => [frame], near: () => [], best: (f) => f, describe: () => ({ title: "t", line: "l" }),
+    source: () => "outline", esc: (t) => String(t), full: () => "#", progUrl: () => "#", thumb: () => "#", name: (q) => q.target,
+    dateOf: () => "2023-06-13", sep: () => 0, appeal: () => 0, render: async (el, ra, dec, frames, opts) => { rendered.push(opts); }, setOpacity() {}, setBase() {} };
+  const pathView = { sky: async () => null, render: async () => null, trail: async () => null };
+  const c = loadCompass({ intro: "fail", webb, pathView });
+  await c.flush();
+  c.pickStar(star);
+  c.$("aboutBtn").click();
+  for (let i = 0; i < 5; i++) await c.flush();
+  c.$("dWebb").querySelector("button").onclick();
+  for (let i = 0; i < 5; i++) await c.flush();
+  assert.deepEqual(rendered[0].mark, { ra: 10, dec: 20 });
+  assert.doesNotMatch(c.$("wNote").innerHTML, /red cross/);
+});
