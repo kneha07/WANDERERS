@@ -26,7 +26,7 @@ function fakeElement(id) {
   };
 }
 
-function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {} } = {}) {
+function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles" } = {}) {
   const els = {}, timers = [], windowListeners = {}, rafs = [];
   let clock = 0;
   const $ = (id) => els[id] || (els[id] = fakeElement(id));
@@ -64,6 +64,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
     getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     DeviceOrientationEvent: undefined, innerWidth: 390, innerHeight: 844, console: { warn() {}, log() {} },
+    Intl: { DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone }) }) },
   };
   Object.assign(window, env);
   let src = fs.readFileSync(path.join(APP, "compass.js"), "utf8");
@@ -198,4 +199,46 @@ test("the 'Webb looked here' chip keeps its frame in a crowded field until you m
   c.S.manual = { az: 200, alt: 46 };              // 6 deg away: now it may let go
   c.frame();
   assert.notEqual(c.S.webbHere && c.S.webbHere.obs, "A");
+});
+
+test("a target picked by the URL (?target=) shows the About button, like picking it by hand", async () => {
+  const c = loadCompass({ intro: "fail", search: "?target=barnard" });
+  await c.flush(); await c.flush();
+  assert.equal(c.S.sel && c.S.sel.id, "barnard");
+  assert.equal(c.$("aboutBtn").hidden, false);
+  const none = loadCompass({ intro: "fail", search: "?target=nope&star=Nope" });
+  await none.flush(); await none.flush();
+  assert.equal(none.S.sel, null);
+  assert.equal(none.$("aboutBtn").hidden, true);
+});
+
+test("drag mode: a drag longer than a full turn keeps the heading in 0-360", async () => {
+  const c = loadCompass({ intro: "fail" });
+  const hud = c.$("hud");
+  hud.dispatch("pointerdown", { clientX: 0, clientY: 400, pointerId: 1 });
+  hud.dispatch("pointermove", { clientX: 8000, clientY: 400 });     // 8000 px * 70/844 deg = 663 deg to the left
+  const az = c.S.manual.az;
+  assert.ok(az >= 0 && az < 360, `az ${az}`);
+  assert.ok(Math.abs(az - (((180 - 8000 * 70 / 844) % 360) + 360) % 360) < 1e-9);
+  hud.dispatch("pointermove", { clientX: -9000, clientY: 400 });
+  assert.ok(c.S.manual.az >= 0 && c.S.manual.az < 360);
+});
+
+test("location note: a later GPS timeout does not claim the location was declined", async () => {
+  const run = async (events) => {
+    const geolocation = { watchPosition: (ok, fail) => { for (const e of events) e.code ? fail(e) : ok({ coords: { latitude: 47.6, longitude: -122.3, accuracy: 12, altitude: null } }); } };
+    const c = loadCompass({ intro: "fail", geolocation });
+    await c.$("go").onclick(); await c.flush();
+    return c.S.locNote;
+  };
+  assert.equal(await run([{}, { code: 3 }]), "GPS ±12 m");
+  assert.match(await run([{ code: 1 }]), /declined/);
+  assert.match(await run([{ code: 3 }]), /no GPS fix yet/);
+});
+
+test("telemetry shows the time-zone city with every underscore replaced", async () => {
+  const c = loadCompass({ intro: "fail", timeZone: "America/Port_of_Spain" });
+  await c.$("go").onclick();
+  c.frame();
+  assert.match(c.$("telemetry").innerHTML, /Port of Spain/);
 });
