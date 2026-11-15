@@ -12,7 +12,7 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261116a">
 </head>
 <body class="obs">
 <a class="skip" href="#console">Skip to the observatory</a>
@@ -47,8 +47,8 @@
       <p class="ws-title">Catch what moves in the infrared sky, then read what it is made of.</p>
     </div>
     <div class="ws-meta">
-      <span class="tag-chip data">Real data · SPHEREx DR1 · WISE · Gaia DR3</span>
-      <a class="ws-link" href="compass.html">Sky Compass (phone) →</a>
+      <span class="tag-chip data">Real data · SPHEREx · WISE / NEOWISE · Gaia DR3</span>
+      <a class="btn btn-primary compass-cta" id="compassCta" href="compass.html" title="Open the Sky Compass on your phone and point it at the sky"><svg class="cc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 8.5l-2.2 4.8-4.8 2.2 2.2-4.8z" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="var(--accent)"/></svg><span class="cc-text"><b>See it in the sky</b><small id="compassCtaSub">Sky Compass · point your phone up</small></span></a>
     </div>
   </div>
 </div>
@@ -58,7 +58,7 @@
   <section class="panel targets" aria-label="Targets">
     <p class="panel-k mono">01 · Targets</p>
     <h2>Missions</h2>
-    <p class="hint">Each test target from the challenge is a level. Start with Barnard's Star.</p>
+    <p class="hint">The five challenge targets, plus six famous nearby stars. Start with Barnard's Star.</p>
     <ol id="targetList" class="target-list"></ol>
     <div class="coord-box">
       <h3>Find a star or go to coordinates</h3>
@@ -165,6 +165,13 @@
           <input type="range" id="lam" min="1" max="102" value="96" aria-label="SPHEREx wavelength"></label>
       </div>
       <div id="aladin" class="aladin" aria-label="Interactive sky map"></div>
+      <div id="mapYears" class="map-years" hidden>
+        <div class="yr-row"><button type="button" id="yrPlay">▶ Play its path</button>
+          <input type="range" id="yrSlider" min="1900" max="2100" step="1" value="2026" aria-label="Year">
+          <span id="yrLbl" class="mono"></span></div>
+        <p class="hint">Green square: where the path model puts the star in that year (a prediction, not photographs; the
+          picture underneath is today's sky). Blue line: path taken since 1900. Green dashed: path ahead to 2100.</p>
+      </div>
       <p class="hint">Live from IRSA's all-sky maps (HiPS) via Aladin Lite. Drag to pan, scroll to zoom. Slide the
         wavelength: cold brown dwarfs appear only at the long end, normal stars fade there. The orange marker is the
         target; the dashed line is its measured path. This map works for any coordinates you type.</p>
@@ -198,6 +205,7 @@
       <p id="starMsg" class="hint" aria-live="polite">Search about 12,000 named and naked-eye stars from the HYG database.</p>
       <p id="starSuggest" class="hint chips"></p>
       <div id="starDetail" class="star-detail" hidden></div>
+      <div id="starProfile" hidden></div>
       <div id="starQuake" hidden></div>
       <section id="starLong" class="lr" hidden aria-label="Path over thousands of years">
         <h3>Over thousands of years <span class="hint">where it goes on the sky and through space</span></h3>
@@ -231,16 +239,16 @@
       </section>
       <p id="starPredMsg" aria-live="polite"></p>
       <div id="starPred" hidden>
-        <h3>Past and future path <span class="hint">1900 → 2100, learnt by a classical machine-learning model</span></h3>
+        <h3>Past and future path <span class="hint" id="starPredSub">1900 → 2100, learnt by a classical machine-learning model</span></h3>
         <svg id="starChart" viewBox="0 0 640 420" role="img"></svg>
         <p class="hint slegend"><span class="sw past"></span> past · <span class="sw future"></span> predicted future ·
           <span class="sw band"></span> 68% uncertainty · dots: measured positions
           (<span class="dot" style="background:#b48cff"></span> Hipparcos/Tycho, <span class="dot" style="background:#7cc4ff"></span> ground and WISE surveys,
           <span class="dot" style="background:#7ee787"></span> Gaia, <span class="dot" style="background:#ffb547"></span> WANDERERS). North up, east left.</p>
         <table id="starTable" class="frames"></table>
-        <h4>How the path was learnt</h4>
+        <h4 id="starModelH">How the path was learnt</h4>
         <div id="starModel"></div>
-        <details><summary>Measured positions used for training</summary><div id="starObs"></div></details>
+        <details id="starObsBox"><summary>Measured positions used for training</summary><div id="starObs"></div></details>
       </div>
     </div>
     <section class="path-card" id="pathCard" aria-label="Path taken and path ahead" hidden>
@@ -295,7 +303,7 @@
   <section class="panel spectrum" aria-label="Spectrum">
     <div class="spec-head">
       <div><p class="panel-k mono">04 · Spectrum</p>
-      <h2>Infrared fingerprint <span class="hint">SPHEREx spectrum, 0.75–5 µm, built from every image of this target</span></h2></div>
+      <h2>Infrared fingerprint <span class="hint">SPHEREx spectrum, 0.75–5 µm, built from this target's SPHEREx images (stars bright enough to saturate SPHEREx have none)</span></h2></div>
       <div class="legend"><span class="sw h2o"></span>Water <span class="sw ch4"></span>Methane <span class="sw co"></span>CO / CO₂</div>
     </div>
     <svg id="spec" viewBox="0 0 900 260" role="img" aria-label="Spectrum chart"></svg>
@@ -307,23 +315,25 @@
 <footer class="foot">
   <p><strong>Candidate, never "discovery".</strong> WANDERERS points people at interesting objects and shows the evidence.
     Confirming a new object needs follow-up by astronomers.</p>
-  <p>Data: SPHEREx DR1 (NASA/IPAC IRSA) · AllWISE (NASA/IPAC IRSA) · Gaia DR3 (ESA) · Webb frames: MAST (STScI) and ESA ESASky · star names: HYG (CC BY-SA 4.0). NASA Space Apps 2026 · Planet X and SPHEREx.</p>
+  <p>Data: SPHEREx DR1 and QR3 (NASA/IPAC IRSA) · AllWISE and NEOWISE (NASA/IPAC IRSA) · Gaia DR3 (ESA) · Webb frames: MAST (STScI) and ESA ESASky · star names: HYG (CC BY-SA 4.0). NASA Space Apps 2026 · Planet X and SPHEREx. WANDERERS is an independent student project and is not affiliated with or endorsed by NASA or ESA.</p>
 </footer>
 <script src="theme.js"></script>
 <script src="framemath.js"></script>
 <script src="chartlayout.js"></script>
-<script src="frameinfo.js"></script>
+<script src="frameinfo.js?v=20261116n"></script>
 <script src="aladinlink.js"></script>
 <script src="starpath.js"></script>
-<script src="stardb.js"></script>
-<script src="starcore.js"></script>
-<script src="pathview.js?v=20261115b"></script>
-<script src="search.js?v=20261115b"></script>
-<script src="telescope.js?v=20261115b"></script>
-<script src="app.js?v=20261115b"></script>
-<script src="starquake.js?v=20261115b"></script>
-<script src="starquake-ui.js?v=20261115b"></script>
-<script src="longrange.js"></script>
-<script src="stars.js"></script>
+<script src="stardb.js?v=20261115i"></script>
+<script src="starcore.js?v=20261115i"></script>
+<script src="pathview.js?v=20261116m"></script>
+<script src="search.js?v=20261116m"></script>
+<script src="telescope.js?v=20261116m"></script>
+<script src="app.js?v=20261116q"></script>
+<script src="starquake.js?v=20261115i"></script>
+<script src="starquake-ui.js?v=20261115i"></script>
+<script src="starprofile.js?v=20261115i"></script>
+<script src="physicspath.js?v=20261115i"></script>
+<script src="longrange.js?v=20261115i"></script>
+<script src="stars.js?v=20261116a"></script>
 </body>
 </html>

@@ -4,10 +4,12 @@
 // Claude Code CLI in headless mode (`claude -p`): no API key needed, it uses your Claude Code login.
 // Bound to 127.0.0.1 only. The deployed static site works without this server (pre-written answers).
 const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
+const { pipeline } = require("stream");
 const ROOT = path.join(__dirname, "app"), PORT = process.env.PORT || 8000;
 const fields = require("./fields").createFieldService();
 // "Explore any patch" live mode: the React app (web/, built to web/dist) and its FastAPI server (backend/, port 8001).
-const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = "http://127.0.0.1:8001";
+const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = process.env.WANDERERS_LIVE || "http://127.0.0.1:8001";
+const LIVE_ROUTES = new Set(["/api/frames", "/api/resolve", "/api/about"]);
 const LIVE_DOWN = "The live SPHEREx server is not running. Start it with: node start.js " +
   "(or: backend/.venv/bin/python -m uvicorn backend.app:app --port 8001).";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
@@ -52,13 +54,13 @@ function knownStarKeys() {
   }
   return starKeys;
 }
-function learnStar(job, key) {
-  const p = spawn(PY, ["-u", "pipeline/star_ml.py", key], { cwd: __dirname });
+function learnStar(job, key, script = "star_ml.py", out = "pred") {
+  const p = spawn(PY, ["-u", "pipeline/" + script, key], { cwd: __dirname });
   const onData = (d) => d.toString().split("\n").map((l) => l.trim()).filter(Boolean)
     .forEach((l) => job.log.push(l.replace(/^==\s*/, "").replace(/^!!\s*/, "")));
   p.stdout.on("data", onData); p.stderr.on("data", () => {});
   p.on("close", (code) => {
-    job.status = code === 0 && fs.existsSync(path.join(ROOT, "data", "stars", "pred", key + ".json")) ? "done" : "error";
+    job.status = code === 0 && fs.existsSync(path.join(ROOT, "data", "stars", out, key + ".json")) ? "done" : "error";
     if (job.status === "error" && !job.log.length) job.log.push("the model could not be fitted");
     starBusy = null;
   });
@@ -112,6 +114,18 @@ http.createServer(async (req, res) => {
       res.writeHead(202); return res.end(JSON.stringify({ job: n }));
     } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) })); }
   }
+  // star profile (Gaia + Hypatia + Gaia XP spectrum) for a star that has none yet; shares the one-at-a-time slot
+  if (req.method === "POST" && url.pathname === "/api/star-profile") {
+    res.setHeader("content-type", "application/json");
+    try {
+      const { key } = JSON.parse(await body(req, 500));
+      if (!/^[a-z0-9_]{1,40}$/.test(key || "") || !knownStarKeys().has(key)) throw new Error("unknown star");
+      if (starBusy) { res.writeHead(409); return res.end(JSON.stringify({ error: "Busy with another star; try again shortly", job: starBusy })); }
+      const n = String(++starSeq), job = { status: "running", log: [], started: Date.now() };
+      starJobs.set(n, job); starBusy = n; learnStar(job, key, "star_profile.py", "profile");
+      res.writeHead(202); return res.end(JSON.stringify({ job: n }));
+    } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ error: e instanceof SyntaxError ? "bad JSON" : String(e.message || e) })); }
+  }
   if (url.pathname.startsWith("/api/star-job/")) {
     const job = starJobs.get(url.pathname.slice(14));
     res.writeHead(job ? 200 : 404, { "content-type": "application/json" });
@@ -137,10 +151,22 @@ http.createServer(async (req, res) => {
     return;
   }
   // live mode API: proxy to the FastAPI server; /api/live-health maps to its /api/health
-  if (req.method === "GET" && (url.pathname === "/api/frames" || url.pathname === "/api/live-health")) {
-    const target = LIVE + (url.pathname === "/api/frames" ? url.pathname + url.search : "/api/health");
-    http.get(target, (r) => { res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" }); r.pipe(res); })
-      .on("error", () => { res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN })); });
+  if (req.method === "GET" && (LIVE_ROUTES.has(url.pathname) || url.pathname === "/api/live-health")) {
+    const target = LIVE + (LIVE_ROUTES.has(url.pathname) ? url.pathname + url.search : "/api/health");
+    // pipeline, not pipe: if the backend dies mid-answer the browser's response is destroyed (no endless wait).
+    // A browser that leaves (a new target during a cold load) aborts the upstream request; an answer that still
+    // arrives is dropped. No error here may escape: one would stop the whole server.
+    const up = http.get(target, (r) => {
+      if (res.destroyed || res.writableEnded) return r.destroy();
+      res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" });
+      pipeline(r, res, () => {});   // premature close of either side: both are destroyed, nothing is thrown
+    });
+    up.on("error", () => {
+      if (res.destroyed || res.writableEnded) return;
+      if (res.headersSent) return res.destroy();
+      res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN }));
+    });
+    res.on("close", () => { if (!res.writableFinished) up.destroy(); });
     return;
   }
   // live mode app: web/dist under /explore/, no directory traversal, unknown routes fall back to index.html
@@ -160,7 +186,7 @@ http.createServer(async (req, res) => {
   let p;
   try { p = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname))); }
   catch { res.writeHead(400); return res.end("bad URL"); }   // malformed %-escape must not crash the server
-  if (!p.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+  if (p !== ROOT && !p.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }   // not app_old/, app.bak/...
   fs.readFile(p, (err, data) => {
     if (err) { res.writeHead(404); return res.end("not found"); }
     res.writeHead(200, { "content-type": TYPES[path.extname(p)] || "application/octet-stream" }); res.end(data);

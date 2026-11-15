@@ -1,0 +1,67 @@
+== Barnard's Star
+   movers found: 1 (0 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 6)]  spectrum bins: 0 (points 150, flagged 150)
+   motion: measured 10.39"/yr vs expected 10.39"/yr over 15.7 yr
+   brightness change: -0.042 ± 0.031 mag
+   methane test 4.0/3.3 um: None
+== Epsilon Indi B
+   movers found: 1 (0 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 9)]  spectrum bins: 49 (points 149, flagged 59)
+   motion: measured 4.72"/yr vs expected 4.68"/yr over 15.8 yr
+   brightness change: -0.009 ± 0.075 mag
+   methane test 4.0/3.3 um: 2.4186525499610565
+== WISE 0855-0714
+   movers found: 5 (5 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 5)]  spectrum bins: 69 (points 150, flagged 41)
+   motion: measured 8.24"/yr vs expected 8.15"/yr over 15.8 yr
+   methane test 4.0/3.3 um: 3.7753498672737393
+== RW Aurigae
+   movers found: 0 (0 not explained by Gaia)
+   flipbook frames: [('w2', 6), ('w1', 6)]  spectrum bins: 6 (points 150, flagged 141)
+   motion: measured 0.04"/yr vs expected 0.03"/yr over 15.7 yr
+   brightness change: +0.003 ± 0.068 mag
+   methane test 4.0/3.3 um: None
+== R Draconis
+   movers found: 0 (0 not explained by Gaia)
+   flipbook frames: [('w2', 15), ('w1', 7)]  spectrum bins: 0 (points 150, flagged 150)
+   motion: measured 0.09"/yr vs expected 0.02"/yr over 15.8 yr
+   brightness change: +0.322 ± 0.070 mag
+   methane test 4.0/3.3 um: None
+barnard      distance 6.0 ly     teff 3099.633544921875  variable flag NOT_AVAILABLE  Gaia class None
+eps_indi_b   distance 12.1 ly    teff None  variable flag NOT_AVAILABLE  Gaia class None
+r_dra        distance 2607.3 ly  teff None  variable flag VARIABLE  Gaia class LPV
+rw_aur       distance 509.1 ly   teff None  variable flag NOT_AVAILABLE  Gaia class None
+wise0855     distance 7.3 ly     teff None  variable flag None  Gaia class None
+Barnard's Star     known     Nearby star with fast proper motion    confidence high
+Epsilon Indi B     known     Cold brown dwarf (methane-rich)        confidence high
+Luhman 16          known     Nearby object with fast proper motion (published motion) confidence high
+Wolf 359           known     Nearby star with fast proper motion    confidence high
+Lalande 21185      known     Nearby star with fast proper motion    confidence high
+Proxima Centauri   known     Nearby star with fast proper motion    confidence high
+61 Cygni           known     Nearby star with fast proper motion    confidence high
+Kapteyn's Star     known     Nearby star with fast proper motion    confidence high
+R Draconis         known     Variable star                          confidence high
+RW Aurigae         known     Known variable star, quiet in these snapshots confidence medium
+WISE 0855-0714     known     Cold brown dwarf (methane-rich)        confidence high
+Barnard's Star     movers 1, unconfirmed 0, target recovered: True
+   #1 target     9.96″/yr  This is the mission target itself: both ends lie on its measured path.
+Epsilon Indi B     movers 1, unconfirmed 0, target recovered: True
+   #1 target     4.71″/yr  This is the mission target itself: both ends lie on its measured path.
+Luhman 16          movers 1, unconfirmed 0, target recovered: True
+   #1 target     2.82″/yr  This is the mission target itself: both ends lie on its measured path.
+Wolf 359           movers 1, unconfirmed 0, target recovered: True
+   #1 target     4.74″/yr  This is the mission target itself: both ends lie on its measured path.
+Lalande 21185      movers 0, unconfirmed 0, target recovered: False
+Proxima Centauri   movers 1, unconfirmed 0, target recovered: False
+   #1 rejected   2.33″/yr  The 2010 end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.
+61 Cygni           movers 1, unconfirmed 0, target recovered: False
+   #1 rejected   5.82″/yr  The 2010 end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.
+Kapteyn's Star     movers 0, unconfirmed 0, target recovered: False
+R Draconis         movers 0, unconfirmed 0, target recovered: None
+RW Aurigae         movers 0, unconfirmed 0, target recovered: None
+WISE 0855-0714     movers 5, unconfirmed 0, target recovered: True
+   #1 target     8.12″/yr  This is the mission target itself: both ends lie on its measured path.
+   #3 rejected   8.99″/yr  The SPHEREx end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.
+   #5 rejected   9.40″/yr  The 2010 end sits on a Gaia star that does not move. The dot is that star, seen in one image and missed in the other.
+   #2 rejected   4.59″/yr  An end is at the edge of the picture, where a dot can appear or vanish without moving.
+   #4 rejected   8.60″/yr  An end is at the edge of the picture, where a dot can appear or vanish without moving.

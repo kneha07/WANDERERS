@@ -168,6 +168,12 @@ def trim(content):
     buf = io.BytesIO(); keep.writeto(buf); return buf.getvalue()
 
 
+def ref_summary(ref, n_stars):
+    """Log line for the reference. A Gaia DR3 two-parameter source has no proper motion (None): shown as 0."""
+    pm = f"({ref['pmra'] or 0:.0f},{ref['pmdec'] or 0:.0f})"
+    return f"   reference: {ref['source']} ra={ref['ra']:.5f} dec={ref['dec']:.5f} pm={pm} mas/yr; {n_stars} Gaia field stars"
+
+
 def fetch(tid):
     t = TARGETS[tid]
     d = CACHE / tid; d.mkdir(parents=True, exist_ok=True)
@@ -181,8 +187,7 @@ def fetch(tid):
         meta = {"ref": ref, "field_stars": stars}
         meta_f.write_text(json.dumps(meta, indent=1))
     ref = meta["ref"]
-    print(f"   reference: {ref['source']} ra={ref['ra']:.5f} dec={ref['dec']:.5f} "
-          f"pm=({ref['pmra']:.0f},{ref['pmdec']:.0f}) mas/yr; {len(meta['field_stars'])} Gaia field stars", flush=True)
+    print(ref_summary(ref, len(meta["field_stars"])), flush=True)
 
     # --- SPHEREx DR1: one cutout per spectral image covering the target -------------------
     c25 = predict(ref, 2025.9)
@@ -261,6 +266,12 @@ def fetch(tid):
             print(f"   AllWISE {band}: none"); continue
         f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(fov * 1.6)}arcsec"))
     print(f"   AllWISE W1/W2 cached", flush=True)
+    # NEOWISE 2014-2024: one stacked image per sky visit, from NASA IRSA's copy on AWS (pipeline/neowise.py)
+    try:
+        import neowise
+        neowise.run(tid)
+    except Exception as e:                      # optional: the time-lapse still works with WISE 2010 + SPHEREx
+        print(f"   NEOWISE skipped: {e}", flush=True)
 
 
 def add_position(ra, dec, name=None, fov=None):

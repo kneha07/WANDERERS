@@ -22,13 +22,13 @@
   function frameRow(f) {
     const spherex = f.mission === "SPHEREx";
     let seen, tone;
-    if (typeof f.detected === "boolean") { seen = f.detected ? "seen" : "not detected"; tone = f.detected ? "ok" : "warn"; }
+    if (typeof f.detected === "boolean") { seen = f.detected ? (f.saturated_core ? "seen (saturated)" : "seen") : "not detected"; tone = f.detected ? "ok" : "warn"; }
     else { seen = "not measured"; tone = "mute"; }
     return {
       label: f.label,
       epoch: Number.isFinite(f.year) ? f.year.toFixed(1) : "",
-      source: spherex ? "SPHEREx" : "AllWISE atlas",
-      images: spherex && Number.isFinite(f.n_images) ? f.n_images : null,
+      source: spherex ? "SPHEREx" : f.mission === "NEOWISE" ? "NEOWISE single exposures" : "AllWISE atlas",
+      images: (spherex || f.mission === "NEOWISE") && Number.isFinite(f.n_images) ? f.n_images : null,
       seen, tone,
       signal: typeof f.snr === "number" && Number.isFinite(f.snr) ? fmtSnr(f.snr) : "",
     };

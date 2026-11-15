@@ -1,8 +1,60 @@
 # Spec: real sky behind Sky Compass
 
-Status: ready for implementation. Date: 2026-11-14. Base: `origin/main` at `35cb320`.
-Files today: `app/compass.html`, `app/compass.js`, `app/compass.css`, `app/sky.js`.
-Work in a new worktree `.worktrees/real-sky`, branch `feature/real-sky`, from `origin/main` (see the workspace `CLAUDE.md`).
+Status: **built** (2026-11-15), on branch `feature/real-sky-main` from `origin/main` at `cf24fdd`. Read "Built, measured, and left to do" first: where it and the original text below disagree, it wins.
+
+**Ported to the AR compass.** PR #33 replaced the radar page with a full-screen AR view (`orient.js` sensor fusion,
+a camera projection). The real sky now lives in `app/realsky.js` and draws in that view's projection:
+
+- The AR view is a camera (gnomonic, Aladin's `TAN`), not the radar's stereographic `STG`. Deep uses `TAN` with the full
+  width `2·atan(W / 2f)` and `setRotation(−(zenithAngle − roll))`. Measured: worst offset 0.2 to 1.8 px (1° = 12.8 px) at
+  five dragged views and four leaning phone poses (roll up to 26°). Objects under 5° altitude are left out of the check:
+  refraction lifts the drawn stars there (0.5° at the horizon) and photographs cannot follow it.
+- Eye reads `data/skystars.json` (`pipeline/make_sky_stars.py`); main's `data/stars.json` stays the search file. A tapped
+  star opens main's own star sheet, found by its star-database key. Planets, Moon and Sun get a small card.
+- "Drag the sky" sets main's sight-check offsets (`F.fineAz`, `F.fineAlt`) and freezes the compass, like a sight check.
+  It solves on a modelled pose, because the fused sensors apply new offsets only at the next (smoothed) event.
+- `compass.js` loads `intro.js` (three.js from a CDN) on demand, and `sw.js` keeps that pinned three.js. Before, a failed
+  CDN stopped the whole page.
+- Not ported: the radar's zoom (+/−, pinch); the AR view has a fixed lens.
+
+Files: `app/realsky.js`, `app/skyview.js`, `app/hips.js`, `app/sw.js`, `app/sky.js`, `app/compass.html|js|css`.
+
+## Built, measured, and left to do
+
+Reference for the look: <https://spacetelescopelive.org/webb> shows survey photographs edge to edge behind its panels. It uses the same engine as this spec (Aladin Lite 3 with HiPS tiles: DSS2 colour and 2MASS colour from ESA's `cdn.skies.esac.esa.int`). So the sky here is **edge to edge across the whole stage**, not clipped to the radar circle as first written. The circle is now only a compass drawn over the sky.
+
+| Step | State | Proof |
+|---|---|---|
+| 1. Inverse sky maths, planets | done | `test/sky.test.js`: round trip under 0.02°, planets within 0.1° of JPL Horizons |
+| One projection for canvas and photographs | done: the AR view's camera projection (`TAN`) | registration check below |
+| 2. Eye view, City / Suburb / Dark site, constellation lines, taps | done | `test/skyview.test.js`; `artifacts/real-sky/eye-phone.png` |
+| 3. Deep view | done | `node test/browser/realsky.mjs`: worst offset 1.8 px (limit 3 px; 1° = 12.8 px) at nine views, roll up to 26°, on a phone-shaped screen |
+| 4. Recent pictures kept by `app/sw.js` | done | browser check: a test hook in `sw.js` shortens the limits; trim keeps the 5 newest, the age rule drops the cache |
+| 5. Save the sky for a place | done for one detail level (Basic) | browser check: 60 tiles saved, Deep then works with the archive unreachable |
+| 6. Labels, pointing note, fallback to Eye, ground dimmed | done | browser check: fallback in about 1 s |
+| 6. "Drag the sky" calibration | done | browser check, phone leaning 22°: the grabbed point moves 60.0, 40.0 px for a 60 × 40 px drag; Done sets the sight check |
+| Infrared background (2MASS colour) | done | browser check: same registration limit as the visible survey; switching back needs no reload |
+
+Measured facts that replace guesses in the text below:
+
+- Edge can sign a new test profile in with the Windows account and sync the user's extensions into it. The browser check therefore starts Edge with `--disable-sync --disable-extensions`, drives only its `about:blank` tab, and stops if an extension opens a page.
+- 2MASS colour tiles average 59 KB (DSS2: 38 KB); its `Norder3/Allsky.jpg` is 1.0 MB.
+- `aladin.setRotation(−Sky.zenithAngle(...))`: the sign is minus. `aladin.setFoV` is the full width of Aladin's box.
+- Aladin draws wide views from `Norder3/Allsky.jpg` (0.8 MB) and, on a 3× phone screen, order-0 tiles; closer views ask for orders 1 and 2. `Hips.plan` therefore lists the all-sky file plus every tile order from 0.
+- `Sky.planets` returns J2000 RA/Dec (not "of date"); pass each planet to `Sky.observe` like a star.
+- Pass `log: false` to `A.aladin`: by default it reports the page address to a CDS server. `app/app.js` (the sky-map tab) now passes it too.
+- Aladin sets `position: relative` on its container; our rule needs `!important`.
+- Second host for the same survey, used when IRSA does not answer and nothing is saved: `https://cdn.skies.esac.esa.int/DSSColor`.
+
+Left to do, in order:
+
+1. Test on a real Android phone and a real iPhone: sensors, camera blend slider, frame rate with Deep on, and whether Safari keeps the service worker's pictures. None of this can run in headless Edge.
+2. ~~"Drag the sky" calibration (step 6).~~ Done: the drag grabs the sky point under the finger and solves for the pointing that keeps it there.
+3. ~~Save: check Standard and Sharp; make Remove work per place.~~ Done. Each saved place writes a manifest into the saved cache (`Hips.manifestUrl`), written last so a half-finished save is never listed; the list on screen is read from the manifests; Remove deletes only the files no other place lists (`Hips.orphans`). Measured in headless Edge: Basic 48° N 60 tiles in 2–3 s; Standard 34° S 248 tiles in 8 s; Sharp 48° N 924 tiles (orders 0–3, about 34 MB) in 28 s. Removing Standard 34° S, or Sharp 48° N, left every Basic 48° N file in place (`SHARP=1 node test/browser/realsky.mjs`).
+6. Settings: survey hosts, tile sizes, cache names, recent-cache limits and the Aladin address are in `Hips.CONFIG`, read by both `realsky.js` and `sw.js` (a unit test fails if `sw.js` repeats one).
+7. Aladin Lite stays on the jsDelivr CDN on purpose: it is GPL-3.0 and this repository is MIT, so it is not copied in. The service worker keeps the pinned file, and a saved place stores it too, so it is a one-time download.
+4. ~~Exercise the service worker's trim and 7-day expiry in `test/browser/realsky.mjs`.~~ Done.
+5. ~~An "Infrared" background (`CDS/2MASS/Color` at IRSA).~~ Done, with the ESA host as the second host. A save stores the background chosen under Deep.
 
 ## Goal
 
@@ -20,7 +72,7 @@ Nothing is stored on our server. Deep tiles go from the archive straight to the 
 1. **A phone camera's live picture cannot show stars.** Under clouds it shows clouds, and under a clear dark sky it shows black. So the sky layer does not align star-for-star with camera pixels. The camera stays for what it is good at: the horizon, buildings, the Moon, and calibration.
 2. **The radar is wider than the camera.** The radar circle shows 120° across. A phone camera shows about 50° by 65°, and the browser does not report the exact value. A pixel-exact overlay on the camera needs a per-phone zoom calibration. That is phase 2, not this spec.
 
-So "merged with the camera" means **layered on one screen, with a blend slider**, in the radar's own projection.
+So "merged with the camera" means **layered on one screen, with a blend slider**, in the radar's own projection. Both the camera and the sky fill the stage edge to edge.
 
 ## Layers (bottom to top)
 

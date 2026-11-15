@@ -10,20 +10,25 @@
   fetch("data/index.json").then((r) => r.json()).then((list) => {
     S.list = list;
     renderTargets(); renderExamples();
-    const p = new URLSearchParams(location.search);
+    const p = new URLSearchParams(location.search), want = p.get("target");
     if (p.get("ra") && p.get("dec")) { if (!coordSearch(p.get("ra"), p.get("dec"), p.get("fov"))) load(list[0].id); }   // unreadable: still show something
-    else { load(p.get("target") || list[0].id, p.get("ch")); }
-  }).catch(() => { $("tName").textContent = "No data yet. Run the pipeline (see README)."; });
+    else {                                                // an unknown id in a link: say so and show the first target
+      const known = list.some((t) => t.id === want);
+      if (want && !known) $("coordMsg").textContent = `No mission called “${want}”. Showing ${list[0].name} instead.`;
+      load(known ? want : list[0].id, p.get("ch"));
+    }
+  }).catch(() => { $("tName").textContent = "Could not load the observatory data. Please reload the page."; });
   fetch("api/health").then((r) => { if (r.ok) { S.live = true; $("askForm").hidden = false; } }).catch(() => {});
   // "Explore any patch" live mode (web/ + backend/ on port 8001): links show only when server.js can reach it
   const liveExplore = fetch("api/live-health").then((r) => r.ok).catch(() => false);
   liveExplore.then((ok) => { $("exploreLink").hidden = !ok; });
 
   // one-tap examples for the coordinate box (the challenge's own WISE 0855 coordinates first)
-  const hms = (deg) => { const h = deg / 15, H = Math.floor(h), m = (h - H) * 60, M = Math.floor(m);
-    return `${String(H).padStart(2, "0")}h${String(M).padStart(2, "0")}m${((m - M) * 60).toFixed(2).padStart(5, "0")}s`; };
-  const dms = (deg) => { const a = Math.abs(deg), D = Math.floor(a), m = (a - D) * 60, M = Math.floor(m);
-    return `${deg < 0 ? "-" : "+"}${String(D).padStart(2, "0")}d${String(M).padStart(2, "0")}m${((m - M) * 60).toFixed(1).padStart(4, "0")}s`; };
+  // rounded before splitting, so 59.996 s becomes the next minute instead of "60.00s"
+  const hms = (deg) => { const c = Math.round((((deg % 360) + 360) % 360) / 15 * 360000) % 8640000;   // hundredths of a second of time
+    return `${String(Math.floor(c / 360000)).padStart(2, "0")}h${String(Math.floor(c / 6000) % 60).padStart(2, "0")}m${((c % 6000) / 100).toFixed(2).padStart(5, "0")}s`; };
+  const dms = (deg) => { const c = Math.round(Math.abs(deg) * 36000);   // tenths of an arcsecond
+    return `${deg < 0 ? "-" : "+"}${String(Math.floor(c / 36000)).padStart(2, "0")}d${String(Math.floor(c / 600) % 60).padStart(2, "0")}m${((c % 600) / 10).toFixed(1).padStart(4, "0")}s`; };
   function renderExamples() {
     const ex = [{ name: "WISE 0855 (from the brief)", ra: "08h55m10.831s", dec: "-07d14m42.53s" },
       ...S.list.filter((t) => t.id !== "wise0855").map((t) => ({ name: t.name, ra: hms(t.ra), dec: dms(t.dec) }))];
@@ -49,20 +54,46 @@
   function renderTargets() {
     $("targetList").innerHTML = S.list.map((t, k) =>
       `<li><button data-id="${t.id}"><span class="lvl">${k + 1}</span><span>${t.name}</span><span class="sub">${t.teaser}</span></button></li>`).join("");
-    $("targetList").querySelectorAll("button").forEach((b) => b.onclick = () => { selectTab("flip"); load(b.dataset.id); });
+    $("targetList").querySelectorAll("button").forEach((b) => b.onclick = () => openTarget(b.dataset.id));
+  }
+  // a mission picked from the list (or a link in the Star database): the searched star's card no longer applies
+  function openTarget(id) { $("starCard").hidden = true; selectTab("flip"); load(id); }
+
+  // Where a target is now: its newest measured position (fast movers leave the field centre behind), else the centre.
+  function nowPos(t) {
+    const last = [...(t.track || [])].sort((a, b) => b.year - a.year)[0];
+    return last && last.ra != null ? { ra: last.ra, dec: last.dec } : { ra: t.grid.centre_ra, dec: t.grid.centre_dec };
   }
 
+  // The subject is a searched star or typed position with no prepared time-lapse: heading, evidence and
+  // spectrum say so instead of still describing the previous mission target.
+  function showSubject(label, kind) {
+    S.away = true;
+    $("tName").textContent = label; $("tKind").textContent = kind;
+    $("targetList").querySelectorAll("button").forEach((b) => b.classList.remove("on"));
+    $("verdict").className = "verdict";
+    $("verdict").innerHTML = `<div class="status">NOT ANALYSED</div><div class="conf">${esc(label)} has no prepared time-lapse, so there is no evidence card. ` +
+      "The sky map and Through Webb tabs show it live; pick a mission for the full analysis.</div>";
+    $("checks").innerHTML = ""; $("numbers").innerHTML = ""; $("insights").hidden = true; $("changes").hidden = true;
+    $("explain").textContent = ""; $("qButtons").innerHTML = ""; $("answer").textContent = "";
+    $("spec").innerHTML = ""; $("specNote").textContent = "No SPHEREx spectrum: this position has not been analysed."; $("targetQuake").hidden = true;
+  }
+
+  let loadSeq = 0;
   async function load(id, ch) {
     stop();
+    const me = ++loadSeq;   // a newer pick wins: a slow answer for an earlier target is dropped
     const [t, ex, tr] = await Promise.all([
       fetch(`data/${id}/target.json`).then((r) => r.json()),
       fetch(`data/${id}/explain.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch(`data/${id}/trajectory.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),   // optional
     ]);
-    S.here = { ra: t.grid.centre_ra, dec: t.grid.centre_dec, label: t.name };
-    S.t = t; S.ex = ex; S.tr = tr;
+    if (me !== loadSeq) return;
+    S.here = { ...nowPos(t), label: t.name };   // Through Webb looks where the star is now, not at the field centre
+    S.t = t; S.ex = ex; S.tr = tr; S.away = false;
     $("pathNote").textContent = StarPath.summary(tr); $("pathNote").hidden = !tr;
-    $("tPath").parentElement.hidden = !tr; S.ch = ch && t.frames[ch] ? ch : (t.frames.w2 && t.frames.w2.length ? "w2" : "w1");
+    const hasFrames = (c) => Object.hasOwn(t.frames, c) && Array.isArray(t.frames[c]) && t.frames[c].length > 0;
+    $("tPath").parentElement.hidden = !tr; S.ch = ch && hasFrames(ch) ? ch : (hasFrames("w2") ? "w2" : "w1");
     S.i = 0; S.imgs = {}; S.lum = {}; S.mixOut = null;
     $("targetList").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.id === id));
     $("tName").textContent = t.name;
@@ -71,16 +102,20 @@
     if ([...$("fovIn").options].some((o) => o.value === fovNow)) $("fovIn").value = fovNow;
     renderChannels(); S.math = null; $("mOp").value = "off"; $("stackAll").setAttribute("aria-pressed", "false");
     const url = new URL(location); url.searchParams.set("target", id); ["ra", "dec", "fov"].forEach((k) => url.searchParams.delete(k));
+    if (S.ch === ch) url.searchParams.set("ch", ch); else url.searchParams.delete("ch");   // a channel from the last target is not this one's
     history.replaceState(null, "", url);
     await preload();
+    if (me !== loadSeq) return;
     if (S.pickUrlDone) { S.pick = null; const u = new URL(location); u.searchParams.delete("pick"); history.replaceState(null, "", u); }
     setupSlider(); initMix(true); renderMeta(); renderChanges(); renderMetaBox(); setAladin(); fillCompare(); draw(); evidence(); spectrum();
     showPath({ target: id });
     // starquakes for the five challenge targets (typed-in fields have no star parameters, so no widget)
     if (window.StarquakeUI) {
-      const qk = id === "barnard" ? "hip87937" : "wanderers_" + id;
-      fetch("data/starquake_stars.json").then((r) => r.json()).then((info) => {
-        if (info[qk]) StarquakeUI.mount($("targetQuake"), { key: qk, row: null, title: t.name }); else $("targetQuake").hidden = true;
+      Promise.all([fetch("data/starquake/targets.json").then((r) => (r.ok ? r.json() : {})), fetch("data/starquake_stars.json").then((r) => r.json()),
+        fetch("data/stars/index.json").then((r) => r.json())]).then(([map, info, idx]) => {
+        if (me !== loadSeq) return;
+        const qk = map[id] || (id === "barnard" ? "hip87937" : "wanderers_" + id), row = idx.stars.find((s) => s.key === qk) || null;
+        if (info[qk] || row) StarquakeUI.mount($("targetQuake"), { key: qk, row, title: t.name }); else $("targetQuake").hidden = true;
       }).catch(() => { $("targetQuake").hidden = true; });
     }
     if (MAP.ready) mapGoTo();
@@ -105,8 +140,9 @@
     return Promise.all(jobs);
   }
   function img(name) {
+    const store = S.imgs;   // every target names its frames alike (w2_wise2010.png): a late image must not land in the next target's cache
     return new Promise((res) => {
-      const im = new Image(); im.onload = () => { S.imgs[name] = im; res(); }; im.onerror = res;
+      const im = new Image(); im.onload = () => { store[name] = im; res(); }; im.onerror = res;
       im.src = `data/${S.t.id}/${name}`;
     });
   }
@@ -162,10 +198,16 @@
       const ch = S.t.track.filter((p) => (p.ch || "w2") === S.ch).sort((a, b) => a.year - b.year);
       g.strokeStyle = "rgba(255,181,71,.9)"; g.lineWidth = 2; g.setLineDash([6, 4]);
       g.beginPath(); ch.forEach((p, j) => (j ? g.lineTo(X(p.x), Y(p.y)) : g.moveTo(X(p.x), Y(p.y)))); g.stroke(); g.setLineDash([]);
-      for (const p of ch) {
+      // label the years sparsely: with NEOWISE there is a dot every six months, so a label on each would smear
+      let lastLbl = null;
+      ch.forEach((p, j) => {
         g.fillStyle = "rgba(255,181,71,.95)"; g.beginPath(); g.arc(X(p.x), Y(p.y), 3.5, 0, 2 * Math.PI); g.fill();
-        g.fillStyle = "#ffe2b0"; g.font = "12px ui-monospace, monospace"; g.fillText(p.mission === "WISE" ? "2010" : Math.floor(p.year), X(p.x) + 8, Y(p.y) - 6);
-      }
+        const yr = p.mission === "WISE" ? 2010 : Math.floor(p.year), far = !lastLbl || Math.hypot(X(p.x) - lastLbl.x, Y(p.y) - lastLbl.y) > 34;
+        if (j === 0 || j === ch.length - 1 || (far && yr !== (lastLbl && lastLbl.yr))) {
+          g.fillStyle = "#ffe2b0"; g.font = "12px ui-monospace, monospace"; g.fillText(yr, X(p.x) + 8, Y(p.y) - 6);
+          lastLbl = { x: X(p.x), y: Y(p.y), yr };
+        }
+      });
     }
     // A pair from the automatic mover search (pipeline/vet.py): 2010 end, arrow, SPHEREx end.
     const pk = S.pick && S.t.changes && S.t.changes.items.find((c) => c.n === S.pick);
@@ -179,10 +221,10 @@
       }
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
-    const seen = f && f.detected === false ? " · not detected at this wavelength" : "";
+    const seen = f && f.detected === false ? " · not detected at this wavelength" : f && f.saturated_core ? " · saturated (too bright for this camera)" : "";
     const lbl = S.math ? S.math.label : diff ? "Difference: SPHEREx 2026 − 2025 (green = now, pink = before)" : mixed ? S.mixOut.label : f ? `${f.label} · ${labelOf(S.ch)}${seen}` : "";
     $("stamp").textContent = lbl;
-    $("frameLbl").textContent = mixed ? "" : f ? `${S.i + 1}/${fr.length} · ${f.year.toFixed(1)}` : "";
+    $("frameLbl").textContent = mixed ? "" : f ? `${S.i + 1}/${fr.length} · ${f.year.toFixed(1)}${fr.length === 1 ? " · only one frame here" : ""}` : "";
     document.querySelectorAll("#metaBody tr[data-i]").forEach((tr) => tr.classList.toggle("now", !diff && +tr.dataset.i === S.i));
   }
 
@@ -208,7 +250,7 @@
   const CH_WORD = { candidate: "Unconfirmed", known: "Known object", target: "The target", rejected: "Ruled out" };
   function renderChanges() {
     const ch = S.t.changes, box = $("changes");
-    box.hidden = !ch;
+    box.hidden = !ch || $("flipView").hidden;          // shown with the time-lapse only
     if (!ch) return;
     const out = ch.items.filter((c) => c.status === "rejected").length, kn = ch.found - out - ch.candidates;
     const pairs = (k) => `${k} pair${k === 1 ? "" : "s"}`;
@@ -369,7 +411,12 @@
     S.mixOut = out;
     $("mixMode").value = m.mode;
     $("mixSub").hidden = m.mode !== "sub"; $("mixOpts").hidden = m.mode !== "sub"; $("mixAdd").hidden = m.mode !== "add";
-    $("play").disabled = $("frame").disabled = !!out;     // the blink slider has no meaning on a combined picture
+    // the blink slider has no meaning on a combined picture, nor with a single frame (D2 and D5 of some targets)
+    const one = fr.length < 2, spx = fr.filter((f) => f.mission === "SPHEREx").length;
+    $("play").disabled = $("frame").disabled = !!out || one;
+    $("mixMode").disabled = $("mOp").disabled = $("mA").disabled = $("mB").disabled = one;
+    $("stackAll").disabled = spx < 2;
+    $("tDiff").disabled = !S.t.diff[S.ch];
     $("mixNote").textContent = note || (m.mode === "sub" ? HINT_SUB : m.mode === "add" ? HINT_ADD : "");
     writeMixUrl();
     if (redraw) draw();
@@ -426,6 +473,7 @@
   function step() { const n = frames().length; if (!n) return; S.i = (S.i + 1) % n; $("frame").value = S.i; draw(); }
   function play() {
     if (S.playing) return stop();
+    if ($("play").disabled) return;                       // one frame, or a combined picture (keyboard too)
     S.playing = true; $("play").textContent = "❚❚ Pause";
     S.timer = setInterval(step, reduceMotion ? 1500 : 600);
   }
@@ -436,7 +484,10 @@
   ["tGhost", "tTrail", "tPath", "tDiff"].forEach((id) => ($(id).onchange = draw));
 
   document.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT") return;
+    const el = e.target;
+    if (e.altKey || e.ctrlKey || e.metaKey || $("flipView").hidden) return;                   // browser shortcuts; another tab is showing
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable) return;          // the control's own keys
+    if (e.key === " " && el.closest && el.closest("button, a, summary")) return;              // Space presses the focused button
     if (e.key === " ") { e.preventDefault(); play(); }
     if (e.key === "ArrowRight") { stop(); step(); }
     if (e.key === "ArrowLeft") { stop(); const n = frames().length; S.i = (S.i - 1 + n) % n; $("frame").value = S.i; draw(); }
@@ -454,7 +505,7 @@
     $("checks").innerHTML = ev.checks.map((c) => `<li><span class="${c.state}">${icon[c.state]}</span><span>${c.text}</span></li>`).join("");
     $("numbers").innerHTML = (ev.numbers || []).map((n) => `<div><b>${n.value}</b><span>${n.label}</span></div>`).join("");
     insights();
-    $("explain").textContent = S.ex ? S.ex.summary : "Explanation not generated yet (run pipeline/explain.py).";
+    $("explain").textContent = S.ex ? S.ex.summary : "No written explanation for this target yet.";
     $("qButtons").innerHTML = S.ex && S.ex.qa ? S.ex.qa.map((q, k) => `<button data-k="${k}">${q.q}</button>`).join("") : "";
     $("qButtons").querySelectorAll("button").forEach((b) => (b.onclick = () => ($("answer").textContent = S.ex.qa[+b.dataset.k].a)));
   }
@@ -467,9 +518,7 @@
     $("facts").innerHTML = ins.facts.map((f) =>
       `<li><b>${esc(f.headline)}</b><span>${esc(f.detail)}</span><span class="basis">How: ${esc(f.basis)}</span></li>`).join("");
     $("limits").innerHTML = ins.limits.map((l) => `<li>${esc(l)}</li>`).join("");
-    // Latest measured position if there is one (fast movers leave the catalogue position behind), else the field centre.
-    const last = [...S.t.track].sort((a, b) => b.year - a.year)[0];
-    const ra = last && last.ra != null ? last.ra : S.t.grid.centre_ra, dec = last && last.dec != null ? last.dec : S.t.grid.centre_dec;
+    const { ra, dec } = nowPos(S.t);   // latest measured position (fast movers leave the catalogue position behind)
     const c = encodeURIComponent(`${ra.toFixed(5)} ${dec >= 0 ? "+" : ""}${dec.toFixed(5)}`);
     const links = [
       ["SIMBAD (is it a known object?)", `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${c}&Radius=30&Radius.unit=arcsec`],
@@ -528,12 +577,15 @@
   // ---------- coordinates ----------
   $("coordForm").onsubmit = (e) => { e.preventDefault(); coordSearch($("raIn").value, $("decIn").value, $("fovIn").value); };
   function parseAngle(s, hours) {
-    s = String(s).trim(); if (!s) return NaN;
+    s = String(s).trim().replace(/[−–]/g, "-"); if (!s) return NaN;   // the Star database prints a Unicode minus
     if (/^[-+]?\d+(\.\d+)?$/.test(s)) return +s;
-    const m = s.replace(/[hdms:°'″"]/g, " ").trim().split(/\s+/).map(Number);
+    const m = s.replace(/[hdms:°'′″"]/g, " ").trim().split(/\s+/).map(Number);
+    if (m.length > 3) return NaN;                                      // both coordinates typed into one box
     const sign = /^-/.test(s) ? -1 : 1, v = Math.abs(m[0]) + (m[1] || 0) / 60 + (m[2] || 0) / 3600;
     return sign * v * (hours ? 15 : 1);
   }
+  // 12h30m, 12:30:00 and plain "12 30 00" are hours of RA (the usual convention); 187.5 and 187d30m are degrees
+  const raInHours = (s) => /h|:/i.test(s) || (/^\s*[-+]?[\d.]+\s+\d/.test(s) && !/[d°]/i.test(s));
   async function liveLookup(a, d) {
     const msg = $("coordMsg"), btn = document.querySelector("#coordForm button");
     btn.disabled = true;
@@ -565,17 +617,19 @@
 
   function coordSearch(ra, dec, fovIn, opts = {}) {
     if (fovIn && typeof fovIn === "object") { opts = fovIn; fovIn = $("fovIn").value; }
-    const a = parseAngle(ra, /h/i.test(ra) || /:/.test(ra)), d = parseAngle(dec, false);
+    let a = parseAngle(ra, raInHours(ra)), d = parseAngle(dec, false);
     if (!isFinite(a) || !isFinite(d)) { $("coordMsg").textContent = "Could not read those coordinates."; return false; }
+    if (a < 0 || a > 360 || Math.abs(d) > 90) { $("coordMsg").textContent = "RA runs from 0 to 360° (0h to 24h) and Dec from −90° to +90°."; return false; }
+    if (a === 360) a = 0;                                // 24h00m00s is 0h
     S.here = { ra: a, dec: d, label: opts.label || `RA ${a.toFixed(4)}°, Dec ${d.toFixed(4)}°` };
-    if (!opts.fromSearch) showPath(null);              // bare coordinates: no known motion until a target matches
+    if (!opts.fromSearch) { showPath(null); $("starCard").hidden = true; }   // bare coordinates: no known motion until a target matches
     const fov = Number(fovIn) || 300;
     if ([...$("fovIn").options].some((o) => Number(o.value) === fov)) $("fovIn").value = String(fov);
     // nearest cached target overall, and nearest one that has the field size that was asked for
     const near = (list) => {
       let best = null, bd = 1e9;
       for (const t of list) {
-        const dd = Math.hypot((t.ra - a) * Math.cos((d * Math.PI) / 180), t.dec - d) * 3600;
+        const dd = Math.hypot((((t.ra - a + 540) % 360) - 180) * Math.cos((d * Math.PI) / 180), t.dec - d) * 3600;   // across RA 0h too
         if (dd < bd) { bd = dd; best = t; }
       }
       return { best, bd };
@@ -583,6 +637,7 @@
     const same = near(S.list.filter((t) => (t.fov || 300) === fov)), any = near(S.list);
     if (same.best && same.bd < 600) { $("coordMsg").textContent = `Matched ${same.best.name} (${Math.round(same.bd)}″ away).`; load(same.best.id); return true; }
     if (opts.fromSearch) {   // a star picked by name: show it instantly; the full time-lapse is an explicit choice
+      showSubject(S.here.label, "Found by name · shown live on the sky map");
       showMap(a, d, opts.label || "searched star");
       $("coordMsg").innerHTML = "Showing it on the live SPHEREx sky map (slide through all 102 wavelengths), or open 🔭 Through Webb." +
         (S.live ? ' <button type="button" id="mkLapse">Make a SPHEREx time-lapse (a few minutes)</button>' : "");
@@ -591,14 +646,14 @@
       return true;
     }
     exploreHere(a, d);   // live /explore/ mode (backend on :8001), shown beside the message
-    if (S.live) { requestField(a, d, fov); return true; }
+    if (S.live) { showSubject(S.here.label, "Typed coordinates · preparing a time-lapse"); requestField(a, d, fov); return true; }
     else if (any.best && any.bd < 600) {   // no server to make the other size: show what is cached and say so
-      $("coordMsg").textContent = `${any.best.name} is cached at ${fovLabel(any.best.fov || 300)} only. A ${fovLabel(fov)} field needs the local server (node server.js).`;
+      $("coordMsg").textContent = `${any.best.name} is prepared as a ${fovLabel(any.best.fov || 300)} field only, so that is what is shown.`;
       load(any.best.id); return true;
-    } else {   // static site: show the live sky map, plus how a teammate adds the field
-      showMap(a, d, `RA ${a.toFixed(4)}°, Dec ${d.toFixed(4)}°`);
-      $("coordMsg").textContent = `Not in the cached set yet. A teammate can add it in a few minutes: ` +
-      `python pipeline/fetch.py --ra ${a.toFixed(5)} --dec ${d.toFixed(5)}${fov === 300 ? "" : ` --fov ${fov}`}, then analyze.py and evidence.py.`;
+    } else {   // static site: show the live sky map
+      showSubject(S.here.label, "Typed coordinates · shown live on the sky map");
+      showMap(a, d, S.here.label);
+      $("coordMsg").textContent = "This patch of sky has no prepared time-lapse yet; the sky map shows it live.";
     }
     return true;   // the live sky map is showing
   }
@@ -618,7 +673,7 @@
     if (MAP.ready) return;
     await loadAladin(); await A.init;
     const t = S.t || {};
-    MAP.aladin = A.aladin("#aladin", { survey: HIPS.spherex, fov: 0.12, cooFrame: "ICRSd", showReticle: true, showLayersControl: false,
+    MAP.aladin = A.aladin("#aladin", { survey: HIPS.spherex, fov: 0.12, cooFrame: "ICRSd", log: false, showReticle: true, showLayersControl: false,
       showGotoControl: false, showFullscreenControl: true, showCooGridControl: false, showSimbadPointerControl: false,
       showProjectionControl: false, showFrame: true, showZoomControl: true,
       target: t.grid ? `${t.grid.centre_ra} ${t.grid.centre_dec}` : "0 0" });
@@ -627,6 +682,9 @@
     MAP.aladin.setBaseImageLayer(MAP.layers.spherex);
     MAP.overlay = A.graphicOverlay({ color: "#ffb547", lineWidth: 2, lineDash: [6, 4] }); MAP.aladin.addOverlay(MAP.overlay);
     MAP.cat = A.catalog({ name: "target", sourceSize: 22, color: "#ffb547", shape: "circle" }); MAP.aladin.addCatalog(MAP.cat);
+    MAP.past = A.graphicOverlay({ color: "#7cc4ff", lineWidth: 2.5 }); MAP.aladin.addOverlay(MAP.past);                    // path taken
+    MAP.fut = A.graphicOverlay({ color: "#7ee787", lineWidth: 2.5, lineDash: [7, 5] }); MAP.aladin.addOverlay(MAP.fut);    // path ahead
+    MAP.yr = A.catalog({ name: "year", sourceSize: 16, color: "#7ee787", shape: "square" }); MAP.aladin.addCatalog(MAP.yr);  // predicted spot in a chosen year
     try {   // wavelength of each of the 102 cube frames, straight from the HiPS description
       const txt = await (await fetch(HIPS.spherex + "/properties")).text();
       const m = txt.match(/data_cube_crval3_arr\s*=\s*([\d.\s]+)/);
@@ -646,12 +704,49 @@
     if (ra == null && t) { ra = t.grid.centre_ra; dec = t.grid.centre_dec; label = t.name; }
     if (ra == null) return;
     MAP.aladin.gotoRaDec(ra, dec);
-    MAP.overlay.removeAll(); MAP.cat.removeAll();
+    MAP.overlay.removeAll(); MAP.cat.removeAll(); MAP.past.removeAll(); MAP.fut.removeAll(); MAP.yr.removeAll();
+    MAP.sp = null; $("mapYears").hidden = true; yrStop();
+    const me = (MAP.seq = (MAP.seq || 0) + 1);
+    if (S.pathQ && window.PathView) PathView.sky(S.pathQ).then((sp) => {     // the star's path, 1900 to 2100
+      if (!sp || !MAP.past || me !== MAP.seq) return;                        // the map has moved on to another star
+      const back = sp.pts.filter((p) => p.year <= sp.now).map((p) => [p.ra, p.dec]), ahead = sp.pts.filter((p) => p.year >= sp.now).map((p) => [p.ra, p.dec]);
+      if (back.length > 1) MAP.past.add(A.polyline(back));
+      if (ahead.length > 1) MAP.fut.add(A.polyline(ahead));
+      MAP.sp = sp; $("mapYears").hidden = false; $("yrSlider").value = Math.floor(sp.now);
+      const c = Math.cos(sp.pts[0].dec * Math.PI / 180), xs = sp.pts.map((p) => p.ra * c), ys = sp.pts.map((p) => p.dec);
+      const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+      if (span > 0) MAP.aladin.setFoV(Math.min(30, Math.max(0.03, span * 2.2)));   // fit the whole path
+      yrMove(sp.now);
+    }).catch(() => {});
     const pts = t && label === t.name ? t.track.filter((p) => (p.ch || "w2") === "w2").sort((a, b) => a.year - b.year) : [];
     if (pts.length >= 2) MAP.overlay.add(A.polyline(pts.map((p) => [p.ra, p.dec])));
     const last = pts.length ? pts[pts.length - 1] : { ra, dec };
     MAP.cat.addSources([A.source(last.ra, last.dec, { name: label })]);
   }
+  // ---------- year slider: move the star along its predicted path (any star with known motion) ----------
+  function yrMove(y) {
+    const sp = MAP.sp; if (!sp) return;
+    const P = sp.pts; let i = P.findIndex((p) => p.year >= y); if (i <= 0) i = 1; if (i >= P.length) i = P.length - 1;
+    const a = P[i - 1], b = P[i], t = b.year === a.year ? 0 : Math.max(0, Math.min(1, (y - a.year) / (b.year - a.year)));
+    MAP.yr.removeAll(); MAP.yr.addSources([A.source(a.ra + (b.ra - a.ra) * t, a.dec + (b.dec - a.dec) * t, { name: String(Math.round(y)) })]);
+    const isNow = Math.abs(y - sp.now) < 1;           // "now" is this calendar year (2026.9 is still 2026)
+    $("yrLbl").textContent = `${isNow ? Math.floor(sp.now) : Math.round(y)} · ${isNow ? "now" : y < sp.now ? "where it was" : "predicted"}`;
+  }
+  let yrAnim = null;
+  function yrStop() { if (yrAnim) cancelAnimationFrame(yrAnim); yrAnim = null; $("yrPlay").textContent = "▶ Play its path"; }
+  $("yrSlider").oninput = (e) => { yrStop(); yrMove(+e.target.value); };
+  $("yrPlay").onclick = () => {
+    if (yrAnim) return yrStop();
+    if (reduceMotion) { $("yrSlider").value = 2100; return yrMove(2100); }
+    const t0 = performance.now(), y0 = +$("yrSlider").value >= 2099 ? 1900 : +$("yrSlider").value;
+    $("yrPlay").textContent = "❚❚ Pause";
+    const step = (now) => {
+      const y = Math.min(2100, y0 + (now - t0) / 1000 * 25);   // 25 years a second
+      $("yrSlider").value = Math.round(y); yrMove(y);
+      yrAnim = y < 2100 ? requestAnimationFrame(step) : (yrStop(), null);
+    };
+    yrAnim = requestAnimationFrame(step);
+  };
   async function showMap(ra, dec, label) {
     selectTab("map");
     try { await initMap(); mapGoTo(ra, dec, label); } catch (e) { $("coordMsg").textContent = "Sky map unavailable: " + e.message; }
@@ -663,17 +758,30 @@
     }
     $("meta").hidden = which === "stars";
     document.body.classList.toggle("stars-mode", which === "stars");
-    if (which === "stars") $("pathCard").hidden = true; else if ($("pathBody").innerHTML) $("pathCard").hidden = false;
+    if (which === "stars") $("pathCard").hidden = true; else if (S.pathQ && $("pathBody").innerHTML) $("pathCard").hidden = false;   // typed coordinates: no path
+    $("changes").hidden = which !== "flip" || S.away || !(S.t && S.t.changes);   // "What else moved" belongs to the time-lapse
+    if (which !== "stars" && new URLSearchParams(location.search).has("star")) {   // a reload should not reopen the Star database
+      const u = new URL(location); u.searchParams.delete("star"); history.replaceState(null, "", u);
+    }
     if (which !== "flip") stop();
     if (which === "webb") showWebb();
     if (which === "stars" && window.StarsTab) window.StarsTab.open(starKey);
     if (window.LongRange) which === "stars" ? requestAnimationFrame(window.LongRange.refresh) : window.LongRange.stop();
   }
-  window.WANDERERS = { selectTab, openTarget: (id) => { selectTab("flip"); load(id); } };
+  window.WANDERERS = { selectTab, openTarget };
 
   // ---------- path taken and path ahead (the team's star-path model, via pathview.js) ----------
   let pathSeq = 0;
+  // the "See it in the sky" button opens the Sky Compass already aimed at what is on screen
+  function compassCta(q) {
+    const a = $("compassCta"); if (!a) return;
+    const t = q && q.target ? S.list.find((x) => x.id === q.target) : null;
+    a.href = t ? `compass.html?target=${encodeURIComponent(t.id)}` : q && q.star ? `compass.html?star=${encodeURIComponent(q.star.name)}` : "compass.html";
+    $("compassCtaSub").textContent = t ? `Find ${t.name} with your phone` : q && q.star ? `Find ${q.star.name} with your phone` : "Sky Compass · point your phone up";
+  }
   async function showPath(q) {
+    compassCta(q);
+    S.pathQ = q || null;
     const card = $("pathCard"), seq = ++pathSeq;
     if (!q || !window.PathView) { card.hidden = true; return; }
     card.hidden = document.body.classList.contains("stars-mode");
@@ -691,6 +799,10 @@
     let db; try { db = await Webb.load(); } catch (e) { head.textContent = "Webb frame list unavailable: " + e.message; return; }
     $("webbCount").textContent = `${db.count.toLocaleString()} frames`;
     let frames = Webb.best(Webb.framesAt(h.ra, h.dec)), centre = h;
+    const path = S.pathQ && window.PathView ? await PathView.sky(S.pathQ).catch(() => null) : null;
+    const legend = `<br><span class="webb-legend"><i class="lg-gold"></i>Webb frame shown <i class="lg-grey"></i>other Webb frames that cover this spot <i class="lg-cross"></i>your position` +
+      (path ? ` <i class="lg-past"></i>path taken since 1900 <i class="lg-fut"></i>path ahead to 2100` : "") + `</span>` +
+      (path ? "" : `<br><span class="hint">No path is drawn: ${S.pathQ ? "no motion is known for this star" : "these are typed coordinates, not a known star. Search a star by name to see where it has been and where it is going"}.</span>`);
     if (frames.length) head.innerHTML = `<b>Webb has imaged ${esc(h.label)}</b> in ${frames.length} frame${frames.length > 1 ? "s" : ""}. ` +
       `The red cross is your position, the gold outline the frame shown.`;
     else {
@@ -699,6 +811,7 @@
       frames = [n, ...Webb.best(Webb.framesAt(n.ra, n.dec)).filter((p) => p.obs !== n.obs)]; centre = n;
       head.innerHTML = `<b>Webb has not imaged ${esc(h.label)}.</b> Showing its nearest Webb frame, “${esc(Webb.name(n))}”, ${n.dist.toFixed(2)}° away.`;
     }
+    head.innerHTML += legend;
     const show = async (p) => {
       list.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.obs === p.obs));
       const d = Webb.describe(p);
@@ -709,7 +822,9 @@
         `<a href="${Webb.progUrl(p)}" target="_blank" rel="noopener">Programme ${esc(p.pid)} at STScI ↗</a></span>`;
       try {
         await Webb.render($("webbAladin"), centre === h ? h.ra : p.ra, centre === h ? h.dec : p.dec, [p, ...frames.filter((x) => x !== p)],
-          { label: h.label, mark: { ra: h.ra, dec: h.dec }, base: $("webbBase").value, webbOpacity: +$("webbOp").value });
+          { label: h.label, mark: { ra: h.ra, dec: h.dec }, path, base: $("webbBase").value, webbOpacity: +$("webbOp").value });
+        const edge = Webb.inside(p, h.ra, h.dec) ? Webb.edgeArcsec(p, h.ra, h.dec) : null;
+        if (edge != null && edge < 15) $("webbNote").insertAdjacentHTML("beforeend", `<br><span class="hint">Your position is only ${edge.toFixed(0)}″ inside this frame's outline, right at its edge: Webb's pixels may not quite reach it.</span>`);
       } catch (e) { $("webbNote").textContent = "Sky viewer could not load: " + e.message; }
     };
     list.innerHTML = frames.slice(0, 12).map((p) => { const d = Webb.describe(p);
@@ -720,7 +835,10 @@
   $("tabWebb").onclick = () => selectTab("webb");
   $("webbOp").oninput = (e) => Webb.setOpacity(+e.target.value);
   $("webbBase").onchange = (e) => Webb.setBase(e.target.value);
-  $("tabFlip").onclick = () => selectTab("flip");
+  $("tabFlip").onclick = () => {   // the time-lapse belongs to a mission: back from a searched star, show that mission again
+    selectTab("flip");
+    if ((S.away || !S.t) && S.list.length) { $("starCard").hidden = true; load((S.t || S.list[0]).id, S.t ? S.ch : undefined); }
+  };
   $("tabStars").onclick = () => selectTab("stars");
   $("tabMap").onclick = async () => { selectTab("map"); try { await initMap(); mapGoTo(); } catch (e) { $("coordMsg").textContent = "Sky map unavailable: " + e.message; } };
   $("lam").oninput = (e) => setSlice(+e.target.value);

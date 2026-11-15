@@ -7,12 +7,13 @@
 **Live:** https://rajryadav4.github.io/wanderers/ · **Sky Compass (phone):** https://rajryadav4.github.io/wanderers/compass.html
 
 <p align="center">
-  <img alt="NASA Space Apps 2026" src="https://img.shields.io/badge/NASA%20Space%20Apps-2026-0B3D91?style=for-the-badge&logo=nasa&logoColor=white">
+  <img alt="NASA Space Apps 2026" src="https://img.shields.io/badge/NASA%20Space%20Apps-2026-0B3D91?style=for-the-badge">
   <img alt="Challenge: Planet X and SPHEREx" src="https://img.shields.io/badge/Challenge-Planet%20X%20%26%20SPHEREx-5B21B6?style=for-the-badge">
   <img alt="Candidate, never discovery" src="https://img.shields.io/badge/Rule-candidate%2C%20never%20discovery-C2410C?style=for-the-badge">
 </p>
 <p align="center">
-  <img alt="Data: SPHEREx" src="https://img.shields.io/badge/data-SPHEREx%20DR1-1D4ED8">
+  <img alt="Data: SPHEREx" src="https://img.shields.io/badge/data-SPHEREx%20DR1%20%2B%20QR3-1D4ED8">
+  <img alt="Data: NEOWISE" src="https://img.shields.io/badge/data-NEOWISE%202014--2024-1D4ED8">
   <img alt="Data: WISE" src="https://img.shields.io/badge/data-WISE%20%2F%20AllWISE-1D4ED8">
   <img alt="Data: Gaia DR3" src="https://img.shields.io/badge/data-Gaia%20DR3-1D4ED8">
   <img alt="Data: JWST via MAST" src="https://img.shields.io/badge/data-JWST%20%28MAST%29-1D4ED8">
@@ -26,6 +27,12 @@
   <img alt="Data are real" src="https://img.shields.io/badge/data-real%2C%20not%20simulated-16A34A">
 </p>
 
+
+<p align="center">
+  <img src="docs/img/wanderers-live-qr.png" alt="QR code: scan to open WANDERERS on your phone" width="220"><br>
+  <sub><b>Scan to open WANDERERS on your phone</b> (the live site above)</sub>
+</p>
+
 Pluto was found by flipping between two photos of the sky and spotting the dot that moved. WANDERERS does
 that with real infrared data spanning 2010 to 2026, then goes one step further: it uses SPHEREx's
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
@@ -37,6 +44,7 @@ evidence on screen. Unmatched objects are called **candidates, never discoveries
 timeline
   title The same patch of sky, seen at three moments
   2010 : WISE (AllWISE atlas, epoch 2010.5) : 3.4 and 4.6 µm images
+  2014-2024 : NEOWISE : a new image every six months, same 3.4 and 4.6 µm bands
   2016 : Gaia DR3 reference epoch : positions and motions of every field star
   2025 : SPHEREx first all-sky survey : 102 colours, 0.75 to 5 µm
   2026 : SPHEREx next survey : compared wavelength by wavelength
@@ -47,7 +55,6 @@ timeline
 | I want to… | Do this |
 |---|---|
 | **Look around** | Open the live site (top of this page). Nothing to install. |
-| **Run it locally** | `node server.js`, then open <http://localhost:8000>. |
 | **Run everything** (any coordinates, live explorer) | `node start.js`, or double-click `start.cmd` / `start.command`. It sets up Python and the web build for you. |
 | **Rebuild the data** | See [Run it](#run-it). `app/data/` is committed, so you only need this to change the data. |
 | **Run the tests** | `for f in test/*.test.js; do node --test "$f"; done` and `python3 -m unittest discover -s tests -p "test_*.py"` |
@@ -106,12 +113,13 @@ mindmap
       Sky Compass
 ```
 
-1. **Flipbook across 16 years.** WISE (2010) and SPHEREx (2025, 2026) images of the same patch, matched by
-   wavelength (4.6 µm and 3.4 µm channels), so you compare like with like.
+1. **Flipbook across 16 years.** WISE (2010), NEOWISE (one image every six months, 2014–2024) and SPHEREx
+   (2025, 2026) images of the same patch, matched by wavelength (4.6 µm and 3.4 µm channels), so you compare
+   like with like.
 2. **Gaia "ghosts".** Circles show where every star Gaia knows about *should* be in each frame. Anything that
    moves without a ghost is unexplained.
 3. **Measured path.** The target's position is measured in every frame and compared with the catalogue motion.
-4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (hundreds of them), each
+4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (up to 150 per target), each
    placed at the wavelength that image recorded there, gives a 0.75–5 µm spectrum. Water, methane and CO/CO₂
    bands are marked.
 5. **Brightness change.** The two SPHEREx sky surveys are compared wavelength by wavelength.
@@ -158,8 +166,8 @@ The five challenge test targets are the five "missions": Barnard's Star, R Draco
 Epsilon Indi B and WISE 0855. URLs are shareable and embeddable: `observatory.html?target=wise0855&ch=w2` (older links to `/?target=…` redirect there). Brand, logo files and the Day/Night palette: [BRAND.md](BRAND.md).
 
 **Any coordinates.** Type an RA/Dec (degrees or `08h55m10.83s` / `-07d14m42.5s`). On the demo server
-(`node server.js`) WANDERERS fetches a quick look of that patch (about 36 SPHEREx cutouts plus WISE and
-Gaia), measures it and plays it as a flipbook in a few minutes. The public static site cannot do this by
+(`node server.js`) WANDERERS prepares that patch (up to 150 SPHEREx cutouts plus WISE, NEOWISE and Gaia),
+measures it and plays it as a flipbook; this takes about 12–15 minutes while IRSA is busy. The public static site cannot do this by
 itself because IRSA does not allow direct browser requests (no CORS), so it shows the prepared patches.
 
 **Sky Compass** (`app/compass.html`, an extra for phones). The intro uses only real imagery: the NASA Blue Marble /
@@ -168,6 +176,28 @@ with your city, time zone and sidereal time. Calibration takes ~10 s: lay the ph
 quarter turns. The gyroscope measures the turns, so if the compass disagrees the app reports magnetic interference
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
+
+**The real sky behind the Sky Compass** (`app/realsky.js`), so clouds and city lights do not matter. A switch under the
+buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (HYG via the star database, with a City /
+Suburb / Dark choice), constellation lines (d3-celestial) and the planets (JPL elements); it is drawn, not
+photographed, and works with no connection. **Deep** shows survey photographs under the AR view, in the camera's own
+projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMass and IPAC/Caltech), both tiled by CDS
+and served by NASA/IPAC IRSA. They are decades old, not a live view. Tap a planet for a card, or a star to open its
+star sheet. "Drag the sky" in the Sight check sheet moves the sky onto something you can see. The page opens with no
+signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days, and "Save the sky for a place" in
+the ⓘ sheet keeps them for a latitude before a trip (each saved place has its own Remove). Checks: `node --test test/sky.test.js test/hips.test.js
+test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network; `SHARP=1` also
+saves and removes the 34 MB Sharp level). GitHub Actions (`.github/workflows/checks.yml`) runs the Node, Python and
+`web/` tests on every pull request, plus this browser check, which is allowed to fail when an archive is down.
+Spec: `docs/specs/sky-compass-real-sky.md`.
+
+**No more 2010 → 2025 jump.** Between WISE 2010 and SPHEREx 2025 the time-lapse now shows one NEOWISE image per sky
+visit (about every 6 months, Dec 2013 to 2024, same 3.4 and 4.6 µm bands), so you watch a fast star walk year by
+year. `pipeline/neowise.py` finds the exposures covering a target in the NEOWISE single-exposure source table
+(Parquet on NASA IRSA's AWS bucket, 5 columns of one sky partition), reads only the strip of each Level-1b image
+around the target with HTTP byte ranges, and median-stacks up to 10 exposures per visit. `fetch.py` runs it for
+new fields too. For any searched star the sky map has a **Play its path** year slider (1900 → 2100) that moves a
+marker along its predicted path; it is labelled as a prediction, because there are no images for every star.
 
 **Path taken and path ahead** (console and Sky Compass). Every result (a prepared target, a star found by name,
 a star picked on the phone) shows where it has been and where it is going: 1900 to 2100 from the scikit-learn path
@@ -249,7 +279,8 @@ node --test test/framemath.test.js   # includes checks on the real WISE 0855 and
 With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
 `evidence.py` for that patch, shows progress in the coordinate box, and opens it when ready (first time:
 several minutes). One field is prepared at a time, up to four can wait, and errors never show server paths.
-It uses `.venv/bin/python` if present, or set `WANDERERS_PYTHON`. The static site does not have this; it
+It uses `WANDERERS_PYTHON` if set, else the project's `.venv` (`.venv/bin/python`, or `.venv\Scripts\python.exe` on Windows),
+else `python3` (`python` on Windows). The static site does not have this; it
 still shows the message that a teammate can add the field.
 
 ```mermaid
@@ -283,7 +314,7 @@ Typed coordinates match a cached target only if the sizes agree; without the ser
 shown with a note that the other size needs the local server. Links can carry it: `?ra=269.4479&dec=4.7461&fov=600`.
 
 ```bash
-python .venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
+.venv/bin/python pipeline/fetch.py --ra 133.795 --dec -7.245 --fov 600   # by hand, 10' field
 node --test test/fields.test.js     # job handling, validation and HTTP checks (fake pipeline, no network)
 python3 test/test_fov.py            # field-of-view helpers; no packages needed
 ```
@@ -423,12 +454,81 @@ node --test test/starquake.test.js                   # Sun calibration, 126 Hz, 
 Not done yet: playing the Sun's own measured Doppler data (SOHO/MDI, SDO/HMI or BiSON). JSOC data exports need a
 registered account, so the Sun currently uses its measured ν<sub>max</sub> and Δν with the model pattern.
 
+### Star profile: compared with the Sun, what it is made of, its real light
+
+Under every star in the Star database, a **Star profile** shows:
+
+- **Size next to the Sun, to scale.** The colours are true blackbody colours computed from each surface
+  temperature (Planck spectrum through the CIE 1931 colour-matching functions to sRGB). For giants such as Polaris,
+  Earth's orbit is drawn in.
+- **The star on the Hertzsprung–Russell diagram,** among every star in the database.
+- **Facts:** weight in kg, diameter in km, surface temperature, power output, distance and light-travel time, the
+  habitable zone, age, and metal content.
+- **"Compared with the Sun" bars** on a log scale (0.01× to 100×) for mass, diameter, power, temperature, density,
+  gravity and age.
+- **What it is made of:**
+  - hydrogen, helium and metals by mass, plus what the metals are (Asplund et al. 2009 solar mix);
+  - a periodic table coloured by each measured element relative to the Sun, the view the Hypatia Catalog uses
+    (blue = less than the Sun, orange = more).
+- **Its real light spread into a rainbow:** the Gaia DR3 XP spectrum, 380–1000 nm, with the broad hydrogen,
+  calcium, sodium, magnesium and titanium-oxide features labelled.
+- **Known planets** with the habitable zone.
+
+Each value comes from the best available source, and the page names it:
+
+1. literature values;
+2. Gaia DR3 FLAME and GSP-Phot (`gaiadr3.astrophysical_parameters`);
+3. the Hypatia Catalog (Hinkel et al. 2014): element abundances and planets for about 14,000 nearby stars;
+4. estimates from the catalogue, labelled as such.
+
+`pipeline/star_profile.py` builds the profiles. The default stars ship ready-made. For any other star, the page
+shows catalogue estimates at once and, with `node server.js` running, fetches Gaia and Hypatia data in about 20 s
+(`POST /api/star-profile`).
+
+**Every star has a profile and both paths.** `pipeline/star_profiles_bulk.py` gathers measured basics for all
+12,244 stars in about 160 bulk calls instead of one query per star:
+- Hypatia properties, planets and element abundances: about 120 batched `star` calls and 29 whole-element `data` calls;
+- Gaia DR3 physical parameters and astrometry: 1,000 stars per TAP query, through Gaia's Hipparcos cross-match.
+
+The results go into `app/data/stars/profile_bulk/`, 101 shards keyed by HIP number mod 100, so the page loads about
+85 KB for the star it opens.
+
+| Data | Stars |
+|---|---|
+| Gaia and/or Hypatia measurements | 9,056 |
+| Gaia astrometry | 8,281 |
+| Element abundances | 3,136 |
+| Known planets | 329 |
+| Catalogue estimates only (the rest) | about 3,190 |
+
+Stars without a learnt path get a 1900–2100 path calculated from their measured motion (`app/physicspath.js`; Gaia
+DR3, else Hipparcos via HYG). It is labelled "calculated", not "learnt", and the button to learn it with the ML model
+stays. For Barnard's Star the calculated and learnt paths agree to within 1.5″.
+
+The top of the Star database tab lists the stars that are already fully done (full profile with real spectrum,
+learnt path and pre-made sound), and search results carry "full profile" and "learnt path" badges.
+
+**Starquake sounds** are pre-made for every default star (`node scripts/starquake_defaults.js` writes
+`app/data/starquake/model/`). Any other star's sound is generated in the browser the moment it is opened (about
+50 ms), with its waveform shown. The model uses the star's measured radius and temperature from its profile when
+there is no literature value.
+
+Tested in the iOS Simulator (iPhone 17 Pro, iPhone 16e, iPad Pro 13) as well as desktop browsers. Links can jump to
+a section once it has been drawn: `?star=hip8102#starProfile`, `#starQuake`, `#starLong`.
+
+```bash
+.venv/bin/python pipeline/star_profile.py --defaults     # profiles for the default stars
+node scripts/starquake_defaults.js                       # their starquake sounds
+node --test test/starprofile.test.js                     # colours, Sun ratios = 1, composition, shipped profiles
+```
+
 ### Frame details and data flags
 
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
 how many SPHEREx images were stacked, whether the object was seen and how strongly), how many SPHEREx spectrum
 measurements were left out because of flagged pixels, and the SPHEREx visits at that position. It shows only what
-the pipeline recorded: a flagged / not-flagged count, not a count per flag type.
+the pipeline recorded: a flagged / not-flagged count. A second panel lists every SPHEREx image with the flags set
+at the target, counted per flag type.
 
 ```bash
 node --test test/frameinfo.test.js   # includes checks on every committed target
@@ -437,10 +537,37 @@ node --test test/frameinfo.test.js   # includes checks on every committed target
 ## Explore any patch (live mode)
 
 Open <http://localhost:8000/explore/>, type any star name or sky position, and see its SPHEREx images as a blink
-video, fetched live from IRSA. It needs the live API (`backend/`, port 8001) next to `node server.js`, and a build
-of `web/`. The coordinate box links to it for positions outside the five missions.
-Double-click `start.cmd` (Windows) or `start.command` (macOS), or run `node start.js`.
-Setup and details: [docs/blink/README.md](docs/blink/README.md).
+video, fetched live from IRSA. The Data tab starts with "About this star": three sentences from the catalogs (CDS
+Sesame, SIMBAD), our own SPHEREx measurement and one quoted Wikipedia sentence. The coordinate box links to the
+explorer for positions outside the five missions. For typed coordinates, a note names a fast-moving star whose
+path passed nearby (old coordinates can miss it). A brightness change counts only when the brightest survey shows a
+source; else the panel says "No source at this position — the brightness numbers are sky noise."
+
+```
+backend/   FastAPI live API (port 8001): spherex.py (frames), about.py (About this star), app.py (routes)
+web/       React + TypeScript explorer, built to web/dist, served by server.js under /explore/
+start.js   one-click start: backend/.venv, root .venv (on-demand fields), web build, both servers
+docs/blink/   README.md (setup, limits) · api.md (the API contract)
+```
+
+Start everything with `node start.js`, or double-click `start.cmd` (Windows) or `start.command` (macOS). By hand:
+
+| Step | macOS / Linux | Windows |
+|---|---|---|
+| Python packages (once) | `python3 -m venv backend/.venv` then `backend/.venv/bin/python -m pip install -r backend/requirements.txt` | `py -3 -m venv backend\.venv` then `backend\.venv\Scripts\python -m pip install -r backend\requirements.txt` |
+| Live API | `backend/.venv/bin/python -m uvicorn backend.app:app --port 8001` | `backend\.venv\Scripts\python -m uvicorn backend.app:app --port 8001` |
+| Web app | `cd web && npm ci && npm run build`, then `node server.js` | the same |
+
+Tests of the live mode (from the repo root unless noted):
+
+```bash
+backend/.venv/bin/python -m pytest backend -q     # Windows: backend\.venv\Scripts\python -m pytest backend -q
+node --test test/*.test.js                         # server.js routes, the live proxy, the teammates' modules
+cd web && npm test && npm run build                # the explorer's pure functions, then a type check and build
+node web/scripts/verify-ui.mjs http://localhost:5173/explore/   # browser checks (needs npm run dev in web/)
+```
+
+Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). API: [docs/blink/api.md](docs/blink/api.md).
 
 ## Data (all public)
 
@@ -455,6 +582,7 @@ Setup and details: [docs/blink/README.md](docs/blink/README.md).
 | NASA Kepler short-cadence light curves (MAST) | real starquakes of four Kepler LEGACY stars |
 | ESA Gaia archive TAP (Gaia DR1-3, Hipparcos-2, Tycho-2, 2MASS, AllWISE, Pan-STARRS1, URAT1, UCAC4, PPMXL, GSC 2.3, CatWISE2020) | measured positions that train each star's trajectory model |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
+| NEOWISE-R single exposures and source table (NASA IRSA on AWS) | yearly frames 2014–2024 between WISE 2010 and SPHEREx |
 | HYG database v4.0 (astronexus; Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0 | the 9,265-star name search (`app/data/stars.json`, same licence) |
 | MAST (STScI), JWST public level-3 images | Webb frame outlines (`s_region`) and previews for "Through Webb" |
 | ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
@@ -470,24 +598,52 @@ photometry with local background, and per-pixel solid angle from each image's WC
 - Bright stars (Barnard's Star) saturate SPHEREx at many wavelengths; those points are dropped and the card says so.
 - AllWISE is a 2010–2011 coadd; we treat it as epoch 2010.5.
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
-- Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py`.
+- Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py` (or `node server.js`).
+  On the public site any other position shows the live sky map, which is one combined image, not a time-lapse.
+- A usable SPHEREx spectrum exists for only some targets: very bright stars (Barnard's Star, R Draconis and
+  others) saturate SPHEREx, and their spectra are left out on purpose.
+- The automatic "what else moved" search finds its own target in only some of the fields where the target moves;
+  the page says so, and an empty list means "nothing found", not "nothing there".
+- In single NEOWISE exposures the brightest stars saturate: their frames are marked "saturated" and give no
+  position (61 Cygni, R Draconis).
+- The public static site shows only the prepared targets. With `node server.js` (or `node start.js`), new coordinates are prepared on demand, and `/explore/` shows any patch live.
 - Through Webb: ESASky's Webb maps hold a subset of the data (to mid-2024), and MAST full previews are too large for
   phones, so many frames show the outline only, with a link to the full image. Frames are matched with the
   catalogue (J2000) position; a fast-moving star can sit a few arcseconds from where Webb saw it.
 - Kapteyn's Star and Luhman 16 were first added with hand-typed coordinates that were 17-30″ off; they now use the
   Gaia DR3 position (Luhman 16: Gaia position with the published motion from Bedin et al. 2017).
 
+## Use of AI
+
+Much of the code, tests and documentation in this repository was written with AI assistance (Claude Code,
+by Anthropic), directed, reviewed and tested on real phones by the team. On the site, the plain-language
+explanations and the "Ask WANDERERS" answers are generated by Claude from the measured numbers and are labelled
+"AI · Claude". Every measurement (motion, brightness, spectrum, evidence checks, paths) comes from the
+pipeline code and public data, not from AI.
+
+WANDERERS is a NASA Space Apps Challenge project. It is not affiliated with or endorsed by NASA, ESA or any of
+the data providers.
+
+## References
+
+- **Data:** see "Data (all public)" above. Star names: HYG database (astronexus), CC BY-SA 4.0.
+- **Python:** Astropy, astroquery, PyVO, reproject, astropy-healpix, NumPy, SciPy, Matplotlib, scikit-learn,
+  PyArrow, pygeomag.
+- **Browser:** Aladin Lite (CDS, Strasbourg), three.js; the live explorer uses React, Vite and FastAPI.
+- **Inspiration:** WiseView (the Backyard Worlds blink tool) and the Backyard Worlds: Planet 9 project, which the
+  page links to for reporting candidates; the IRSA SPHEREx tutorial notebooks for the methods.
+
 ## Repo layout
 
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
             star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
-            make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+            make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
 app/        index.html (home) · observatory.html (console) · compass.html (phone)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
-            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js
-            data/<target>/ · data/stars/ · data/starquake/ · stars.json · webb.json · declination.json
+            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
+            data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
 server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
 fields.js   the any-coordinates job service used by server.js
 start.js    one-click start for everything (also start.cmd, start.command)

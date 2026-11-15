@@ -87,7 +87,7 @@ def predict(ref, years, parallax=True):
         dra, ddec = parallax_offsets(ra, dec, years, plx)
         dec = dec + ddec * MAS
         ra = ra + dra * MAS / np.cos(np.radians(dec))
-    return np.asarray(ra, float), np.asarray(dec, float)
+    return np.asarray(ra, float) % 360, np.asarray(dec, float)     # the parallax shift can step across RA 0h
 
 
 def grid_wcs(grid):

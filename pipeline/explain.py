@@ -39,7 +39,7 @@ def slim(t):
 
 
 def ask(prompt):
-    r = subprocess.run(["claude", "-p", prompt, "--output-format", "text"], capture_output=True, text=True, timeout=240)
+    r = subprocess.run(["claude", "-p", prompt, "--output-format", "text"], capture_output=True, text=True, encoding="utf-8", timeout=240)   # UTF-8: Windows would read it as cp1252
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip()[:300])
     return r.stdout.strip()
@@ -60,6 +60,9 @@ def explain(tid):
 
 
 if __name__ == "__main__":
+    # A Windows console is cp1252 by default and cannot print ″ (issue #46): write UTF-8, and never crash on a character.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ids = sys.argv[1:] or [p.parent.name for p in sorted(DATA.glob("*/target.json"))]
     for tid in ids:
         try:

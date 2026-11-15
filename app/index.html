@@ -59,6 +59,7 @@
         <div class="cta">
           <a class="btn btn-primary" href="observatory.html">Explore the Sky <span class="arr" aria-hidden="true">→</span></a>
           <a class="btn btn-ghost" href="#how">How It Works</a>
+          <a class="btn btn-ghost compass-cta" href="compass.html" title="Open the Sky Compass on your phone and point it at the sky"><svg class="cc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 8.5l-2.2 4.8-4.8 2.2 2.2-4.8z" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="var(--accent)"/></svg><span class="cc-text"><b>See it in the sky</b><small>Sky Compass · point your phone up</small></span></a>
         </div>
         <dl class="hero-stats" id="heroStats" aria-label="Barnard's Star, measured by WANDERERS">
           <div><dt>Moved, 2010 → 2026</dt><dd data-k="shift">—</dd></div>
@@ -78,7 +79,7 @@
         </div>
         <figcaption>
           <span class="tag-chip data">Real data</span>
-          <span><b>Barnard's Star</b>, 5′ field. WISE 2010 and SPHEREx 2025–26 images at matched wavelength; dots are positions WANDERERS measured in each epoch. North up, east left.</span>
+          <span><b>Barnard's Star</b>, 5′ field. WISE 2010, NEOWISE 2014–2024 and SPHEREx 2025–26 images at matched wavelength; dots are positions WANDERERS measured in each epoch. North up, east left.</span>
         </figcaption>
       </figure>
     </div>
@@ -175,7 +176,7 @@
     </header>
     <div class="how-grid">
       <ol class="steps">
-        <li><span class="mono">i</span><div><h3>Flipbook across 16 years</h3><p>WISE (2010) and SPHEREx (2025, 2026) images of the same patch, in the 3.4 and 4.6 µm channels.</p></div></li>
+        <li><span class="mono">i</span><div><h3>Flipbook across 16 years</h3><p>WISE (2010), NEOWISE (2014–2024) and SPHEREx (2025, 2026) images of the same patch, in the 3.4 and 4.6 µm channels.</p></div></li>
         <li><span class="mono">ii</span><div><h3>Gaia ghosts</h3><p>Circles mark where every star Gaia DR3 knows should be in each frame. Anything that moves without a ghost is unexplained.</p></div></li>
         <li><span class="mono">iii</span><div><h3>Measured path</h3><p>The target's position is measured in every frame and compared with its catalogue proper motion and parallax.</p></div></li>
         <li><span class="mono">iv</span><div><h3>Infrared fingerprint</h3><p>Aperture photometry in hundreds of SPHEREx images builds a 0.75–5 µm spectrum. Water, methane and CO/CO₂ bands are marked.</p></div></li>
@@ -206,8 +207,8 @@
       <span class="chapter-no mono">04</span>
       <div>
         <p class="eyebrow">Explore the wanderers</p>
-        <h2 id="c4">Five test targets. Five ways the sky changes.</h2>
-        <p class="lede">The five NASA Space Apps test objects, from the fastest star in the sky to the coldest known brown dwarf. Every number below comes from the WANDERERS pipeline or the cited catalogue.</p>
+        <h2 id="c4">Eleven targets. Many ways the sky changes.</h2>
+        <p class="lede">The five NASA Space Apps test objects, from the fastest star in the sky to the coldest known brown dwarf, and six of the Sun's nearest neighbours. Every number below comes from the WANDERERS pipeline or the cited catalogue.</p>
       </div>
     </header>
     <ol class="targets" id="targetCards"></ol>
@@ -228,14 +229,14 @@
         <p>Methods follow the IRSA SPHEREx tutorials: per-pixel wavelengths from the WCS-WAVE table, the conservative bad-pixel flag set, 3-pixel aperture photometry with local background.</p>
         <div class="cta">
           <a class="btn btn-primary" href="observatory.html">Open the Observatory <span class="arr" aria-hidden="true">→</span></a>
-          <a class="btn btn-ghost" href="compass.html">Sky Compass (phone)</a>
         </div>
       </div>
       <div>
         <h3 class="eyebrow">Data sources</h3>
         <dl class="sources">
-          <div><dt>NASA SPHEREx DR1</dt><dd>2025–26 images, spectra, brightness change · IRSA</dd></div>
+          <div><dt>NASA SPHEREx DR1 + QR3</dt><dd>2025–26 images, spectra, brightness change · IRSA</dd></div>
           <div><dt>NASA WISE / AllWISE</dt><dd>2010 images at 3.4 and 4.6 µm · IRSA</dd></div>
+          <div><dt>NASA NEOWISE</dt><dd>2014–2024 single exposures, one image per sky visit · IRSA</dd></div>
           <div><dt>ESA Gaia DR3</dt><dd>Positions, motions, parallaxes, field-star ghosts</dd></div>
           <div><dt>Luhman &amp; Esplin 2016</dt><dd>Motion of WISE 0855, too cold for Gaia · AJ 152, 78</dd></div>
           <div><dt>HYG Database v4.1</dt><dd>Searchable star list · CC BY-SA 4.0</dd></div>
@@ -262,10 +263,10 @@
     </div>
     <div><h4>Observatory</h4><ul><li><a href="observatory.html">Time-lapse viewer</a></li><li><a href="observatory.html?target=wise0855">WISE 0855 (boss level)</a></li><li><a href="compass.html">Sky Compass</a></li></ul></div>
     <div><h4>Project</h4><ul><li><a href="#how">How it works</a></li><li><a href="#about">Data and limits</a></li><li><a href="https://github.com/kneha07/WANDERERS" rel="noopener noreferrer">Source on GitHub ↗</a></li></ul></div>
-    <p class="legal">Data: SPHEREx DR1 (NASA/IPAC IRSA) · AllWISE (NASA/IPAC IRSA) · Gaia DR3 (ESA). WANDERERS is an independent student project and is not affiliated with or endorsed by NASA or ESA.</p>
+    <p class="legal">Data: SPHEREx DR1 and QR3 (NASA/IPAC IRSA) · AllWISE and NEOWISE (NASA/IPAC IRSA) · Gaia DR3 (ESA). WANDERERS is an independent student project and is not affiliated with or endorsed by NASA or ESA.</p>
   </div>
 </footer>
 <script src="theme.js"></script>
-<script src="home.js"></script>
+<script src="home.js?v=20261116a"></script>
 </body>
 </html>

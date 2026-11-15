@@ -103,6 +103,7 @@ function sensors(R, t, sc) {
     const em = O.eulerFromMat(O.mul(Rm, BIAS));
     let spike = rnd() < sc.spikeRate ? 25 * (rnd() < 0.5 ? -1 : 1) : 0;
     out.push({ alpha: O.wrap360(em.alpha + disturb + gauss(sc.compassNoise) + spike), beta: em.beta + gauss(0.3), gamma: em.gamma + gauss(0.3), absolute: true, t: t * 1000 });
+    if (sc.absFirst) out.reverse();           // both listeners start together: the absolute event may arrive first
   }
   return out;
 }
@@ -183,6 +184,7 @@ const scenarios = [
   { name: "iPhone, user skips calibration", platform: "ios", compassNoise: 4, gyroDrift: 0.03, indoor: false, skipCalibration: true, seed: 6 },
   { name: "Android, outdoors", platform: "android", compassNoise: 3, gyroDrift: 0.01, indoor: false, spikeRate: 0, seed: 4 },
   { name: "Android, compass spikes", platform: "android", compassNoise: 3, gyroDrift: 0.01, indoor: false, spikeRate: 0.02, seed: 5 },
+  { name: "Android, absolute event arrives first, user skips calibration", platform: "android", compassNoise: 3, gyroDrift: 0.01, indoor: false, spikeRate: 0, absFirst: true, skipCalibration: true, seed: 11 },
 ];
 
 // unit checks first
