@@ -27,7 +27,8 @@ function fakeElement(id) {
 }
 
 function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {} } = {}) {
-  const els = {}, timers = [], windowListeners = {};
+  const els = {}, timers = [], windowListeners = {}, rafs = [];
+  let clock = 0;
   const $ = (id) => els[id] || (els[id] = fakeElement(id));
   const dirs = [0, 90, 180, 270].map((az) => Object.assign(fakeElement(), { dataset: { az: String(az) } }));
   const body = fakeElement("body");
@@ -50,6 +51,9 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
     return { ok: true, json: async () => JSON.parse(fs.readFileSync(p, "utf8")) };
   };
   const SkyLocal = { ...Sky, loadDeclination: () => Promise.resolve(null) };
+  if (webb === "real") {                          // app/telescope.js on the given data/webb.json
+    const w = {}; new Function("window", "fetch", fs.readFileSync(path.join(APP, "telescope.js"), "utf8"))(w, fetchFile); webb = w.Webb;
+  }
   const introMod = { playIntro: async (o) => { await null; o.onDone({ lat: 47.61, lon: -122.33 }); }, earthFacts: () => ({ distanceAU: 1, speedKms: 30 }) };
   const importIntro = () => (intro === "ok" ? Promise.resolve(introMod) : Promise.reject(new Error("CDN unreachable")));
   const StarSearch = { attach() {}, load: () => Promise.resolve([]), search: () => [], hms: (d) => `${d}h`, dms: (d) => `${d}d`, describe: () => [] };
@@ -57,7 +61,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const env = {
     window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
     Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: undefined,
-    getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: () => 0, performance: { now: () => 0 },
+    getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     DeviceOrientationEvent: undefined, innerWidth: 390, innerHeight: 844, console: { warn() {}, log() {} },
   };
@@ -70,7 +74,8 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   new Function(...names, "__introMod", "__importIntro", `"use strict";\n${src}`)(...names.map((k) => env[k]), introMod, importIntro);
   const runTimers = (maxMs = Infinity) => { for (const t of timers.splice(0)) if (t.fn && t.ms <= maxMs) t.fn(); };
   const flush = () => new Promise((r) => setImmediate(r));
-  return { $, els, dirs, body, window, windowListeners, timers, runTimers, flush, ...window.__wanderers, location: loc };
+  const frame = () => { for (const fn of rafs.splice(0)) fn(); };   // draw one animation frame
+  return { $, els, dirs, body, window, windowListeners, timers, runTimers, flush, frame, ...window.__wanderers, location: loc };
 }
 // feed iPhone-style events: camera pointing at az/alt (compass heading = az, gyro frame offset 137 deg)
 function aimPhone(c, az, alt, n = 60) {
@@ -163,4 +168,34 @@ test("a successful sight check closes itself after 4 s and restores Cancel", () 
   assert.equal(c.$("aimBar").hidden, true);
   assert.equal(c.$("aimCancel").hidden, false);
   assert.equal(c.F.compassFrozen, true);
+});
+
+// where the crosshair is (J2000) when looking at az/alt in drag mode: one frame of the real page
+async function crosshairAt(az, alt, opts = {}) {
+  const c = loadCompass({ intro: "fail", ...opts });
+  await c.$("go").onclick();
+  c.S.manual = { az, alt };
+  c.frame(); await c.flush(); await c.flush(); c.frame();
+  return c;
+}
+
+test("the 'Webb looked here' chip keeps its frame in a crowded field until you move 4.5 deg away", async () => {
+  const a = (await crosshairAt(200, 40)).S.crosshair, b = (await crosshairAt(200, 40.8)).S.crosshair;
+  // frame A where the crosshair starts; 100 frames crowded 0.8 deg away (like COSMOS: 500+ frames within 4.5 deg)
+  const row = (ra, dec, obs, target) => [ra, dec, 0.05, "NIRCam", target, "1234", 60000, "F200W", obs,
+    [ra - 0.03, dec - 0.03, ra + 0.03, dec - 0.03, ra + 0.03, dec + 0.03, ra - 0.03, dec + 0.03], 0, 0];
+  const rows = [row(a.ra, a.dec, "A", "Frame A")];
+  for (let i = 0; i < 100; i++) rows.push(row(b.ra + (i % 10) * 0.004, b.dec + Math.floor(i / 10) * 0.004, `B${i}`, `Crowd ${i}`));
+  rows.sort((x, y) => x[0] - y[0]);
+  const files = { "data/webb.json": { updated: "test", count: rows.length, programs: {}, p: rows } };
+  const c = await crosshairAt(200, 40, { webb: "real", files });
+  c.frame();
+  assert.equal(c.S.webbHere && c.S.webbHere.obs, "A", "chip starts on the frame under the crosshair");
+  c.S.manual = { az: 200, alt: 40.8 };            // move 0.8 deg: still well inside 4.5 deg of A
+  c.frame();
+  assert.equal(c.S.webbHere.obs, "A", "the chip must not change under your finger");
+  assert.match(c.$("webbChip").innerHTML, /Frame A/);
+  c.S.manual = { az: 200, alt: 46 };              // 6 deg away: now it may let go
+  c.frame();
+  assert.notEqual(c.S.webbHere && c.S.webbHere.obs, "A");
 });
