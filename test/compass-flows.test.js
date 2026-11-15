@@ -309,6 +309,17 @@ test("hold mode: one finger and the arrow keys move the held view, slower when z
   assert.deepEqual([c.pose().az, c.pose().alt], [c.S.manual.az, c.S.manual.alt]);
 });
 
+test("hold mode: a selected target within 6 deg of the crosshair is centred, not the noisy phone pose (snap)", async () => {
+  const c = await phoneAt(337, 28);                          // R Draconis is at az 340.9, alt 29.6 at this time and place
+  c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();
+  c.frame();
+  const T = c.S.sel;
+  assert.ok(T._sep > 1 && T._sep <= 6, `crosshair ${T._sep} deg from the target`);
+  c.setZoom(8);
+  assert.deepEqual(c.S.manual, { az: T._az, alt: T._alt });
+  assert.equal(c.S.snapped, true);
+});
+
 test("location note: a later GPS timeout does not claim the location was declined", async () => {
   const run = async (events) => {
     const geolocation = { watchPosition: (ok, fail) => { for (const e of events) e.code ? fail(e) : ok({ coords: { latitude: 47.6, longitude: -122.3, accuracy: 12, altitude: null } }); } };

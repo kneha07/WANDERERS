@@ -233,12 +233,15 @@ function setZoom(z) {
 }
 // Hold mode (the mount): from 8x the phone's sensors jitter by more than the view, so the view stops following
 // the phone and uses S.manual, like drag mode. It lets go below 6x (the gap stops flicker).
+// Snap: a selected target within 6 deg ("Locked on") is centred instead of the noisy phone pose.
 function updateHold() {
   if (S.sensors && !S.hold && S.zoom >= 8) {
-    const p = F.pointing();
-    if (p) S.manual = { az: p.az, alt: p.alt };
+    const T = S.sel && S.targets.find((t) => t.id === S.sel.id), p = F.pointing();
+    S.snapped = !!(T && T._sep != null && T._sep <= 6);
+    if (S.snapped) S.manual = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
+    else if (p) S.manual = { az: p.az, alt: p.alt };
     S.hold = true;
-  } else if (S.hold && S.zoom < 6) S.hold = false;
+  } else if (S.hold && S.zoom < 6) { S.hold = false; S.snapped = false; }
 }
 const fingers = new Map();
 let pinch = null;
