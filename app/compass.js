@@ -210,8 +210,10 @@ function calibrationTick() {
 }
 
 // ---------- pointing: sensors, or drag on desktop ----------
+// The phone's motion sensors steer the view: not in drag mode, and not while the view is held (zoomed in).
+const phoneSteers = () => S.sensors && !S.hold;
 function pose() {
-  const p = S.sensors && !S.hold ? F.pointing() : null;
+  const p = phoneSteers() ? F.pointing() : null;
   if (p) return p;
   const f = vec(S.manual.az, S.manual.alt);
   let up = [0, 0, 1].map((z, i) => z - f[2] * f[i]); const n = Math.hypot(...up) || 1; up = up.map((x) => x / n);
@@ -225,7 +227,7 @@ let drag = null;
 let trackAt = 0;
 function track(now, L) {
   const dt = (now - trackAt) / 1000; trackAt = +now;
-  if (!(dt > 0 && dt <= 60) || (S.sensors && !S.hold) || S.zoom < 8) return;
+  if (!(dt > 0 && dt <= 60) || phoneSteers() || S.zoom < 8) return;
   const a = -360.98564736629 / 86400 * dt * D2R, c = Math.cos(a), s = Math.sin(a);     // the turn in dt (sidereal rate)
   const k = [0, Math.cos(L.lat * D2R), Math.sin(L.lat * D2R)], v = vec(S.manual.az, S.manual.alt), kv = dot(k, v);
   const kxv = [k[1] * v[2] - k[2] * v[1], k[2] * v[0], -k[1] * v[0]];                  // k x v (the pole has no east part)
@@ -255,7 +257,7 @@ $("zoomReset").onclick = () => setZoom(1);      // back to 1x in one step (Escap
 let ease = null;
 function updateHold() {
   const covered = !S.camOn || RealSky.cover() === 1;
-  const p = S.sensors && !S.hold && S.zoom >= 8 && covered && F.pointing();     // no pose yet: not held (until a frame has one)
+  const p = phoneSteers() && S.zoom >= 8 && covered && F.pointing();     // no pose yet: not held (until a frame has one)
   if (p) {
     RealSky.cancelDrag();       // first, so Drag the sky's Cancel cannot put its old pose back over the held view
     const T = S.sel && S.targets.find((t) => t.id === S.sel.id);
@@ -302,7 +304,7 @@ for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(typ
 $("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
 
-$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY }; stopGlide(); $("hud").setPointerCapture(e.pointerId); } });
+$("hud").addEventListener("pointerdown", (e) => { if (!phoneSteers() && !pinch) { drag = { x: e.clientX, y: e.clientY }; stopGlide(); $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
   const k = 70 / innerHeight / S.zoom;       // step by step, so the sidereal tracking between two moves is kept
@@ -315,7 +317,7 @@ window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   stopGlide();
   if (e.key === "Escape") { if (![...document.querySelectorAll(".sheet")].some((el) => !el.hidden)) setZoom(1); return; }
-  if (S.sensors && !S.hold) return;
+  if (phoneSteers()) return;
   const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
   if (e.key === "ArrowLeft") S.manual.az = (S.manual.az - s + 360) % 360;
   if (e.key === "ArrowRight") S.manual.az = (S.manual.az + s) % 360;
@@ -853,7 +855,7 @@ function renderInfo(now, L, lst, tz) {
 
 // ---------- the real sky (realsky.js) ----------
 RealSky.init({
-  pose, focal: focalPx, loc, camOn: () => S.camOn, F, S,
+  pose, focal: focalPx, loc, camOn: () => S.camOn, phoneSteers, F, S,
   openSight: () => $("northBtn").click(),
   // a tapped star opens the same star sheet as the search, found by its star-database key
   onStar: async (pk) => {

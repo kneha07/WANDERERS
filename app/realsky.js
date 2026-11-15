@@ -24,7 +24,7 @@
     survey: pick("survey", (v) => SURVEYS[v], load("wanderers.skySurvey", "visible")),
     lines: load("wanderers.skyLines", true), mix: load("wanderers.skyMix", 0.8), msg: "", calDrag: null,
   };
-  let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), F, S, onStar(key), openSight()
+  let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), phoneSteers(), F, S, onStar(key), openSight()
   let LAST = null;         // the latest frame: pose, focal, size, time, place (for taps, the drag and the self-check)
 
   // ---------- the camera's projection (the same formula as compass.js) ----------
@@ -321,7 +321,7 @@
       A += lim((d * ex - b * ey) / det); T += lim((a * ey - c * ex) / det);
     }
     g.A = A; g.T = T;
-    if (C.S.sensors && !C.S.hold) { C.F.fineAz = Orient.wrap180(g.fine[0] + A); C.F.fineAlt = Math.max(-30, Math.min(30, g.fine[1] + T)); }
+    if (C.phoneSteers()) { C.F.fineAz = Orient.wrap180(g.fine[0] + A); C.F.fineAlt = Math.max(-30, Math.min(30, g.fine[1] + T)); }
     else { const m = C.S.manual; m.az = (g.manual.az + A + 720) % 360; m.alt = Math.max(-85, Math.min(85, g.manual.alt + T)); }
   }
   function startDrag() {
@@ -333,7 +333,7 @@
     const b = R.calDrag; R.calDrag = null; $("dragBar").hidden = true;
     if (!b) return;
     if (!keep) { C.F.fineAz = b.az; C.F.fineAlt = b.alt; C.F.compassFrozen = b.frozen; Object.assign(C.S.manual, b.manual); return; }
-    if (C.S.sensors && !C.S.hold) C.F.compassFrozen = true;      // the sky the user sees is the truth now, as after a sight check
+    if (C.phoneSteers()) C.F.compassFrozen = true;      // the sky the user sees is the truth now, as after a sight check
   }
 
   // ---------- pictures kept on the phone, and "Save the sky for a place" ----------
