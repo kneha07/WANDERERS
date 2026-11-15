@@ -1,6 +1,8 @@
 # Brief and judging criteria: where WANDERERS stands
 
-Status on 2026-11-14, `main` at `33adca6` plus the fixes in the pull request that added this file.
+Status on 2026-11-14. Written against `main` at `33adca6`, plus the fixes in the pull request that added this file. `main` has moved since
+(a redesign of the live Explore tool, and independent reviews of PRs #19 and #20), so the rows about the live Explore tool were **not** rechecked
+against the new code.
 Words used: **Done** (built and checked), **Partial** (built, with a stated limit), **Open** (not done), **Unchecked** (documented by the team, but nobody
 has run it for this list).
 
@@ -57,7 +59,12 @@ has run it for this list).
 - Issue #9: two on-demand features are on `main` (`/api/lookup` and `/api/field`); the page uses only one.
 - Issue #6: two Planet X tools live side by side; how they combine.
 - Issue #2: the background PDF.
-- Pull requests #4 (blocked), #19 and #20 (waiting for review).
+- Pull request #4: blocked by a change request and a conflict.
+- Pull request #19 (Windows Python): **passed** its independent review (`artifacts/review-pr-19-8299018.md`), with one gap that matters. `start.js`, the one-click start,
+  sets up only `backend/.venv`, so someone who starts with `start.cmd` still gets a failed field job, with a different message. It needs a follow-up issue.
+- Pull request #20 (test folders and runner): **failed** its independent review (`artifacts/review-pr-20-5cbd519.md`) on two high findings.
+  (1) The runner reads the old test-output format (`# pass 9`), but Node 24 prints another (`ℹ pass 7`), so it counts 0 for every Node file and strict mode misses Node skips.
+  (2) "Runs every test" is not true: it does not run `backend/test_spherex.py` or the `web/` tests. It also conflicts with the Python star tests that arrived in `tests/`.
 
 ## Before submitting
 
