@@ -1,3 +1,5 @@
+<!doctype html>
+<meta charset="utf-8">
 <title>WANDERERS Explained</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -143,8 +145,8 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
   <header><span class="eyebrow">Why it exists</span><h2 id="obj">Objectives</h2></header>
   <ul class="goals">
     <li><h3>Meet all six challenge requirements</h3><p>Data sync, detector switch, quality flags, citizen votes, candidate ranking and a billion-object search. Each one is live and tested.</p></li>
-    <li><h3>See motion, then read composition</h3><p>A flipbook shows <em>that</em> it moved. The 0.75–5.0 µm spectrum shows <em>what</em> it is: water, methane, CO and CO₂ bands.</p></li>
-    <li><h3>Show the evidence, not a score</h3><p>Stated rules turn measurements into a class and a confidence, for example "3 of 3 checks support it". No black box.</p></li>
+    <li><h3>See motion, then read composition</h3><p>A flipbook shows <em>that</em> it moved. The 0.75–5.0 µm spectrum shows <em>what</em> it is: water, methane, CO and CO₂ bands. A usable spectrum exists for 5 of the 11 shipped targets.</p></li>
+    <li><h3>Show the evidence, not a score</h3><p>Stated rules turn measurements into a class and a confidence, for example "3 of 3 key checks support it". The full list of checks prints under the headline. No black box.</p></li>
     <li><h3>Never over-claim</h3><p>Anything that Gaia or a catalogue does not explain is a <em>candidate</em>. Each card has a "What this view cannot show" box.</p></li>
     <li><h3>Use only real, public data</h3><p>SPHEREx, WISE, NEOWISE, Gaia DR3, JWST, Kepler. Nothing is simulated. AI writes text only, never measurements.</p></li>
     <li><h3>Open with no install</h3><p>The site is static and the data is committed. A clone or the live link just works, also on a phone.</p></li>
@@ -159,7 +161,7 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
     <div><h3>Challenge judges</h3><p class="need">Need proof that each requirement works.</p><span class="gets">→ README table, live links</span></div>
     <div><h3>Citizen scientists</h3><p class="need">Backyard Worlds volunteers who blink images to find brown dwarfs.</p><span class="gets">→ Explorer, Classify card, Survey</span></div>
     <div><h3>Astronomers</h3><p class="need">Need a ranked, filterable candidate list with archive links at the right epoch.</p><span class="gets">→ Survey CSV/JSON, promote.py</span></div>
-    <div><h3>Students and public</h3><p class="need">Want to point a phone at the sky, hear a star, or see what Webb saw.</p><span class="gets">→ Sky Compass, Starquakes, Star database</span></div>
+    <div><h3>Students and public</h3><p class="need">Want to point a phone at the sky, hear a star, see what Webb saw, or find where a photo was taken from its stars.</p><span class="gets">→ Sky Compass, Starquakes, Star database, Star Fix</span></div>
   </div>
 </section>
 
@@ -209,6 +211,7 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
       <text class="sub" x="272" y="242">any coordinates (fields.js)</text>
       <text class="sub" x="272" y="256">Ask WANDERERS (claude -p)</text>
       <text class="sub" x="272" y="270">learn a star · /explore/</text>
+      <text class="sub" x="272" y="284">Star Fix: POST /api/star-fix</text>
       <!-- backend -->
       <rect class="box" x="10" y="200" width="170" height="104" rx="6"/>
       <text x="22" y="224" font-weight="600" font-size="13">backend/ :8001</text>
@@ -232,7 +235,7 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
 <!-- EVIDENCE -->
 <section class="sec" aria-labelledby="ev">
   <header><span class="eyebrow">The core logic</span><h2 id="ev">How the evidence card decides</h2>
-  <p class="lede"><code>pipeline/evidence.py</code> asks these questions in order. The first "yes" wins. Confidence is the number of checks that agree: 3 or more is high, 2 is medium, 0 or 1 is low.</p></header>
+  <p class="lede"><code>pipeline/evidence.py</code> asks these questions in order. The first "yes" wins. Confidence counts the key checks for the chosen class: high when all pass (at least 2) or 3 or more pass, medium when 2 pass, low otherwise. It drops one step, with the reason shown, when most SPHEREx points are saturated. Read the printed list of checks, not only the headline.</p></header>
   <div class="ladder">
     <div><span class="q">Cold and red, and it moved?</span><span class="a">Cold brown dwarf</span></div>
     <div><span class="q">Brightness varies between surveys?</span><span class="a">Variable star</span></div>
@@ -254,7 +257,7 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
       <tr><td class="n">2</td><td>Combine six detectors</td><td>Each detector co-add is divided by its own noise, then summed. A switch picks D1–D6 or "Combined (all 6)".</td><td><span class="mono">analyze.py, app.js</span></td></tr>
       <tr><td class="n">3</td><td>Quality metadata</td><td>Every frame shows mission, wavelength, dates, flags, saturation and a good / caution / poor verdict with the reason.</td><td><span class="mono">frameinfo.js</span></td></tr>
       <tr><td class="n">4</td><td>Citizen classification</td><td>Vote Moving / Variable / Stationary / Artifact / Unsure. Votes go through GitHub issues. Consensus needs 3 voters and 60%.</td><td><span class="mono">classify.js, aggregate_votes.py</span></td></tr>
-      <tr><td class="n">5</td><td>Candidate ranking</td><td>Each mover is checked against Gaia DR3 and ranked by a transparent score. Filters, presets, CSV/JSON export.</td><td><span class="mono">pipeline/survey/</span></td></tr>
+      <tr><td class="n">5</td><td>Candidate ranking</td><td>Each mover is checked against Gaia DR3 and ranked by a transparent score. SPHEREx 2025–26 data checks whether the mover is where its track predicts. Filters (including SPHEREx-confirmed only), presets, CSV/JSON export with the SPHEREx verdict.</td><td><span class="mono">pipeline/survey/, survey/spherex.py</span></td></tr>
       <tr><td class="n">6</td><td>Billion-object search</td><td>12,288 HEALPix tiles. NEOWISE detections 2014–2024 are linked into ten-year tracks, fitted, vetted and ranked.</td><td><span class="mono">tiles.py, link.py, rank.py</span></td></tr>
     </tbody>
   </table></div>
@@ -266,11 +269,11 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
   <div class="tbl"><table>
     <thead><tr><th>Layer</th><th>Technology</th><th>Job</th></tr></thead>
     <tbody>
-      <tr><td>Data pipeline</td><td>Python · Astropy · astroquery · PyVO · reproject · astropy-healpix · NumPy · SciPy · PyArrow</td><td>Download cutouts, measure motion, spectrum and brightness, build evidence</td></tr>
+      <tr><td>Data pipeline</td><td>Python · Astropy · astroquery · PyVO · reproject · astropy-healpix · NumPy · SciPy · PyArrow · cedar-solve · pillow-heif</td><td>Download cutouts, measure motion, spectrum and brightness, build evidence; plate-solve Star Fix photos</td></tr>
       <tr><td>Machine learning</td><td>scikit-learn <code>HuberRegressor</code>, BIC model choice, bootstrap</td><td>Learn each star's path 1900–2100 from up to 13 catalogues</td></tr>
       <tr><td>Main site</td><td>Plain JavaScript · HTML canvas · Aladin Lite 3.8.2 · three.js · service worker</td><td>Flipbook, spectrum, sky map, 3D star paths, offline phone use</td></tr>
       <tr><td>Phone extra</td><td>DeviceOrientation sensor fusion · Web Audio · NASA GIBS</td><td>Sky Compass AR view, Starquakes sound</td></tr>
-      <tr><td>Local server</td><td>Node.js (<code>server.js</code>, <code>fields.js</code>, <code>start.js</code>)</td><td>Any-coordinate jobs, live questions, one-click start</td></tr>
+      <tr><td>Local server</td><td>Node.js (<code>server.js</code>, <code>fields.js</code>, <code>start.js</code>)</td><td>Any-coordinate jobs, live questions, Star Fix uploads, one-click start</td></tr>
       <tr><td>Live explorer</td><td>FastAPI (port 8001) · React · TypeScript · Vite</td><td>Blink any patch of sky live from IRSA</td></tr>
       <tr><td>AI</td><td>Claude (Claude Code CLI, headless)</td><td>Plain-language explanations from measured numbers only</td></tr>
       <tr><td>Automation</td><td>GitHub Actions · GitHub issue forms · GitHub Pages</td><td>Tests on every pull request, weekly data sync, vote count, hosting</td></tr>
@@ -296,10 +299,10 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
       <tr><td class="n">2010</td><td>WISE / AllWISE (NASA IRSA)</td><td>First image, 3.4 and 4.6 µm</td></tr>
       <tr><td class="n">2014–2024</td><td>NEOWISE single exposures (IRSA on AWS)</td><td>One image every six months; the survey search</td></tr>
       <tr><td class="n">2016</td><td>Gaia DR3 (ESA)</td><td>Expected position of every field star ("ghosts")</td></tr>
-      <tr><td class="n">2025–2026</td><td>SPHEREx DR1 and QR3 (IRSA)</td><td>Latest images, spectrum, brightness change</td></tr>
+      <tr><td class="n">2025–2026</td><td>SPHEREx DR1 and QR3 (IRSA)</td><td>Latest images, spectrum, brightness change; checks survey movers in the all-sky cube</td></tr>
     </tbody>
   </table></div>
-  <p class="lede">Five test targets ship ready: Barnard's Star, R Draconis, RW Aurigae, Epsilon Indi B and WISE 0855 (the coldest known brown dwarf).</p>
+  <p class="lede">Eleven targets ship ready, for example Barnard's Star, R Draconis, RW Aurigae, Epsilon Indi B, Luhman 16 and WISE 0855 (the coldest known brown dwarf).</p>
 </section>
 
 <!-- LIMITS -->
@@ -307,14 +310,16 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
   <header><span class="eyebrow">Stated on the site too</span><h2 id="lim">Known limits</h2></header>
   <ul class="limits">
     <li>Bright stars saturate SPHEREx. Those points are dropped, and the card says so.</li>
+    <li>A usable spectrum exists for 5 of the 11 shipped targets. Bright stars such as Barnard's Star have none, and the panel says so.</li>
     <li>Aperture photometry gives the shape of a spectrum, not precise absolute flux.</li>
+    <li>One Star Fix photo is right to about 50 to 150 km. It needs the local server with the plate solver installed.</li>
     <li>The public site shows only prepared targets. New coordinates need <code>node server.js</code> (about 12–15 minutes).</li>
     <li>The field search recovers its own target in 8 of 9 moving-target fields. WISE 0855 is still missed.</li>
     <li>An empty "what else moved" list means "nothing found", not "nothing there".</li>
   </ul>
 </section>
 
-<footer>Source: <code>README.md</code>, <code>docs/demo-script.md</code>, <code>BRAND.md</code> in kneha07/WANDERERS at commit 184e071 (15 Nov 2026). WANDERERS is a Space Apps project. It is not endorsed by NASA or ESA.</footer>
+<footer>Source: <code>README.md</code>, <code>docs/demo-script.md</code>, <code>BRAND.md</code> in kneha07/WANDERERS at commit cfc0129 (15 Nov 2026). WANDERERS is a Space Apps project. It is not endorsed by NASA or ESA.</footer>
 </div>
 
 <script>
@@ -323,7 +328,7 @@ const CASES = [
  {k:"Spot a mover", who:"Citizen scientist", steps:[
   "Open the explorer on Barnard's Star.",
   "Play the flipbook: WISE 2010, then NEOWISE every six months, then SPHEREx 2025 and 2026.",
-  "Look for a dot with no Gaia ghost circle. That dot is unexplained.",
+  "Watch Barnard's dot walk away from its Gaia ghost circles. A dot with no circle at all would be unexplained.",
   "Turn on Predicted path to compare the measured path with the catalogue motion.",
   "Subtract two frames: green is now, pink is before."], where:"observatory.html?target=barnard"},
  {k:"Identify an object", who:"Student or judge", steps:[
@@ -335,6 +340,7 @@ const CASES = [
   "Open the Sky Survey and pick the High-confidence preset (12+ visits, S/N 10+).",
   "Filter for unexplained, red movers. Red is a brown-dwarf hint, not proof.",
   "Open a candidate. Follow links to SIMBAD, Gaia and Legacy Surveys at the right epoch.",
+  "Tick SPHEREx-confirmed only to keep movers that SPHEREx saw in 2025–26 where predicted.",
   "Export CSV or JSON, or run promote.py to build a full time-lapse."], where:"survey.html?preset=high"},
  {k:"Vote on an object", who:"Citizen scientist", steps:[
   "On any target or candidate, pick Moving, Variable, Stationary, Artifact or Unsure.",
@@ -346,6 +352,11 @@ const CASES = [
   "Calibrate for about 10 s: lay the phone flat and give it three quarter turns.",
   "Pick Eye for drawn stars and planets, or Deep for survey photographs.",
   "Tap a star for its profile, path, Starquake sound and whether Webb imaged it."], where:"compass.html"},
+ {k:"Find where a photo was taken", who:"Public, local", steps:[
+  "Run start.cmd or node start.js. This installs the plate solver.",
+  "Open Star Fix and upload original iPhone night-sky photos (HEIC).",
+  "The stars, the phone's gravity sensor and the photo time give a latitude and longitude.",
+  "Read the answer, the map circle, and the distance to the GPS position the phone stored."], where:"starfix.html → POST /api/star-fix"},
  {k:"Explore any patch", who:"Anyone, local", steps:[
   "Run node start.js (or double-click start.cmd).",
   "Type any RA/Dec. The pipeline prepares the field and opens it as a flipbook.",
