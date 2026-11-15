@@ -1,7 +1,7 @@
 // Instrument panels. Every value comes from the API answer (docs/blink/api.md); nothing is hard-coded.
 import { Component, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSentence, nearestGaia, scatteredLight, yearOf } from './data'
+import { brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSentence, nearestGaia, scatteredLight, sourceSeen, yearOf } from './data'
 import type { Frame, Phot, Result } from './data'
 import { decText, raText, skyToPixel } from './sky'
 import type { RaDec } from './sky'
@@ -92,7 +92,7 @@ function ticks(lo: number, hi: number, count = 4) {
 
 const aboutAnswers = new Map<string, Promise<About>>() // url -> answer: a tab switch or a second open is instant
 
-function fetchAbout(url: string) {
+export function fetchAbout(url: string) {
   let p = aboutAnswers.get(url)
   if (!p) {
     p = fetch(url, { signal: AbortSignal.timeout(20_000) }).then(async (res) => {
@@ -106,13 +106,20 @@ function fetchAbout(url: string) {
   return p
 }
 
+/** The About request for the current target: by its typed name, or by position for typed coordinates. */
+export function targetAboutUrl(r: Result) {
+  if (r.name) return aboutUrl({ q: r.query })
+  const at = r.frames.find((f) => f.ring)?.ring ?? { x: r.size_px / 2, y: r.size_px / 2 }
+  return aboutUrl(aboutWhere(r.center, nearestGaia(r, r.gaia, at), r.gaia))
+}
+
 /** Three short sentences about the target, or about a marked candidate: (1) catalog facts, (2) our SPHEREx
  * measurement, (3) one history sentence from Wikipedia or the SIMBAD paper count. Sources are linked below. */
 export function AboutCard({ r, mark }: { r: Result; mark?: RaDec }) {
   const at = mark ? skyToPixel(r, mark) : (r.frames.find((f) => f.ring)?.ring ?? { x: r.size_px / 2, y: r.size_px / 2 })
   const self = !mark || onTarget(r, at)
   const hit = nearestGaia(r, r.gaia, at)
-  const url = self && r.name ? aboutUrl({ q: r.query }) : aboutUrl(aboutWhere(self ? r.center : mark!, hit, r.gaia))
+  const url = self ? targetAboutUrl(r) : aboutUrl(aboutWhere(mark!, hit, r.gaia))
   const [got, setGot] = useState<{ url: string; data?: About; error?: string }>({ url: '' })
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
@@ -561,7 +568,9 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
   const wl = pick === 'stack' || pick === 'each' ? null : r.detectors[pick].find((d) => d.wavelength_um)?.wavelength_um
   const change = pick === 'each' ? null : brightnessChange(good.map((p) => p.phot!))
   // A change that is largest in D1 or D2 is probably scattered light (issue #5): never call it real.
-  const suspect = !!change && change.sigmas >= 3 && scatteredLight(r) && !/^D[3-6]$/.test(pick)
+  // NM1: no claim about a change where no source shows (typed coordinates of a star that has moved away)
+  const source = good.some((p) => sourceSeen(r.frames[p.frame], p.phot))
+  const suspect = !!change && source && change.sigmas >= 3 && scatteredLight(r) && !/^D[3-6]$/.test(pick)
   const common = r.frames[0]?.stack_detectors
   const sameStack = !!common && r.frames.every((f) => f.stack_detectors?.join() === common.join())
   const L = 64
@@ -646,7 +655,9 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
         <li>△ no data at the target</li>
       </ul>
       <p className="summary">
-        {pick === 'each'
+        {good.length && !source
+          ? 'No source at this position — the brightness numbers are sky noise.'
+          : pick === 'each'
           ? good.length
             ? `Measured: ${good.map((p) => `${p.tag} ${fmt(p.phot!)} ${unit} (survey ${p.frame + 1})`).join(' · ')}`
             : 'No detector is measurable here.'

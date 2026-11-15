@@ -10,7 +10,9 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { brightGhosts, marksFromParam, marksToParam, titleOf } from './data'
 import type { Result } from './data'
-import { AboutCard, AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard } from './panels'
+import { AboutCard, AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard, fetchAbout, targetAboutUrl } from './panels'
+import { fastHint } from './about'
+import type { About } from './about'
 import { COLOUR_LINE, EXAMPLES, FieldGuide, TaskTab, Thumbs, Tutorial, markedText, reportText } from './rail'
 import SkyContext from './SkyContext'
 import SkyNow, { CITIES } from './SkyNow'
@@ -182,6 +184,8 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
   const toastTimer = useRef(0)
+  const chipsRef = useRef<HTMLUListElement>(null)
+  const [typedAbout, setTypedAbout] = useState<{ url: string; data: About } | null>(null) // typed RA/Dec only
   const key = keyOf(state)
   const r = state.result
   const loading = state.status === 'loading'
@@ -290,6 +294,25 @@ export default function App() {
     return () => clearInterval(t)
   }, [loading])
   const elapsed = Math.max(0, Math.round((now - state.since) / 1000))
+
+  // A new place shows the test targets from the first one (on a phone they scroll sideways).
+  useEffect(() => {
+    chipsRef.current?.scrollTo?.({ left: 0 })
+  }, [state.q])
+
+  // Typed coordinates: ask About now, so a fast mover near the typed position is named under the image (NM2).
+  const typedUrl = state.status === 'result' && r && !r.name ? targetAboutUrl(r) : ''
+  useEffect(() => {
+    if (!typedUrl) return
+    let live = true
+    fetchAbout(typedUrl).then(
+      (data) => live && setTypedAbout({ url: typedUrl, data }),
+      () => undefined, // the hint is optional; the About card shows the error
+    )
+    return () => {
+      live = false
+    }
+  }, [typedUrl])
 
   // Decode every frame before playing, so the blink never flickers.
   useEffect(() => {
@@ -421,6 +444,7 @@ export default function App() {
   const wl = r?.rgb?.wavelength_um
   const satN = r?.frames.filter((f) => f.saturated).length ?? 0
   const current = TARGETS.find((t) => t.q.toLowerCase() === state.q.toLowerCase())
+  const fast = r && !loading ? fastHint(r, typedAbout?.url === typedUrl ? typedAbout.data : null) : null
 
   return (
     <>
@@ -489,7 +513,7 @@ export default function App() {
           )}
         </div>
 
-        <ul className="chips" aria-label="Test targets">
+        <ul className="chips" aria-label="Test targets" ref={chipsRef}>
           {TARGETS.map((t) => (
             <li key={t.q}>
               <button
@@ -592,7 +616,9 @@ export default function App() {
                             : ' '}
                     </p>
                     <p className="note">
-                      {!loading && state.view === 'diff' && r
+                      {fast
+                        ? fast
+                        : !loading && state.view === 'diff' && r
                         ? r.difference
                           ? 'A mover shows as a dark and bright pair: dark where it was, bright where it is now. A blinker shows as a dark or bright spot.'
                           : 'A difference needs at least two surveys. This position has only one so far.'

@@ -175,7 +175,13 @@ export function measuredMotion(r: Track) {
 const span = (days: number) =>
   days < 45 ? `${Math.round(days)} days` : days < 730 ? `${Math.round(days / 30.44)} months` : `${(days / 365.25).toFixed(1)} years`
 
-/** One plain sentence for the Motion panel: how far, which way, how long, and whether the catalogue agrees. */
+const perYear = (arcsec: number, days: number) => (arcsec / (days / 365.25)).toFixed(1)
+
+/** The measured motion in the words that the Motion panel and About share: one number, per year, from our frames. */
+export const motionClause = (m: NonNullable<ReturnType<typeof measuredMotion>>) =>
+  `In our SPHEREx frames it moves about ${perYear(m.arcsec, m.days)}″ per year toward the ${compass(m.pa)}`
+
+/** One plain sentence for the Motion panel: how fast, which way, over how long, and whether the catalogue agrees. */
 export function motionSentence(r: Track) {
   const m = measuredMotion(r)
   if (!m)
@@ -184,12 +190,17 @@ export function motionSentence(r: Track) {
       : 'No proper motion is known for a typed position, so there is no predicted position to measure.'
   const t = span(m.days)
   const moved = m.significant
-    ? `It moved ${m.arcsec.toFixed(1)}″ (about ${m.px.toFixed(1)} pixels) ${compass(m.pa)} in ${t}`
-    : `It did not move measurably in ${t} (less than ${(3 * m.sigmaPx * r.pixel_arcsec).toFixed(1)}″)`
+    ? `${motionClause(m)} (${m.px.toFixed(1)} pixels in ${t})`
+    : `In our SPHEREx frames it does not move measurably in ${t} (less than ${perYear(3 * m.sigmaPx * r.pixel_arcsec, m.days)}″ per year)`
   if (!m.pred) return `${moved}. No catalogue motion is known for a typed position.`
-  if (m.significant && m.agree) return `${moved}, as its catalogue motion predicts.`
-  return `${moved}; its catalogue motion predicts ${m.pred.arcsec.toFixed(1)}″${m.significant ? ` ${compass(m.pred.pa)}` : ''}.`
+  const cat = `${perYear(m.pred.arcsec, m.days)}″ per year`
+  if (m.significant && m.agree) return `${moved}, as its catalogue motion predicts (${cat}).`
+  return `${moved}; its catalogue motion is ${cat}${m.significant ? ` toward the ${compass(m.pred.pa)}` : ''}.`
 }
+
+/** A source stands out where the brightness is measured: a centroid in that frame, or a flux of 5 sigma or more.
+ * Without one, a "change" is only sky noise (typed coordinates of a star that has moved away). */
+export const sourceSeen = (f: Pick<Frame, 'centroid'>, p: Phot | null | undefined) => !!f.centroid || (!!p && p.flux >= 5 * p.err)
 
 /** SIMBAD prefixes and spacing do not make a different name: "V* R Dra" is "R Dra". */
 const bare = (s: string) =>

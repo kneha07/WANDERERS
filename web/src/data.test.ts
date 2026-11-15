@@ -72,16 +72,22 @@ const barnard = {
 
 describe('plain motion sentence', () => {
   it('says how far, which way and how long, and that the catalogue agrees', () => {
-    expect(motionSentence(barnard)).toBe('It moved 9.6″ (about 1.6 pixels) north-northwest in 13 months, as its catalogue motion predicts.')
+    expect(motionSentence(barnard)).toBe(
+      'In our SPHEREx frames it moves about 8.9″ per year toward the north-northwest (1.6 pixels in 13 months), as its catalogue motion predicts (10.4″ per year).',
+    )
   })
   it('says what the catalogue predicts when it disagrees', () => {
     const r = { ...barnard, frames: [barnard.frames[0], { ...barnard.frames[1], ring: { x: 22.0, y: 25.09 } }] }
-    expect(motionSentence(r)).toBe('It moved 9.6″ (about 1.6 pixels) north-northwest in 13 months; its catalogue motion predicts 15.1″ east.')
+    expect(motionSentence(r)).toBe(
+      'In our SPHEREx frames it moves about 8.9″ per year toward the north-northwest (1.6 pixels in 13 months); its catalogue motion is 14.0″ per year toward the east.',
+    )
   })
   it('says when the shift is inside the errors', () => {
     const c = { ex: 0.3, ey: 0.3 }
     const r = { ...barnard, frames: [{ ...barnard.frames[0], centroid: { x: 24.5, y: 24.5, ...c } }, { ...barnard.frames[1], centroid: { x: 24.6, y: 24.5, ...c } }] }
-    expect(motionSentence(r)).toBe('It did not move measurably in 13 months (less than 7.8″); its catalogue motion predicts 11.2″.')
+    expect(motionSentence(r)).toBe(
+      'In our SPHEREx frames it does not move measurably in 13 months (less than 7.3″ per year); its catalogue motion is 10.4″ per year.',
+    )
   })
   it('says that a typed position has no prediction', () => {
     expect(motionSentence({ ...barnard, pm: null, frames: barnard.frames.map((f) => ({ ...f, ring: null, centroid: null })) })).toBe(

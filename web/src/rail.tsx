@@ -1,6 +1,6 @@
 // Right rail content: the task (mark, check, report), the field guide, and the first-run tutorial cards.
 import { useState } from 'react'
-import { KNOWN_ARCSEC, nearestGaia } from './data'
+import { KNOWN_ARCSEC, nearestGaia, titleOf } from './data'
 import type { Result } from './data'
 import { decText, raText, skyToPixel } from './sky'
 import type { RaDec } from './sky'
@@ -186,7 +186,7 @@ export function reportText(r: Result, marks: RaDec[], url: string, local = local
   })
   return [
     `Candidate${marks.length === 1 ? '' : 's'} from WANDERERS Explore (NASA SPHEREx images from IRSA)`,
-    `Field: ${r.query}${r.name && r.name !== r.query ? ` (${r.name})` : ''} at RA ${raText(r.center.ra)}, Dec ${decText(r.center.dec)} (${r.center.ra.toFixed(5)}, ${r.center.dec.toFixed(5)}), ${r.fov_arcmin}′`,
+    `Field: ${r.query}${titleOf(r).catalog ? ` (${titleOf(r).catalog})` : ''} at RA ${raText(r.center.ra)}, Dec ${decText(r.center.dec)} (${r.center.ra.toFixed(5)}, ${r.center.dec.toFixed(5)}), ${r.fov_arcmin}′`,
     `Frames: first ${r.frames[0]?.label}, last ${r.frames[r.frames.length - 1]?.label}`,
     ...lines,
     local ? 'Link: none yet (the tool runs on my computer only; the RA and Dec above find the field).' : `Link: ${url}`,

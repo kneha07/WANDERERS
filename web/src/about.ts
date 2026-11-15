@@ -1,7 +1,7 @@
 // "About this star": the answer of GET /api/about (docs/blink/api.md) and the three sentences of the card.
 // Sentence 1 and 3 come from catalogs and Wikipedia (backend/about.py); sentence 2 comes from our own SPHEREx
 // measurements in the frames answer. Pure functions, so the card can be tested without a browser.
-import { brightnessChange, compass, KNOWN_ARCSEC, measuredMotion, scatteredLight, yearOf } from './data'
+import { brightnessChange, KNOWN_ARCSEC, measuredMotion, motionClause, scatteredLight, sourceSeen, yearOf } from './data'
 import type { Frame, Gaia, GaiaStar, Result } from './data'
 
 export type About = {
@@ -16,6 +16,7 @@ export type About = {
   papers: number | null
   sources: { label: string; url: string }[]
   notes: string[]
+  fast_movers?: { name: string; pm_arcsec_yr: number; sep_arcsec: number }[] // only for a position
 }
 
 type Measured = Pick<Result, 'pixel_arcsec' | 'pm' | 'detectors'> & {
@@ -25,9 +26,10 @@ type Measured = Pick<Result, 'pixel_arcsec' | 'pm' | 'detectors'> & {
 /** Sentence 2: motion per year and direction, or the brightness change, or "too bright", from our frames only. */
 export function measuredSentence(r: Measured) {
   const m = measuredMotion(r)
-  if (m?.significant)
-    return `In our SPHEREx frames it moves about ${(m.arcsec / (m.days / 365.25)).toFixed(1)}″ per year toward the ${compass(m.pa)}.`
+  if (m?.significant) return `${motionClause(m)}.`
   const change = brightnessChange(r.frames.flatMap((f) => (f.photometry ? [f.photometry] : [])))
+  if (change && !r.frames.some((f) => sourceSeen(f, f.photometry)))
+    return 'In our SPHEREx frames no source shows at this position, so its brightness numbers are sky noise.'
   if (change) {
     if (change.sigmas < 3) return `In our SPHEREx frames it does not move measurably, and its brightness stays within the noise.`
     if (scatteredLight(r)) return 'In our SPHEREx frames its brightness changes, but that may be scattered light (known issue #5).'
@@ -51,7 +53,7 @@ export function gaiaSentence(hit: { star: GaiaStar; sep: number; frame: number }
   if (!hit) return `No ${release} star is in this view.`
   if (hit.sep >= 3) return `No ${release} star is within 3″; the nearest is ${hit.sep.toFixed(1)}″ away.`
   const { gmag, parallax, parallax_over_error: snr } = hit.star
-  const g = gmag != null ? ` has G = ${gmag.toFixed(1)}` : ' is there'
+  const g = gmag != null ? ` has G = ${gmag.toFixed(1)} (Gaia brightness; larger is fainter)` : ' is there'
   const far = parallax && parallax > 0 && (snr ?? 0) >= 5 ? ` and lies about ${lightYears(3261.56 / parallax)} light-years away (parallax ${parallax.toFixed(2)} mas)` : ''
   return `The nearest ${release} star, ${hit.sep.toFixed(1)}″ away,${g}${far}.`
 }
@@ -78,6 +80,34 @@ export function aboutWhere(p: { ra: number; dec: number }, hit: { star: GaiaStar
   if (gaia && s && hit.sep < KNOWN_ARCSEC && s.pmra != null && s.pmdec != null && Math.hypot(s.pmra, s.pmdec) > 1000)
     return { ra: s.ra, dec: s.dec, pmra: s.pmra, pmdec: s.pmdec, epoch: +yearOf(gaia.epoch_mjd).toFixed(2) }
   return { ra: p.ra, dec: p.dec }
+}
+
+const hint = (name: string, pm: number, sep: number) =>
+  `A fast-moving star (${name}, ${pm.toFixed(1)}″/yr) is ${Math.round(sep)}″ from here. Typed coordinates from an old catalogue may miss it — search it by name.`
+
+/** How near a straight path (position at epoch, proper motion in mas/yr) passes a point between 1990 and 2030, and
+ * how far it is from the point in 2026.0: [closest, now] in arcsec (flat sky, like backend/about.py path_near). */
+export function pathNear(s: { ra: number; dec: number; pmra: number; pmdec: number }, epoch: number, p: { ra: number; dec: number }) {
+  const dx = ((((p.ra - s.ra + 180) % 360) + 360) % 360 - 180) * Math.cos((s.dec * Math.PI) / 180) * 3600
+  const dy = (p.dec - s.dec) * 3600
+  const [vx, vy] = [s.pmra / 1000, s.pmdec / 1000]
+  const t = Math.max(1990 - epoch, Math.min(2030 - epoch, (dx * vx + dy * vy) / (vx * vx + vy * vy)))
+  return [Math.hypot(dx - vx * t, dy - vy * t), Math.hypot(dx - vx * (2026 - epoch), dy - vy * (2026 - epoch))]
+}
+
+/** NM2: typed coordinates (no proper motion) of a fast mover may be old. A star faster than 1″/yr whose path passes
+ * within 60″ of the typed position: from SIMBAD (in the About answer), else from the Gaia stars of the frames answer. */
+export function fastHint(r: Pick<Result, 'pm' | 'center' | 'gaia'>, about: Pick<About, 'fast_movers'> | null) {
+  if (r.pm) return null
+  const f = about?.fast_movers?.[0]
+  if (f) return hint(f.name, f.pm_arcsec_yr, f.sep_arcsec)
+  const epoch = r.gaia ? yearOf(r.gaia.epoch_mjd) : 2016
+  const near = (r.gaia?.stars ?? [])
+    .filter((s) => s.pmra != null && s.pmdec != null && Math.hypot(s.pmra, s.pmdec) > 1000)
+    .map((s) => ({ s, path: pathNear(s as { ra: number; dec: number; pmra: number; pmdec: number }, epoch, r.center) }))
+    .filter((x) => x.path[0] <= 60)
+    .sort((a, b) => a.path[0] - b.path[0])[0]
+  return near ? hint(`Gaia DR3 ${near.s.source_id}`, Math.hypot(near.s.pmra!, near.s.pmdec!) / 1000, near.path[1]) : null
 }
 
 /** True when a candidate mark is on the target (within 1.5 px of its predicted or measured position, or the view

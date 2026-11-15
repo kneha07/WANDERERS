@@ -28,6 +28,13 @@ describe('Talk report', () => {
   })
 })
 
+describe('the report names the field once', () => {
+  it('leaves out a catalog name that only differs in case', () => {
+    const text = reportText({ ...r, query: "Barnard's Star", name: "Barnard's star" } as Result, [], 'u', true)
+    expect(text).toContain("Field: Barnard's Star at RA")
+  })
+})
+
 describe('the toast after a mark', () => {
   it('points to the Task tab on a wide screen and to the list below on a phone', () => {
     expect(markedText(1, 269.44642, 4.7676, false)).toBe('Candidate 1 marked at 17h 57m 47.14s +04° 46′ 03.4″. See the Task tab.')
