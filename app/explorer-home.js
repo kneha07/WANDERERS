@@ -95,6 +95,8 @@
     data = { list, targets };
     return data;
   }
+  api.load = load;                    // shared with explorer-learn.js, stories.js (one fetch per page)
+  if (!doc.getElementById("discover") && !doc.getElementById("research")) return;   // other pages use only the helpers and load()
   const lastFrame = (t) => { const fr = (t.frames && (t.frames.w2 || t.frames.w1)) || []; return fr[fr.length - 1]; };
 
   /* ---------------- stories (Kids, Students) ---------------- */
@@ -197,24 +199,41 @@
   }
 
   /* ---------------- research panel ---------------- */
+  /* research table: filter, sort and export (Research.tableRows/filterRows/sortRows/rowsCSV) */
+  const RS = { q: "", cls: "", key: "name", dir: 1 };
+  const COLS = [["name", "Target"], ["ra", "RA (deg, ICRS)"], ["dec", "Dec (deg)"], ["epochs", "Epochs · 4.6 µm"], ["measured", "Measured motion (″/yr)"],
+    ["catalogue", "Catalogue (″/yr)"], ["dmag", "Δm (mag, ±1σ)"], ["cls", "Classification · confidence"], [null, "Data"]];
   function renderResearch() {
-    const host = $("researchRows");
-    if (!host || !data) return;
-    host.innerHTML = data.list.map((e) => {
-      const t = data.targets[e.id];
-      if (!t) return "";
-      const fr = (t.frames && t.frames.w2) || [], ev = t.evidence || {}, f = facts(t);
-      const years = fr.length ? `${fr[0].year.toFixed(2)}–${fr[fr.length - 1].year.toFixed(2)}` : "—";
-      return `<tr>
-        <th scope="row">${esc(t.name)}</th>
-        <td class="mono">${e.ra.toFixed(5)}</td><td class="mono">${e.dec >= 0 ? "+" : ""}${e.dec.toFixed(5)}</td>
-        <td class="mono">${fr.length} <span class="dim">(${years})</span></td>
-        <td class="mono">${esc(f.measured || "—")}</td><td class="mono">${esc(f.catalogue || "—")}</td>
-        <td>${esc(ev.classification || "—")} <span class="dim">· ${esc(ev.confidence || "")}</span></td>
-        <td><a href="data/${encodeURIComponent(e.id)}/target.json" download>target.json</a> · <a href="observatory.html?target=${encodeURIComponent(e.id)}">open</a></td>
-      </tr>`;
-    }).join("");
+    const host = $("researchRows"), R = root.Research;
+    if (!host || !data || !R) return;
+    const all = R.tableRows(data.list, data.targets);
+    const sel = $("rpClass");
+    if (sel && sel.options.length <= 1) [...new Set(all.map((r) => r.cls).filter(Boolean))].sort().forEach((c) => sel.add(new Option(c, c)));
+    const rows = R.sortRows(R.filterRows(all, RS), RS.key, RS.dir);
+    const f = (v, n) => (v == null ? "—" : v.toFixed(n));
+    const head = host.closest("table").querySelector("thead tr");
+    head.innerHTML = COLS.map(([k, label]) => k
+      ? `<th scope="col" aria-sort="${RS.key === k ? (RS.dir > 0 ? "ascending" : "descending") : "none"}"><button type="button" class="rp-sort" data-k="${k}">${label}<span aria-hidden="true">${RS.key === k ? (RS.dir > 0 ? " ▲" : " ▼") : ""}</span></button></th>`
+      : `<th scope="col">${label}</th>`).join("");
+    head.querySelectorAll(".rp-sort").forEach((b) => (b.onclick = () => { const k = b.dataset.k; RS.dir = RS.key === k ? -RS.dir : 1; RS.key = k; renderResearch(); head.querySelector(`[data-k="${k}"]`)?.focus(); }));
+    host.innerHTML = rows.length ? rows.map((r) => `<tr>
+        <th scope="row">${esc(r.name)}</th>
+        <td class="mono">${f(r.ra, 5)}</td><td class="mono">${r.dec >= 0 ? "+" : ""}${f(r.dec, 5)}</td>
+        <td class="mono">${r.epochs} <span class="dim">(${f(r.first, 2)}–${f(r.last, 2)})</span></td>
+        <td class="mono">${f(r.measured, 3)}</td><td class="mono">${f(r.catalogue, 3)}</td>
+        <td class="mono">${r.dmag == null ? "—" : `${r.dmag >= 0 ? "+" : ""}${r.dmag.toFixed(2)} ± ${r.dmagErr.toFixed(2)}`}</td>
+        <td>${esc(r.cls || "—")} <span class="dim">· ${esc(r.confidence)}</span></td>
+        <td><a href="data/${encodeURIComponent(r.id)}/target.json" download>target.json</a> · <a href="observatory.html?target=${encodeURIComponent(r.id)}&amp;mode=research">open</a></td>
+      </tr>`).join("") : '<tr><td colspan="9">No targets match.</td></tr>';
+    const n = $("rpCount"); if (n) n.textContent = `${rows.length} of ${all.length} targets`;
+    const dl = $("rpCsv"); if (dl) dl.onclick = () => root.ShareKit.download("wanderers-targets.csv", R.rowsCSV(rows), "text/csv");
   }
+  function wireResearch() {
+    const q = $("rpSearch"), c = $("rpClass");
+    if (q) q.oninput = () => { RS.q = q.value; renderResearch(); };
+    if (c) c.onchange = () => { RS.cls = c.value; renderResearch(); };
+  }
+  wireResearch();
 
   /* ---------------- explanations by mode ---------------- */
   function renderExplain(mode) {

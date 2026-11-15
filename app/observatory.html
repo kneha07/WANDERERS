@@ -8,13 +8,18 @@
 <meta name="theme-color" content="#F6F8FB">
 <script>(function () { var t; try { t = localStorage.getItem("wanderers-theme"); } catch (e) {}
   if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  document.documentElement.dataset.theme = t; })();</script>
+  document.documentElement.dataset.theme = t; })();
+(function () { var m = (location.search.match(/[?&]mode=(kids|teens|adults|research)\b/) || [])[1];
+  if (!m) { try { m = localStorage.getItem("wanderers-mode"); } catch (e) {} }
+  if (!/^(kids|teens|adults|research)$/.test(m || "")) m = "adults";
+  document.documentElement.dataset.mode = m; })();</script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="brand.css">
 <link rel="stylesheet" href="release.css?v=20261115b">
 <link rel="stylesheet" href="style.css?v=20261117d">
 <link rel="stylesheet" href="classify.css?v=20261117a">
+<link rel="stylesheet" href="explorer.css?v=20261117c">
 </head>
 <body class="obs">
 <a class="skip" href="#console">Skip to the observatory</a>
@@ -357,5 +362,12 @@
 <script src="physicspath.js?v=20261115i"></script>
 <script src="longrange.js?v=20261115i"></script>
 <script src="stars.js?v=20261116a"></script>
+<script src="share.js?v=20261117a"></script>
+<script src="research.js?v=20261117b"></script>
+<script src="story-render.js?v=20261117a"></script>
+<script src="explorer.js?v=20261117a"></script>
+<script src="discoveries.js?v=20261117a"></script>
+<script src="explorer-home.js?v=20261117b"></script>
+<script src="explorer-observatory.js?v=20261117b"></script>
 </body>
 </html>
