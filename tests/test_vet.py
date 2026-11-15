@@ -56,6 +56,19 @@ class VetTests(unittest.TestCase):
         # a Gaia star that is under the end in one epoch only has moved, so it does not explain the dot away
         self.assertEqual(one(field([mover()], ghosts={'old.png': [], 'new.png': g}))['status'], 'candidate')
 
+    def test_other_2010_and_neowise_frames_do_not_count_as_the_new_epoch(self):
+        # A Gaia star under the 2010 end only in 2010 has moved away: the W1 2010 frame and the NEOWISE
+        # frames (2014-2024) must not make it look like the same star sits there "in both epochs".
+        frames = {'w2': [{'png': 'old.png', 'mission': 'WISE'}, {'png': 'neo.png', 'mission': 'NEOWISE'},
+                         {'png': 'new.png', 'mission': 'SPHEREx'}],
+                  'w1': [{'png': 'w1old.png', 'mission': 'WISE'}]}
+        at_start = [[40.5, 39.5, 15.0]]
+        ghosts = {'old.png': at_start, 'w1old.png': at_start, 'neo.png': [[41.5, 40.0, 15.0]], 'new.png': [[60.0, 60.0, 15.0]]}
+        self.assertEqual(one(field([mover()], frames=frames, ghosts=ghosts))['status'], 'candidate')
+        # a NEOWISE position of the mission target is not where SPHEREx saw it
+        track = field([])['track'] + [{'year': 2018.0, 'mission': 'NEOWISE', 'ch': 'w2', 'x': 80.0, 'y': 80.0}]
+        self.assertEqual(one(field([mover()], frames=frames, track=track))['status'], 'candidate')
+
     def test_simbad_static_object_rejects_and_matching_mover_is_known(self):
         static = {0: {'start': [], 'end': [{'name': 'LP 1-1', 'otype': 'PM*', 'pm': 0.19, 'sep': 4.7}]}}
         c = one(field([mover()]), static)
