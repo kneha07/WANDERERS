@@ -6,7 +6,7 @@ Handoff: `docs/HANDOFF.md` (tasks 1-4).
 |---|---|
 | 1. Land `feature/insights` | PR #25 opened, then merged by the team |
 | 2. Real sky behind Sky Compass | PR #40: ported onto the AR compass from #33. 29/29 browser checks, 188 unit tests. Open items: #42 |
-| 3. Mover search finds its own targets | Fix done (`fix/mover-pairing`, `47acba3`), not pushed: data decision in #41 |
+| 3. Mover search finds its own targets | PR #43 (owner chose code + new data): rebuilt on main, verdicts unchanged; `explain.json` texts quote old numbers (`artifacts/movers/explain-stale.md` on that branch) |
 | 4. Next product item | Not started: needs the owner's choice (asteroid check, one product #6/#9, live-API host #24, timeline, production basics) |
 
 ## Decisions
@@ -26,3 +26,8 @@ Handoff: `docs/HANDOFF.md` (tasks 1-4).
 ## Snapshot before risky changes
 Tag `snapshot-2026-11-15-before-real-sky` (pushed) = `origin/main` at `2ce8067`, before PR #40 and the mover-search data (#41).
 Go back with `git checkout snapshot-2026-11-15-before-real-sky`, or open a branch from it.
+
+## Follow-ups raised
+- #42 real-phone tests, Standard/Sharp saves, per-place Remove (real sky)
+- #44 console `<circle>` NaN on the WISE 0855 page (on main before these PRs)
+- Regenerate the five `explain.json` files with `pipeline/explain.py` (needs the Claude CLI): listed in #43
