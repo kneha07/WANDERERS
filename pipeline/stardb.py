@@ -118,6 +118,7 @@ def entry(r):
         "dec": num(r["dec"], 6), "mag": num(r["mag"], 2),
         "dist_pc": dist if dist and dist < 100000 else None,           # 100000 = unknown in HYG
         "pmra": num(r["pmra"], 2), "pmdec": num(r["pmdec"], 2), "rv": num(r["rv"], 1),
+        "ci": num(r["ci"], 3),                                        # B-V colour: temperature for the starquake model
         "spect": r["spect"] or None, "con": CON.get(r["con"], (r["con"], ""))[0] if r["con"] else None,
         "hip": int(r["hip"]) if r["hip"] else None,
     }
