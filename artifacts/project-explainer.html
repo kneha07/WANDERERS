@@ -113,6 +113,8 @@ td .mono{color:var(--ink2)}
 footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding-top:16px}
 
 @media (max-width:720px){ .hero{grid-template-columns:1fr} .ladder div{grid-template-columns:1fr;gap:2px} }
+.grown{font:400 12.5px/1.5 var(--mono);color:var(--ink2);border-left:2px solid var(--line);padding-left:10px;max-width:65ch}
+.big{font-size:18px;line-height:1.55}
 </style>
 
 <div class="wrap">
@@ -120,236 +122,239 @@ footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding
 <!-- HERO -->
 <section class="hero" aria-labelledby="t">
   <div class="txt">
-    <span class="eyebrow">NASA Space Apps 2026 · Planet X and SPHEREx · Team Hello Universe</span>
+    <span class="eyebrow">A NASA Space Apps 2026 project · explained simply</span>
     <h1 id="t">WANDERERS</h1>
-    <p><strong>WANDERERS finds objects that move or change in the infrared sky.</strong> It then uses the 102 colours of NASA SPHEREx to show what each object is likely to be.</p>
-    <p class="lede">It flips through real images from 2010 to 2026, the way Pluto was found by flipping two photos. Every claim shows its evidence on screen.</p>
-    <span class="rule">Rule: candidate, never discovery</span>
+    <p class="big"><strong>WANDERERS plays spot-the-difference with the sky.</strong></p>
+    <p>Most stars look like they stay still. A few things slowly move. We look at pictures of the sky from many years and find the dot that moved.</p>
+    <p class="lede">Then we look at the dot's colours, to guess what it is. It is like telling a lemon from an orange by its colour.</p>
+    <span class="rule">Our big rule: we say "maybe", never "we found it!"</span>
     <div class="links">
-      <a href="https://rajryadav4.github.io/wanderers/">Live site</a>
-      <a href="https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855">Explorer: WISE 0855</a>
-      <a href="https://rajryadav4.github.io/wanderers/survey.html">Sky Survey</a>
-      <a href="https://github.com/kneha07/WANDERERS">Repo</a>
+      <a href="https://rajryadav4.github.io/wanderers/">Open the real website</a>
+      <a href="https://rajryadav4.github.io/wanderers/survey.html">See the list of moving dots</a>
     </div>
   </div>
-  <figure class="skybox" style="margin:0" aria-label="Animation: a star field. Circles mark where Gaia expects each known star. One dot moves across the field from 2010 to 2026 and leaves hollow rings at past epochs.">
+  <figure class="skybox" style="margin:0" aria-label="Animation: many stars. Blue circles show where each known star should be. One orange dot moves across the sky from 2010 to 2026. It has no circle, so it is a mystery dot.">
     <canvas id="sky" width="440" height="440"></canvas>
-    <figcaption class="cap"><span>○ Gaia "ghost" = expected star</span><span class="yr" id="yr">2026</span></figcaption>
+    <figcaption class="cap"><span>○ circle = "this star should be here"</span><span class="yr" id="yr">2026</span></figcaption>
   </figure>
+</section>
+
+<!-- WHAT IS THE IDEA -->
+<section class="sec" aria-labelledby="idea">
+  <header><span class="eyebrow">The idea in 3 steps</span><h2 id="idea">How do you find a thing that moves?</h2></header>
+  <ul class="goals">
+    <li><h3>1. Take pictures, many years apart</h3><p>Space telescopes took pictures of the same bit of sky in 2010, every 6 months until 2024, then in 2025 and 2026.</p></li>
+    <li><h3>2. Flip between them, like a flipbook</h3><p>Stars far away stay in the same place. A thing that is close to us seems to walk across the picture.</p></li>
+    <li><h3>3. Check the list of known stars</h3><p>Scientists already have a big list of stars. If the moving dot is not on the list, it is a mystery. We call it a "candidate".</p></li>
+  </ul>
+  <p class="grown">Grown-up words: "moving" = proper motion. The big star list = ESA Gaia DR3. The circles in the picture are "Gaia ghosts". A man found Pluto in 1930 with this same flip trick.</p>
 </section>
 
 <!-- OBJECTIVES -->
 <section class="sec" aria-labelledby="obj">
-  <header><span class="eyebrow">Why it exists</span><h2 id="obj">Objectives</h2></header>
+  <header><span class="eyebrow">Why we made it</span><h2 id="obj">What we want to do</h2></header>
   <ul class="goals">
-    <li><h3>Meet all six challenge requirements</h3><p>Data sync, detector switch, quality flags, citizen votes, candidate ranking and a billion-object search. Each one is live and tested.</p></li>
-    <li><h3>See motion, then read composition</h3><p>A flipbook shows <em>that</em> it moved. The 0.75–5.0 µm spectrum shows <em>what</em> it is: water, methane, CO and CO₂ bands.</p></li>
-    <li><h3>Show the evidence, not a score</h3><p>Stated rules turn measurements into a class and a confidence, for example "3 of 3 checks support it". No black box.</p></li>
-    <li><h3>Never over-claim</h3><p>Anything that Gaia or a catalogue does not explain is a <em>candidate</em>. Each card has a "What this view cannot show" box.</p></li>
-    <li><h3>Use only real, public data</h3><p>SPHEREx, WISE, NEOWISE, Gaia DR3, JWST, Kepler. Nothing is simulated. AI writes text only, never measurements.</p></li>
-    <li><h3>Open with no install</h3><p>The site is static and the data is committed. A clone or the live link just works, also on a phone.</p></li>
+    <li><h3>Do all six homework tasks</h3><p>NASA gave every team six tasks. WANDERERS does all six. You can try each one on the website.</p></li>
+    <li><h3>Find what moves</h3><p>Spot the dots that walk across the sky over 16 years.</p></li>
+    <li><h3>Tell what it is made of</h3><p>A special telescope sees 102 colours. Our eyes cannot see them. Water and other stuff leave their own pattern in those colours.</p></li>
+    <li><h3>Always show why</h3><p>When the app makes a guess, it shows the clues. "3 of 3 clues agree" means a good guess.</p></li>
+    <li><h3>Never fib</h3><p>If we are not sure, we say "maybe". We also say what the pictures cannot show.</p></li>
+    <li><h3>Use only real pictures</h3><p>Every picture comes from NASA or other real telescopes. Nothing is made up.</p></li>
   </ul>
 </section>
 
 <!-- AUDIENCE -->
 <section class="sec" aria-labelledby="aud">
-  <header><span class="eyebrow">Who it is for</span><h2 id="aud">Target audience</h2>
-  <p class="lede">Four groups. Each group enters at a different page.</p></header>
+  <header><span class="eyebrow">Who it is for</span><h2 id="aud">Who uses it</h2></header>
   <div class="aud">
-    <div><h3>Challenge judges</h3><p class="need">Need proof that each requirement works.</p><span class="gets">→ README table, live links</span></div>
-    <div><h3>Citizen scientists</h3><p class="need">Backyard Worlds volunteers who blink images to find brown dwarfs.</p><span class="gets">→ Explorer, Classify card, Survey</span></div>
-    <div><h3>Astronomers</h3><p class="need">Need a ranked, filterable candidate list with archive links at the right epoch.</p><span class="gets">→ Survey CSV/JSON, promote.py</span></div>
-    <div><h3>Students and public</h3><p class="need">Want to point a phone at the sky, hear a star, or see what Webb saw.</p><span class="gets">→ Sky Compass, Starquakes, Star database</span></div>
+    <div><h3>The judges</h3><p class="need">Grown-ups who pick the winners. They want to see that every task works.</p><span class="gets">→ a list of tasks with links</span></div>
+    <div><h3>Sky helpers at home</h3><p class="need">People who help scientists from home. They look at pictures and spot moving dots.</p><span class="gets">→ the flipbook and a vote button</span></div>
+    <div><h3>Sky scientists</h3><p class="need">They want a tidy list of the best mystery dots to study next.</p><span class="gets">→ a sorted list they can download</span></div>
+    <div><h3>Kids and families</h3><p class="need">They want to point a phone at the sky, or hear how a star "sings".</p><span class="gets">→ Sky Compass and Starquakes</span></div>
   </div>
 </section>
 
 <!-- USE CASES -->
 <section class="sec" aria-labelledby="uc">
-  <header><span class="eyebrow">What people do with it</span><h2 id="uc">Use cases</h2>
-  <p class="lede">Pick a use case to see the steps.</p></header>
+  <header><span class="eyebrow">Fun things to try</span><h2 id="uc">What you can do with it</h2>
+  <p class="lede">Tap a button to see the steps.</p></header>
   <div class="tabs" role="tablist" id="tabs"></div>
   <div class="case" id="case" role="tabpanel" aria-live="polite"></div>
 </section>
 
 <!-- ARCHITECTURE -->
 <section class="sec" aria-labelledby="arch">
-  <header><span class="eyebrow">How it fits together</span><h2 id="arch">Architecture</h2>
-  <p class="lede">The Python pipeline writes data. The static site reads it. Two optional servers add live features. Dashed lines need <code>node server.js</code>.</p></header>
+  <header><span class="eyebrow">Behind the screen</span><h2 id="arch">How it works</h2>
+  <p class="lede">Think of a kitchen. A helper robot gets the food, cooks it, and puts it in a lunch box. The website opens the lunch box and shows you the food.</p></header>
   <div class="diag">
-    <svg viewBox="0 0 760 330" role="img" aria-label="Architecture diagram">
+    <svg viewBox="0 0 760 330" role="img" aria-label="Diagram: space picture libraries send pictures to the helper robot. The robot measures them and puts them in the lunch box. The website reads the lunch box. Two extra helpers work only on your own computer.">
       <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink2)"/></marker></defs>
-      <!-- archives -->
       <rect class="box" x="10" y="20" width="170" height="92" rx="6"/>
-      <text x="22" y="44" font-weight="600" font-size="13">Public archives</text>
-      <text class="sub" x="22" y="62">NASA IRSA (SPHEREx, WISE,</text>
-      <text class="sub" x="22" y="76">NEOWISE on AWS) · MAST</text>
-      <text class="sub" x="22" y="90">ESA Gaia DR3 · SIMBAD · CDS</text>
-      <!-- pipeline -->
+      <text x="22" y="44" font-weight="600" font-size="13">Space picture libraries</text>
+      <text class="sub" x="22" y="62">NASA and Europe keep</text>
+      <text class="sub" x="22" y="76">every telescope picture</text>
+      <text class="sub" x="22" y="96" font-family="var(--mono)">IRSA · MAST · Gaia</text>
       <rect class="key" x="260" y="20" width="220" height="92" rx="6"/>
-      <text x="272" y="44" font-weight="600" font-size="13">pipeline/ (Python)</text>
-      <text class="sub" x="272" y="62">fetch → analyze → gaia_facts</text>
-      <text class="sub" x="272" y="76">→ evidence → vet → explain</text>
-      <text class="sub" x="272" y="90">survey/: tiles, link, rank, run</text>
-      <!-- data -->
+      <text x="272" y="44" font-weight="600" font-size="13">The helper robot</text>
+      <text class="sub" x="272" y="62">gets pictures, measures dots,</text>
+      <text class="sub" x="272" y="76">writes the clues</text>
+      <text class="sub" x="272" y="96" font-family="var(--mono)">pipeline/ (Python)</text>
       <rect class="key" x="560" y="20" width="190" height="92" rx="6"/>
-      <text x="572" y="44" font-weight="600" font-size="13">app/data/</text>
-      <text class="sub" x="572" y="62">target.json, frames (PNG),</text>
-      <text class="sub" x="572" y="76">evidence, survey tiles</text>
-      <text class="sub" x="572" y="90">committed to git</text>
-      <!-- site -->
+      <text x="572" y="44" font-weight="600" font-size="13">The lunch box</text>
+      <text class="sub" x="572" y="62">pictures and answers,</text>
+      <text class="sub" x="572" y="76">ready to eat</text>
+      <text class="sub" x="572" y="96" font-family="var(--mono)">app/data/</text>
       <rect class="key" x="560" y="200" width="190" height="104" rx="6"/>
-      <text x="572" y="224" font-weight="600" font-size="13">app/ static site</text>
-      <text class="sub" x="572" y="242">home · observatory · survey</text>
-      <text class="sub" x="572" y="256">compass (phone) · Starquakes</text>
-      <text class="sub" x="572" y="270">plain JS + canvas, Aladin Lite</text>
-      <text class="sub" x="572" y="284">GitHub Pages</text>
-      <!-- server -->
+      <text x="572" y="224" font-weight="600" font-size="13">The website</text>
+      <text class="sub" x="572" y="242">what you see and tap,</text>
+      <text class="sub" x="572" y="256">on a computer or phone</text>
+      <text class="sub" x="572" y="282" font-family="var(--mono)">app/ (JavaScript)</text>
       <rect class="box" x="260" y="200" width="220" height="104" rx="6"/>
-      <text x="272" y="224" font-weight="600" font-size="13">server.js :8000 (Node)</text>
-      <text class="sub" x="272" y="242">any coordinates (fields.js)</text>
-      <text class="sub" x="272" y="256">Ask WANDERERS (claude -p)</text>
-      <text class="sub" x="272" y="270">learn a star · /explore/</text>
-      <!-- backend -->
+      <text x="272" y="224" font-weight="600" font-size="13">Extra helper 1</text>
+      <text class="sub" x="272" y="242">cooks any bit of sky you ask for,</text>
+      <text class="sub" x="272" y="256">answers your questions</text>
+      <text class="sub" x="272" y="282" font-family="var(--mono)">server.js (Node)</text>
       <rect class="box" x="10" y="200" width="170" height="104" rx="6"/>
-      <text x="22" y="224" font-weight="600" font-size="13">backend/ :8001</text>
-      <text class="sub" x="22" y="242">FastAPI live API</text>
-      <text class="sub" x="22" y="256">web/: React + Vite</text>
-      <text class="sub" x="22" y="270">blink any patch live</text>
-      <!-- GitHub Actions -->
-      <text class="lbl" x="262" y="150">GitHub Actions: weekly SPHEREx sync, vote count</text>
-      <!-- arrows -->
-      <path class="ar" d="M180 66H256" marker-end="url(#m)"/><text class="lbl" x="190" y="60">pixels, rows</text>
-      <path class="ar" d="M480 66H556" marker-end="url(#m)"/><text class="lbl" x="492" y="60">writes</text>
-      <path class="ar" d="M655 112V196" marker-end="url(#m)"/><text class="lbl" x="662" y="160">reads</text>
-      <path class="ar dash" d="M556 252H484" marker-end="url(#m)"/><text class="lbl" x="492" y="246">API calls</text>
-      <path class="ar dash" d="M370 200V116" marker-end="url(#m)"/><text class="lbl" x="376" y="190">runs</text>
-      <path class="ar dash" d="M260 252H184" marker-end="url(#m)"/><text class="lbl" x="192" y="246">proxy</text>
-      <path class="ar dash" d="M95 200V116" marker-end="url(#m)"/><text class="lbl" x="102" y="160">live frames</text>
+      <text x="22" y="224" font-weight="600" font-size="13">Extra helper 2</text>
+      <text class="sub" x="22" y="242">shows new pictures</text>
+      <text class="sub" x="22" y="256">straight away</text>
+      <text class="sub" x="22" y="282" font-family="var(--mono)">backend/ + web/</text>
+      <text class="lbl" x="262" y="150">Every Monday a robot checks for new pictures</text>
+      <path class="ar" d="M180 66H256" marker-end="url(#m)"/><text class="lbl" x="190" y="60">pictures</text>
+      <path class="ar" d="M480 66H556" marker-end="url(#m)"/><text class="lbl" x="492" y="60">packs</text>
+      <path class="ar" d="M655 112V196" marker-end="url(#m)"/><text class="lbl" x="662" y="160">opens</text>
+      <path class="ar dash" d="M556 252H484" marker-end="url(#m)"/><text class="lbl" x="492" y="246">asks</text>
+      <path class="ar dash" d="M370 200V116" marker-end="url(#m)"/><text class="lbl" x="376" y="190">starts</text>
+      <path class="ar dash" d="M260 252H184" marker-end="url(#m)"/><text class="lbl" x="192" y="246">passes on</text>
+      <path class="ar dash" d="M95 200V116" marker-end="url(#m)"/><text class="lbl" x="102" y="160">new pictures</text>
     </svg>
   </div>
+  <p class="grown">Dashed lines: the extra helpers work only when you run <code>node start.js</code> on your own computer. The public website uses only the lunch box.</p>
 </section>
 
 <!-- EVIDENCE -->
 <section class="sec" aria-labelledby="ev">
-  <header><span class="eyebrow">The core logic</span><h2 id="ev">How the evidence card decides</h2>
-  <p class="lede"><code>pipeline/evidence.py</code> asks these questions in order. The first "yes" wins. Confidence is the number of checks that agree: 3 or more is high, 2 is medium, 0 or 1 is low.</p></header>
+  <header><span class="eyebrow">A guessing game</span><h2 id="ev">How it guesses what a dot is</h2>
+  <p class="lede">The app asks questions in this order, like the game "20 Questions". The first "yes" gives the answer.</p></header>
   <div class="ladder">
-    <div><span class="q">Cold and red, and it moved?</span><span class="a">Cold brown dwarf</span></div>
-    <div><span class="q">Brightness varies between surveys?</span><span class="a">Variable star</span></div>
-    <div><span class="q">Moved, and Gaia knows it?</span><span class="a">Nearby star, fast proper motion</span></div>
-    <div><span class="q">Moved, and matches a published motion?</span><span class="a">Nearby object, published motion</span></div>
-    <div><span class="q">Moved, with no match?</span><span class="a cand">Unexplained mover → candidate</span></div>
-    <div><span class="q">Listed as variable, but quiet here?</span><span class="a">Known variable, quiet in these snapshots</span></div>
-    <div><span class="q">None of the above</span><span class="a">Steady star</span></div>
+    <div><span class="q">Is it cold, a bit red, and moving?</span><span class="a">A "failed star" (brown dwarf)</span></div>
+    <div><span class="q">Does it get brighter and dimmer?</span><span class="a">A blinking star</span></div>
+    <div><span class="q">Is it moving, and on the big star list?</span><span class="a">A close star we already know</span></div>
+    <div><span class="q">Is it moving, and in a science book?</span><span class="a">A close thing someone already found</span></div>
+    <div><span class="q">Is it moving, and on no list at all?</span><span class="a cand">A mystery! We say "maybe"</span></div>
+    <div><span class="q">Does the list say it blinks, but it was calm?</span><span class="a">A blinking star, resting today</span></div>
+    <div><span class="q">None of these?</span><span class="a">A normal star that stays still</span></div>
   </div>
+  <p class="grown">Then it counts the clues that agree. 3 or more clues: a strong guess. 2 clues: a medium guess. 0 or 1 clue: a weak guess. Code: <code>pipeline/evidence.py</code>.</p>
 </section>
 
 <!-- REQUIREMENTS -->
 <section class="sec" aria-labelledby="req">
-  <header><span class="eyebrow">Challenge scorecard</span><h2 id="req">The six requirements</h2></header>
+  <header><span class="eyebrow">NASA's homework</span><h2 id="req">The six tasks</h2></header>
   <div class="tbl"><table>
-    <thead><tr><th>#</th><th>Requirement</th><th>What WANDERERS does</th><th>Code</th></tr></thead>
+    <thead><tr><th>#</th><th>The task</th><th>What WANDERERS does</th></tr></thead>
     <tbody>
-      <tr><td class="n">1</td><td>SPHEREx data updates</td><td>Asks IRSA which releases exist. Every page shows the release and last sync. A weekly Action opens a pull request with fresh data.</td><td><span class="mono">spherex_releases.py, spherex-sync.yml</span></td></tr>
-      <tr><td class="n">2</td><td>Combine six detectors</td><td>Each detector co-add is divided by its own noise, then summed. A switch picks D1–D6 or "Combined (all 6)".</td><td><span class="mono">analyze.py, app.js</span></td></tr>
-      <tr><td class="n">3</td><td>Quality metadata</td><td>Every frame shows mission, wavelength, dates, flags, saturation and a good / caution / poor verdict with the reason.</td><td><span class="mono">frameinfo.js</span></td></tr>
-      <tr><td class="n">4</td><td>Citizen classification</td><td>Vote Moving / Variable / Stationary / Artifact / Unsure. Votes go through GitHub issues. Consensus needs 3 voters and 60%.</td><td><span class="mono">classify.js, aggregate_votes.py</span></td></tr>
-      <tr><td class="n">5</td><td>Candidate ranking</td><td>Each mover is checked against Gaia DR3 and ranked by a transparent score. Filters, presets, CSV/JSON export.</td><td><span class="mono">pipeline/survey/</span></td></tr>
-      <tr><td class="n">6</td><td>Billion-object search</td><td>12,288 HEALPix tiles. NEOWISE detections 2014–2024 are linked into ten-year tracks, fitted, vetted and ranked.</td><td><span class="mono">tiles.py, link.py, rank.py</span></td></tr>
+      <tr><td class="n">1</td><td>Keep pictures fresh</td><td>A robot checks every Monday for new telescope pictures. The page shows the date of the newest ones.</td></tr>
+      <tr><td class="n">2</td><td>Mix six cameras</td><td>The telescope has six cameras. You can look at one at a time, or mix all six to see faint things better.</td></tr>
+      <tr><td class="n">3</td><td>Say if a picture is good</td><td>Each picture gets a label: good, careful, or poor. It also says why, for example "too bright here".</td></tr>
+      <tr><td class="n">4</td><td>Let people vote</td><td>You can vote: moving, blinking, still, a mistake, or not sure. When 3 or more people mostly agree, the page shows it.</td></tr>
+      <tr><td class="n">5</td><td>Make a "best of" list</td><td>All the mystery dots go in one list. The best ones are at the top. You can sort it and download it.</td></tr>
+      <tr><td class="n">6</td><td>Search the whole sky</td><td>The sky is cut into 12,288 puzzle pieces. A robot checks every piece, one by one, all by itself.</td></tr>
     </tbody>
   </table></div>
 </section>
 
 <!-- TECH STACK -->
 <section class="sec" aria-labelledby="ts">
-  <header><span class="eyebrow">What it is built with</span><h2 id="ts">Tech stack</h2></header>
+  <header><span class="eyebrow">The toolbox</span><h2 id="ts">What it is built with</h2>
+  <p class="lede">Every tool has one job. The grey name is what grown-ups call it.</p></header>
   <div class="tbl"><table>
-    <thead><tr><th>Layer</th><th>Technology</th><th>Job</th></tr></thead>
+    <thead><tr><th>Tool</th><th>It is like…</th><th>Grown-up name</th></tr></thead>
     <tbody>
-      <tr><td>Data pipeline</td><td>Python · Astropy · astroquery · PyVO · reproject · astropy-healpix · NumPy · SciPy · PyArrow</td><td>Download cutouts, measure motion, spectrum and brightness, build evidence</td></tr>
-      <tr><td>Machine learning</td><td>scikit-learn <code>HuberRegressor</code>, BIC model choice, bootstrap</td><td>Learn each star's path 1900–2100 from up to 13 catalogues</td></tr>
-      <tr><td>Main site</td><td>Plain JavaScript · HTML canvas · Aladin Lite 3.8.2 · three.js · service worker</td><td>Flipbook, spectrum, sky map, 3D star paths, offline phone use</td></tr>
-      <tr><td>Phone extra</td><td>DeviceOrientation sensor fusion · Web Audio · NASA GIBS</td><td>Sky Compass AR view, Starquakes sound</td></tr>
-      <tr><td>Local server</td><td>Node.js (<code>server.js</code>, <code>fields.js</code>, <code>start.js</code>)</td><td>Any-coordinate jobs, live questions, one-click start</td></tr>
-      <tr><td>Live explorer</td><td>FastAPI (port 8001) · React · TypeScript · Vite</td><td>Blink any patch of sky live from IRSA</td></tr>
-      <tr><td>AI</td><td>Claude (Claude Code CLI, headless)</td><td>Plain-language explanations from measured numbers only</td></tr>
-      <tr><td>Automation</td><td>GitHub Actions · GitHub issue forms · GitHub Pages</td><td>Tests on every pull request, weekly data sync, vote count, hosting</td></tr>
-      <tr><td>Tests</td><td><code>node --test</code> · Python <code>unittest</code> · pytest · headless Edge/Chrome</td><td>Checks against real committed targets and astropy</td></tr>
+      <tr><td>Measuring robot</td><td>A ruler and a magnifying glass for space pictures</td><td><span class="mono">Python, Astropy, NumPy</span></td></tr>
+      <tr><td>Path guesser</td><td>Draws a line through old dots to guess where a star goes next</td><td><span class="mono">scikit-learn (machine learning)</span></td></tr>
+      <tr><td>The website</td><td>A picture book that you can tap and flip</td><td><span class="mono">JavaScript, HTML canvas</span></td></tr>
+      <tr><td>Sky map</td><td>A zoomable map of the whole night sky</td><td><span class="mono">Aladin Lite</span></td></tr>
+      <tr><td>Phone compass</td><td>Uses the phone's turn sensors to know where you point</td><td><span class="mono">DeviceOrientation, Web Audio</span></td></tr>
+      <tr><td>Helper servers</td><td>Kitchen helpers that cook new requests on your computer</td><td><span class="mono">Node.js, FastAPI, React</span></td></tr>
+      <tr><td>Story writer</td><td>Turns numbers into short, simple sentences</td><td><span class="mono">Claude (AI), text only</span></td></tr>
+      <tr><td>Chore robots</td><td>Check for new pictures and count the votes, all alone</td><td><span class="mono">GitHub Actions</span></td></tr>
+      <tr><td>Checkers</td><td>Small tests that shout if something breaks</td><td><span class="mono">node --test, unittest, pytest</span></td></tr>
     </tbody>
   </table></div>
+  <p class="grown">The AI only writes words. Every number comes from real measurements.</p>
 </section>
 
 <!-- DATA -->
 <section class="sec" aria-labelledby="dt">
-  <header><span class="eyebrow">Sixteen years of sky</span><h2 id="dt">Data and scale</h2></header>
+  <header><span class="eyebrow">The picture album</span><h2 id="dt">Big numbers</h2></header>
   <div class="nums">
-    <div><b>2010–2026</b><span>years covered by images</span></div>
-    <div><b>102</b><span>SPHEREx colours, 0.75–5.0 µm</span></div>
-    <div><b>12,288</b><span>HEALPix tiles in the survey</span></div>
-    <div><b>10 billion+</b><span>NEOWISE detections processed</span></div>
-    <div><b>12,244</b><span>stars with a profile</span></div>
-    <div><b>22,049</b><span>JWST frames matched</span></div>
+    <div><b>16</b><span>years of sky pictures (2010–2026)</span></div>
+    <div><b>102</b><span>colours the telescope can see</span></div>
+    <div><b>12,288</b><span>puzzle pieces of sky</span></div>
+    <div><b>10 billion+</b><span>dots checked (more than people on Earth)</span></div>
+    <div><b>12,244</b><span>stars with their own fact page</span></div>
+    <div><b>5</b><span>practice stars ready to play with</span></div>
   </div>
   <div class="tbl"><table>
-    <thead><tr><th>Epoch</th><th>Source</th><th>Use</th></tr></thead>
+    <thead><tr><th>When</th><th>Which telescope</th><th>What it gives us</th></tr></thead>
     <tbody>
-      <tr><td class="n">2010</td><td>WISE / AllWISE (NASA IRSA)</td><td>First image, 3.4 and 4.6 µm</td></tr>
-      <tr><td class="n">2014–2024</td><td>NEOWISE single exposures (IRSA on AWS)</td><td>One image every six months; the survey search</td></tr>
-      <tr><td class="n">2016</td><td>Gaia DR3 (ESA)</td><td>Expected position of every field star ("ghosts")</td></tr>
-      <tr><td class="n">2025–2026</td><td>SPHEREx DR1 and QR3 (IRSA)</td><td>Latest images, spectrum, brightness change</td></tr>
+      <tr><td class="n">2010</td><td>WISE</td><td>The first picture</td></tr>
+      <tr><td class="n">2014–2024</td><td>NEOWISE</td><td>A new picture every 6 months</td></tr>
+      <tr><td class="n">2016</td><td>Gaia</td><td>The big list: where every known star should be</td></tr>
+      <tr><td class="n">2025–2026</td><td>SPHEREx</td><td>The newest pictures, in 102 colours</td></tr>
     </tbody>
   </table></div>
-  <p class="lede">Five test targets ship ready: Barnard's Star, R Draconis, RW Aurigae, Epsilon Indi B and WISE 0855 (the coldest known brown dwarf).</p>
+  <p class="lede">The 5 practice stars include WISE 0855. It is the coldest "failed star" we know. It is about as cold as a home freezer.</p>
 </section>
 
 <!-- LIMITS -->
 <section class="sec" aria-labelledby="lim">
-  <header><span class="eyebrow">Stated on the site too</span><h2 id="lim">Known limits</h2></header>
+  <header><span class="eyebrow">We tell the truth</span><h2 id="lim">Things it cannot do yet</h2></header>
   <ul class="limits">
-    <li>Bright stars saturate SPHEREx. Those points are dropped, and the card says so.</li>
-    <li>Aperture photometry gives the shape of a spectrum, not precise absolute flux.</li>
-    <li>The public site shows only prepared targets. New coordinates need <code>node server.js</code> (about 12–15 minutes).</li>
-    <li>The field search recovers its own target in 8 of 9 moving-target fields. WISE 0855 is still missed.</li>
-    <li>An empty "what else moved" list means "nothing found", not "nothing there".</li>
+    <li>Very bright stars are too bright for the camera, like a photo of the Sun. We skip those parts and say so.</li>
+    <li>The colour pattern shows the shape, but not exact amounts.</li>
+    <li>On the public website you can see only the ready-made bits of sky. A new bit takes about 15 minutes on your own computer.</li>
+    <li>The robot finds its own practice star in 8 of 9 tests. It still misses WISE 0855.</li>
+    <li>An empty list means "we found nothing". It does not mean "nothing is there".</li>
   </ul>
 </section>
 
-<footer>Source: <code>README.md</code>, <code>docs/demo-script.md</code>, <code>BRAND.md</code> in kneha07/WANDERERS at commit 184e071 (15 Nov 2026). WANDERERS is a Space Apps project. It is not endorsed by NASA or ESA.</footer>
+<footer>Made from <code>README.md</code>, <code>docs/demo-script.md</code> and <code>BRAND.md</code> in kneha07/WANDERERS (15 Nov 2026). WANDERERS is a Space Apps project. NASA and ESA do not run it.</footer>
 </div>
 
 <script>
-// Use cases
 const CASES = [
- {k:"Spot a mover", who:"Citizen scientist", steps:[
-  "Open the explorer on Barnard's Star.",
-  "Play the flipbook: WISE 2010, then NEOWISE every six months, then SPHEREx 2025 and 2026.",
-  "Look for a dot with no Gaia ghost circle. That dot is unexplained.",
-  "Turn on Predicted path to compare the measured path with the catalogue motion.",
-  "Subtract two frames: green is now, pink is before."], where:"observatory.html?target=barnard"},
- {k:"Identify an object", who:"Student or judge", steps:[
-  "Open WISE 0855 and switch to the 4.6 µm channel.",
-  "Read the 0.75–5.0 µm spectrum. Water, methane and CO/CO₂ bands are marked.",
-  "Read the evidence card: class, confidence and the checks that agree.",
-  "Read the Claude explanation and the \"What this view cannot show\" box."], where:"observatory.html?target=wise0855&ch=all"},
- {k:"Work the candidate list", who:"Astronomer", steps:[
-  "Open the Sky Survey and pick the High-confidence preset (12+ visits, S/N 10+).",
-  "Filter for unexplained, red movers. Red is a brown-dwarf hint, not proof.",
-  "Open a candidate. Follow links to SIMBAD, Gaia and Legacy Surveys at the right epoch.",
-  "Export CSV or JSON, or run promote.py to build a full time-lapse."], where:"survey.html?preset=high"},
- {k:"Vote on an object", who:"Citizen scientist", steps:[
-  "On any target or candidate, pick Moving, Variable, Stationary, Artifact or Unsure.",
-  "Press Send my vote. A public GitHub issue form opens, filled in.",
-  "A GitHub Action counts all votes. One vote per person per object; the newest wins.",
-  "A consensus shows when 3 or more people agree by 60%."], where:"classify.js → aggregate_votes.py"},
- {k:"Point a phone at the sky", who:"Public", steps:[
-  "Open the Sky Compass on a phone. Earth swings in to your location.",
-  "Calibrate for about 10 s: lay the phone flat and give it three quarter turns.",
-  "Pick Eye for drawn stars and planets, or Deep for survey photographs.",
-  "Tap a star for its profile, path, Starquake sound and whether Webb imaged it."], where:"compass.html"},
- {k:"Explore any patch", who:"Anyone, local", steps:[
-  "Run node start.js (or double-click start.cmd).",
-  "Type any RA/Dec. The pipeline prepares the field and opens it as a flipbook.",
-  "Or open /explore/ and type a star name to blink its SPHEREx images live."], where:"localhost:8000/explore/"}
+ {k:"Watch a star walk", who:"For everyone", steps:[
+  "Open Barnard's Star on the website.",
+  "Press play. The pictures flip from 2010 to 2026.",
+  "Watch one dot walk across the picture. The other stars stay still.",
+  "Look for a dot with no circle. That dot is a mystery."], where:"observatory.html?target=barnard"},
+ {k:"Guess what it is", who:"For curious kids", steps:[
+  "Open WISE 0855, the coldest \"failed star\".",
+  "Look at its colour chart. Bumps show water and other stuff.",
+  "Read the clue card. It says the guess and how many clues agree.",
+  "Read the short story the app writes about it."], where:"observatory.html?target=wise0855"},
+ {k:"Vote", who:"For sky helpers", steps:[
+  "Pick a dot.",
+  "Choose: moving, blinking, still, a mistake, or not sure.",
+  "Press \"Send my vote\".",
+  "When many people agree, everyone can see the answer."], where:"the Classify card on any dot"},
+ {k:"Find the best mysteries", who:"For sky scientists", steps:[
+  "Open the Sky Survey list.",
+  "Press \"High-confidence\" to see only the strongest dots.",
+  "Tap a dot to check it in other star books.",
+  "Download the list to study later."], where:"survey.html"},
+ {k:"Point your phone up", who:"For families", steps:[
+  "Open the Sky Compass on a phone.",
+  "Lay the phone flat and turn it slowly, three times.",
+  "Point it at the sky. It shows the stars and planets there, even in the day.",
+  "Tap a star to hear it \"sing\" and learn about it."], where:"compass.html"},
+ {k:"Hear a star sing", who:"For everyone", steps:[
+  "Stars shake a tiny bit, like a bell.",
+  "We speed the shake up 42,000 times, so you can hear it.",
+  "Small stars sound high. Big stars sound low.",
+  "Some sounds are real recordings. Some are best guesses. The page tells you which."], where:"Star database → Starquakes"}
 ];
 const tabs=document.getElementById("tabs"), box=document.getElementById("case");
 function show(i){
@@ -362,13 +367,12 @@ function show(i){
 CASES.forEach((c,i)=>{const b=document.createElement("button");b.id="tab"+i;b.role="tab";b.textContent=c.k;b.onclick=()=>show(i);tabs.appendChild(b);});
 show(0);
 
-// Blink sky: field stars with Gaia ghosts, one mover with hollow rings at past epochs (brand motif)
 (function(){
   const cv=document.getElementById("sky"), x=cv.getContext("2d"), yrEl=document.getElementById("yr");
   const W=cv.width, H=cv.height; let seed=7; const r=()=>(seed=(seed*16807)%2147483647)/2147483647;
   const stars=[...Array(70)].map(()=>({x:r()*W,y:r()*H,m:0.6+r()*2.2,g:r()<.45}));
   const epochs=[2010,2014,2016,2018,2020,2022,2024,2025,2026];
-  const P=t=>({x:W*0.18+t*W*0.6, y:H*0.72-t*H*0.42});   // straight proper-motion path
+  const P=t=>({x:W*0.18+t*W*0.6, y:H*0.72-t*H*0.42});
   const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
   function draw(k){
     x.fillStyle="#0B1422"; x.fillRect(0,0,W,H);
