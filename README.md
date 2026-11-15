@@ -43,6 +43,36 @@ itself because IRSA does not allow direct browser requests (no CORS), so it show
 **Sky Compass.** On a phone, GPS + time + compass + tilt tell WANDERERS where the camera points; it guides
 you to a target and opens its investigation. Works indoors; objects below the horizon are shown too.
 
+## How it fits together
+
+```mermaid
+flowchart LR
+  you["Your browser"]
+  site["app/ site<br/>flipbook, evidence card, spectrum,<br/>star database, sky map, Sky Compass"]
+  srv["server.js :8000<br/>optional, local: the live features"]
+  api["backend/ :8001<br/>live explorer API"]
+  pipe["pipeline/ Python<br/>fetch, analyze, evidence, explain, star paths"]
+  data[("app/data/<br/>committed, so a clone just works")]
+  ext["NASA IRSA, ESA Gaia,<br/>CDS, HYG catalogue"]
+
+  you --> site
+  site -->|"reads"| data
+  site -.->|"live features: any coordinates,<br/>Ask, learn a star"| srv
+  you -->|"/explore/"| srv --> api
+  srv -->|"runs"| pipe
+  pipe -->|"writes"| data
+  pipe --> ext
+  api --> ext
+```
+
+| You run | You get |
+|---|---|
+| Nothing: any static host serving `app/` | The five missions, evidence cards, spectrum, star database, sky map for any RA/Dec, Sky Compass, add/subtract frames. All of it runs in the browser. |
+| `node server.js` | Plus any coordinates on demand, "Ask WANDERERS" (needs the `claude` command signed in) and learning any star's path. |
+| `node start.js` (or `start.cmd` / `start.command`) | Plus the `/explore/` live explorer: it sets up and starts the Python API on port 8001 together with `server.js`. |
+
+More detail, with the full diagrams, every route and where each file goes: [docs/architecture.md](docs/architecture.md).
+
 ## Run it
 
 ```bash
@@ -238,8 +268,15 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py
-app/        index.html · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
-server.js   local demo server with live Claude answers
-docs/field-shift/   our earlier Field Shift plan
+app/           the site, static: index.html, style.css, app.js and one script per feature; data/ holds what the pipeline makes (committed)
+pipeline/      Python that builds app/data/: fetch, analyze, gaia_facts, evidence, explain, star_trajectory, stardb, star_ml, make_declination, targets, fov
+server.js      local server (port 8000): the site, Ask WANDERERS, the live routes, and a proxy to the explorer API
+fields.js      the job service behind /api/field and /api/job (prepare any position on demand)
+start.js       one-click start (also start.cmd and start.command): sets up and runs both servers
+backend/       the live explorer's API (FastAPI, port 8001)
+web/           the /explore/ live explorer (React, builds to web/dist)
+test/, tests/  tests: the Node tests and the Python tests (two folders for now, see issue #11)
+docs/          architecture.md, demo-script.md, blink/ (live explorer), research/, field-shift/ (our earlier plan)
+artifacts/     review and merge records, demo screenshots
+background/    the challenge pages
 ```
