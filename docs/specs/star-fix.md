@@ -48,6 +48,46 @@ What these photos can tell about position:
 Conclusion: plate solving works well on phone night photos. But a photo file alone is not enough for a fix.
 The app must capture the time and the "up" direction at the moment of the photo.
 
+## 2a. Owner decision (2026-11-14)
+
+- The app does **not** take the photo. The user uploads a photo from the phone's night-mode camera.
+- The app receives: the photo, the local clock time of the photo, and a compass heading.
+- The app does the math on the sky in the photo. It does not use trees, buildings or other landmarks.
+
+So option C below (capture in Sky Compass) is out. Sections 4 and 5 apply only to option C.
+
+## 2b. Sky-only estimate from the sample photos (time "about 7 pm", no compass values yet)
+
+Method, with stars and sky only:
+
+1. Plate solve each photo, then fit a sky map (TAN WCS) to the matched stars. Marked photos: `artifacts/star-fix/photo1_stars.jpg` to `photo4_stars.jpg`.
+2. Find "down" from the sky glow. Light pollution and airglow make the sky brighter near the horizon. A plane fit to the star-free sky background gives the glow direction.
+3. Each photo then gives one vertical great circle on the sky, and the zenith lies on it. Two photos from the same session cross at the zenith.
+4. Latitude = Dec of the zenith. Local sidereal time (LST) = RA of the zenith.
+5. The clock time (7 pm) plus the LST gives the date (season). It does not give the longitude without the date and the time zone.
+
+| Check | Result |
+|---|---|
+| Hemisphere | **South, certain.** The south celestial pole is inside photos 1, 3 and 4, with sky all round it. |
+| Glow direction | 13-26 deg from image-down in each photo. The bottom is 1.8-3.4x brighter than the top. |
+| Photos 2 + 3 (cloudy session) | Zenith Dec **-53** (68 %: -58 to -47), LST 11.0 h (10.5-11.4 h) |
+| Photos 1 + 4 (clear session) | Zenith Dec -63 (68 %: -65 to -58), LST 10.0 h. Weak: the two photos point the same way, so the lines are almost parallel. |
+| "Up = image top" instead of glow | Photos 2 + 3 give -36. Photos 1 + 4 give +2.5, which is impossible because it puts the visible south pole below the horizon. So glow is the better "up". |
+| Season from 7 pm | Late April to mid-June, most likely mid-May. |
+| Darkness check | At 40-60 S in that season the sun is 17-27 deg below the horizon at 7 pm. The sky is fully dark, as in the photos. |
+| Longitude | **Not possible** from these inputs. Longitude = 15 x (LST - GMST(UTC)), and GMST needs the date. |
+
+Estimate: **latitude about 50 S, plausible range 35-60 S**, in southern autumn. The 68 % ranges show only the glow-direction noise.
+The true error is larger, because clouds lit by a town can shift the glow.
+
+Scripts: `artifacts/star-fix/analyze.py` (solve, sky map, marks), `zenith.py` (glow and zenith), `season.py` (date from 7 pm).
+
+What the compass adds: the south celestial pole is always at azimuth 180 (true). With the heading of the photo centre, the app knows the angle at the zenith between the photo centre and the pole.
+That fixes the zenith on the vertical line, so one photo is enough. Correct magnetic to true north with the existing `pipeline/make_declination.py` data.
+The heading is weak when the photo points within about 15 deg of the zenith (photos 1 and 4).
+
+What gives the longitude: the date plus the UTC offset of the 7 pm time. Then the LST error of about +-0.5 h gives about +-7 deg of longitude.
+
 ## 3. Options
 
 | Option | Time from | "Up" from | Expected error | Risk |
@@ -56,7 +96,7 @@ The app must capture the time and the "up" direction at the moment of the photo.
 | B. Upload photo, user marks the horizon line and types the time | user | horizon line in photo | 150-400 km | Horizon is often hidden. Lens distortion is largest at the edge, where the horizon is. |
 | **C. Capture in Sky Compass** | phone clock | gravity sensor at the shutter | **50-150 km** | The browser camera stream shows fewer stars than night mode |
 
-Recommendation: **build C, with B as the fallback** for photos that come from the native camera app.
+Recommendation (first draft): build C, with B as the fallback. **Superseded by section 2a:** the app uses uploaded night-mode photos, so build B with automatic "down" from sky glow and the compass heading instead of a hand-drawn horizon.
 
 Option C is a "bubble sextant": aircraft navigators used a bubble level instead of the sea horizon. The phone accelerometer is that bubble.
 It does not use the magnetic compass, so the noise that `app/orient.js` describes does not affect it.
