@@ -17,8 +17,8 @@
     .then((r) => (r.ok ? r.json() : { status: "error" }));   // 409, 500, 504: "Could not read this photo" + Try again
   const q = C.photoQueue(send, sync);
   const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
-  const setKm = (el, t) => {   // the same, with each "<number> km" in the mono face of measured values
-    if (el.textContent !== t) el.replaceChildren(...t.split(/(\d+ km)/).map((s, i) => (i % 2 ? Object.assign(document.createElement("span"), { className: "mono", textContent: s }) : s)));
+  const setKm = (el, t) => {   // the same, with each km value in the mono face of measured values
+    if (el.textContent !== t) el.replaceChildren(...t.split(/(\d+)(?= km)/).map((s, i) => (i % 2 ? Object.assign(document.createElement("span"), { className: "mono", textContent: s }) : s)));
   };
   const isUsed = (r, outliers) => !!r.result && r.result.status === "fix" && !outliers.includes(r.result);
   const fmtDate = (local) => {   // the photo's own calendar date, not the date where the browser is
