@@ -9,3 +9,4 @@ data/cache/
 .DS_Store
 data/*.log
 data/*.sh
+.venv-py39
