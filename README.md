@@ -55,7 +55,6 @@ timeline
 | I want to… | Do this |
 |---|---|
 | **Look around** | Open the live site (top of this page). Nothing to install. |
-| **Run it locally** | `node server.js`, then open <http://localhost:8000>. |
 | **Run everything** (any coordinates, live explorer) | `node start.js`, or double-click `start.cmd` / `start.command`. It sets up Python and the web build for you. |
 | **Rebuild the data** | See [Run it](#run-it). `app/data/` is committed, so you only need this to change the data. |
 | **Run the tests** | `for f in test/*.test.js; do node --test "$f"; done` and `python3 -m unittest discover -s tests -p "test_*.py"` |
