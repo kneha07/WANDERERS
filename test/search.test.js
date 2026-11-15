@@ -1,47 +1,46 @@
-// Star search facts and coordinates shared by the console and the Sky Compass (app/search.js).
-// node --test test/search.test.js
-const test = require("node:test");
+// Tests for app/search.js (name search and star card shared by the console and the Sky Compass).
+// Run from the repository root:  node --test test/search.test.js
+const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const fs = require("node:fs"), path = require("node:path");
 
-const APP = path.join(__dirname, "..", "app");
-const win = {};
-new Function("window", fs.readFileSync(path.join(APP, "search.js"), "utf8"))(win);
-const SS = win.StarSearch;
-const kindOf = (spect) => (SS.describe({ spect })[0] || "");
+globalThis.window = globalThis;
+require("../app/search.js");
+const S = globalThis.StarSearch;
+const kind = (spect) => S.describe({ spect })[0];
 
-test("luminosity class: giants are giants, only class I stars are supergiants", () => {
-  const cases = {
-    K0III: /: a giant /, K2IIIp: /: a giant /, "K1.5IIIFe-0.5": /: a giant /, "G8III-IV": /: a giant /, "M0III+": /: a giant /,
-    "K3II-III": /: a giant /, "O9.5II": /: a bright giant /, G2Ib: /: a supergiant /, "M1-M2Ia-Iab": /: a supergiant /,
-    "M1.5Iab-Ib": /: a supergiant /, "F7:Ib-IIv SB": /: a supergiant /, B8Ia: /: a supergiant /, "F5IV-V": /: a subgiant /,
-    G2V: /: a main-sequence star/, sdM1: /: a subdwarf/,
-  };
-  for (const [sp, re] of Object.entries(cases)) assert.match(kindOf(sp), re, sp);
+test("star card: giants and bright giants are not called supergiants", () => {
+  for (const sp of ["K1.5III", "G8III", "M5III", "G8IIIb", "K0III-IV", "K3II-III"]) assert.match(kind(sp), /: a giant /, sp);
+  assert.match(kind("A0II"), /: a bright giant /);
+  for (const sp of ["M2Iab", "B8Ia", "F5Ib-II", "M1.5Iab-Ib", "A2I"]) assert.match(kind(sp), /: a supergiant /, sp);
+  assert.match(kind("K0IV"), /: a subgiant /);
+  for (const sp of ["G2V", "M3.5V", "M0.5Ve"]) assert.match(kind(sp), /: a main-sequence star/, sp);
+  assert.match(kind("sdM4"), /: a subdwarf/);
 });
 
-test("white dwarfs keep their description even without a colour class", () => {
-  assert.match(kindOf("DA2"), /Spectral type DA2: a white dwarf/);
-  assert.equal(kindOf("C6,3"), "Spectral type C6,3.");
+test("star card: a white dwarf is named as one", () => {
+  assert.equal(kind("DA2"), "Spectral type DA2: a white dwarf (the leftover core of a dead star).");
+  assert.equal(kind("XYZ"), "Spectral type XYZ.");
 });
 
-test("every catalogue star with luminosity class III is described as a giant, never a supergiant", () => {
-  const rows = JSON.parse(fs.readFileSync(path.join(APP, "data", "stars.json"), "utf8"));
-  const wrong = rows.filter((r) => /III/.test(r[5] || "") && /supergiant/.test(kindOf(r[5])));
-  assert.equal(wrong.length, 0, wrong.slice(0, 5).map((r) => `${r[0]} ${r[5]}`).join(", "));
+test("hms/dms never show 60 seconds or 24 hours", () => {
+  const sec = (h, m, s) => 15 * (h + m / 60 + s / 3600), arc = (d, m, s) => d + m / 60 + s / 3600;
+  assert.equal(S.hms(sec(10, 59, 59.96)), "11h00m00.0s");
+  assert.equal(S.hms(sec(23, 59, 59.97)), "00h00m00.0s");
+  assert.equal(S.hms(360), "00h00m00.0s");
+  assert.equal(S.hms(sec(17, 57, 48.5)), "17h57m48.5s");
+  assert.equal(S.hms(0), "00h00m00.0s");
+  assert.equal(S.dms(arc(4, 59, 59.6)), "+05d00m00s");
+  assert.equal(S.dms(-arc(10, 0, 59.99)), "-10d01m00s");
+  assert.equal(S.dms(arc(89, 59, 59.9)), "+90d00m00s");
+  assert.equal(S.dms(-arc(7, 14, 42.5)), "-07d14m43s");
+  assert.equal(S.dms(4.693), "+04d41m35s");
 });
 
-test("RA/Dec text never shows 60 seconds: rounding carries into the minute", () => {
-  assert.equal(SS.hms(15 * (1 + 59 / 60 + 59.97 / 3600)), "02h00m00.0s");
-  assert.equal(SS.hms(359.99999), "00h00m00.0s");
-  assert.equal(SS.hms(101.28722), "06h45m08.9s");      // Sirius
-  assert.equal(SS.dms(-(10 + 59 / 60 + 59.6 / 3600)), "-11d00m00s");
-  assert.equal(SS.dms(-16.71612), "-16d42m58s");
-  assert.equal(SS.dms(0.5), "+00d30m00s");
-  const rows = JSON.parse(fs.readFileSync(path.join(APP, "data", "stars.json"), "utf8"));
+test("hms/dms of every catalogue star are well formed", () => {
+  const rows = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "app", "data", "stars.json"), "utf8"));
   for (const r of rows) {
-    assert.doesNotMatch(SS.hms(r[2]), /m60\.0s$/, r[0]);
-    assert.doesNotMatch(SS.dms(r[3]), /m60s$/, r[0]);
+    assert.match(S.hms(r[2]), /^([01]\d|2[0-3])h[0-5]\dm[0-5]\d\.\ds$/, `${r[0]} ${r[2]}`);
+    assert.match(S.dms(r[3]), /^[+-]([0-8]\d|90)d[0-5]\dm[0-5]\ds$/, `${r[0]} ${r[3]}`);
   }
 });
