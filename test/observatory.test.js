@@ -104,6 +104,23 @@ test("Space and the arrow keys blink the time-lapse, but leave buttons, selects 
   p.key(p.document.body, " "); assert.equal(playing(), false);
 });
 
+// ---------- Star database tab ----------
+test("Star database: a slow learnt path for the previous star is not drawn under the star picked after it", async (t) => {
+  const p = open("?target=barnard", { delays: { "stars/pred/hip87937.json": 200 } });
+  t.after(p.close);
+  await p.settle(150);
+  p.window.WANDERERS.selectTab("stars");
+  await p.settle(100);
+  p.window.StarsTab.open("hip87937");                  // Barnard's Star: path arrives late
+  await p.settle(30);
+  p.window.StarsTab.open("hip104214");                 // 61 Cygni, picked last
+  await p.settle(400);
+  assert.match(p.$("starDetail").innerHTML, /<h3>61 Cygni<\/h3>/);
+  assert.match(p.$("starChart").getAttribute("aria-label"), /^Path of 61 Cygni /);
+  assert.equal(search(p).get("star"), "hip104214");
+  assert.deepEqual(p.errors, []);
+});
+
 // ---------- the coordinate box ----------
 function typeCoords(p, ra, dec) {
   p.$("raIn").value = ra; p.$("decIn").value = dec;
