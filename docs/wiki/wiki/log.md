@@ -10,3 +10,4 @@
 - branch: docs/project-explainer, 479d910 (not pushed, not merged; needs review)
 - artifact: https://claude.ai/code/artifact/8ef62b14-34ad-41c5-81ce-92aac295359a (private)
 - source: README.md, docs/demo-script.md, BRAND.md at 184e071
+- 2026-11-15 v3: kid-level text reverted on user request; page is back to v1 (479d910 content)
