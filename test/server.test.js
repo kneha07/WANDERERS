@@ -1,5 +1,5 @@
 // WANDERERS local server smoke/security tests (Node.js 18+).
-// Run from repository root: node --test tests/server.test.js
+// Run from repository root: node --test test/server.test.js
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
