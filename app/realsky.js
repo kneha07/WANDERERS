@@ -191,11 +191,13 @@
   const scope = () => Math.max(0, Math.min(1, (C.S.zoom - 3) / 3));
   // How much of the view the photographs cover: compass.js fades its dark backdrop by it, drawEye its stars.
   const cover = () => (DEEP.state === "ready" ? (R.sky === "deep" ? 1 : scope()) : 0);
-  // The photographs are wanted in Deep, and from 2x (started early, so they are ready by 3x). Their opacity is set
-  // here every frame, written to the page only when it changes. Aladin must not start in a hidden box, so the box
-  // stays shown (at opacity 0 below 3x) while wanted or loading.
+  // The photographs are wanted in Deep, and from 2x (started early, so they are ready by 3x; on mobile data or with
+  // Save-Data on, from 3x, so nothing unseen is fetched). Their opacity is set here every frame, written to the page
+  // only when it changes. Aladin must not start in a hidden box, so the box stays shown (at opacity 0 below 3x) while
+  // wanted or loading.
   function deepFrame(P, f, W, H, now, L) {
-    const want = R.sky === "deep" || C.S.zoom >= 2, t = scope();
+    const net = navigator.connection, from = net && (net.saveData || net.type === "cellular") ? 3 : 2;
+    const want = R.sky === "deep" || C.S.zoom >= from, t = scope();
     const op = R.sky === "deep" ? (C.camOn() ? R.mix + (1 - R.mix) * t : 1) : t;
     const key = want || DEEP.state === "loading" ? op : "hidden";
     if (key !== DEEP.op) { DEEP.op = key; $("skyDeep").hidden = key === "hidden"; $("skyDeep").style.opacity = op; }

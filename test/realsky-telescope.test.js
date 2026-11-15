@@ -91,6 +91,19 @@ test("the photographs: started unseen at 2x, faded in from 3x to 6x; zooming nev
   assert.deepEqual([c.RS.R.sky, c.RS.R.mix, c.RS.R.survey], ["eye", 0.8, "visible"]);
 });
 
+test("on mobile data or with Save-Data on, the photographs start at 3x, not 2x", async () => {
+  for (const connection of [{ type: "cellular" }, { saveData: true }]) {
+    const c = load({ connection });
+    c.S.zoom = 2; c.frame();
+    assert.deepEqual([c.RS.DEEP.state, c.opacity(), c.calls.probes], ["idle", "hidden", 0], JSON.stringify(connection));
+    c.S.zoom = 3; c.frame();
+    assert.equal(c.RS.DEEP.state, "loading", JSON.stringify(connection));
+  }
+  const wifi = load({ connection: { type: "wifi" } });
+  wifi.S.zoom = 2; wifi.frame();
+  assert.equal(wifi.RS.DEEP.state, "loading", "otherwise from 2x");
+});
+
 test("with the camera on, Deep's own camera mix rises to 1 as you zoom in", async () => {
   const c = load({ sky: "deep", camOn: true });
   c.frame(); await c.settle();
