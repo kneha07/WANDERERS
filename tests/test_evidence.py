@@ -70,11 +70,16 @@ class EvidenceCardTests(unittest.TestCase):
         c = evidence.card(target(target_in_gaia=False,
             reference={'source': 'Uncatalogued', 'source_id': None, 'catalogued': False}))
         self.assertEqual(c['status'], 'candidate')
+        # a typed position with nothing catalogued there must not be called "catalogued in the literature"
+        text = ' '.join(x['text'] for x in c['checks'])
+        self.assertNotIn('Catalogued in the literature', text)
+        self.assertIn('no published catalogue entry', text)
 
     def test_non_gaia_catalogued_target_is_known(self):
         c = evidence.card(target(target_in_gaia=False,
             reference={'source': 'Published catalogue', 'catalogued': True}))
         self.assertEqual(c['status'], 'known')
+        self.assertTrue(any('Catalogued in the literature (Published catalogue)' in x['text'] for x in c['checks']))
 
     def test_motion_years_are_calendar_years(self):
         # SPHEREx in September 2026 (2026.67) is "2026", never a future "2027"; WISE 2010.5 stays "2010"

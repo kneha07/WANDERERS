@@ -55,9 +55,13 @@ def card(t):
                        "Luhman 16) are often missing from Gaia."})
     elif t["target_in_gaia"]:
         checks.append({"state": "ok", "text": f"Gaia DR3 has this object (source {t['reference']['source_id']})"})
-    else:
+    elif t["reference"].get("catalogued", True):
         checks.append({"state": "warn", "text": "No Gaia DR3 counterpart: too faint or too cold for Gaia's visible-light camera. "
                                                 f"Catalogued in the literature ({t['reference']['source']})."})
+    else:
+        # a typed-in position with no Gaia star near it (pipeline/fetch.py) and no published entry either
+        checks.append({"state": "warn", "text": "No Gaia DR3 star and no published catalogue entry at the typed position: "
+                                                "nothing catalogued is known there."})
 
     if col.get("ratio"):
         r = col["ratio"]
