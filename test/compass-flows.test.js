@@ -40,7 +40,7 @@ function fakeElement(id) {
   };
 }
 
-function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles", pathView } = {}) {
+function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles", pathView, time = null } = {}) {
   const els = {}, timers = [], windowListeners = {}, rafs = [];
   let clock = 0;
   const $ = (id) => els[id] || (els[id] = fakeElement(id));
@@ -82,6 +82,8 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     DeviceOrientationEvent: undefined, innerWidth: 390, innerHeight: 844, console: { warn() {}, log() {} },
     Intl: { DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone }) }) },
+    // a clock the test moves (time.t, in ms) for checks over time; the real one otherwise
+    Date: time ? class extends Date { constructor(...a) { super(...(a.length ? a : [time.t])); } static now() { return time.t; } } : Date,
   };
   Object.assign(window, env);
   let src = fs.readFileSync(path.join(APP, "compass.js"), "utf8");
@@ -284,8 +286,8 @@ test("hold mode: from 8x the view stops following the phone, and below 6x it fol
   const held = c.pose();
   assert.ok(near(held, 100, 20), `held where the phone pointed, got ${held.az}, ${held.alt}`);
   aimPhone(c, 140, 35);                                       // the phone moves (or its sensors jitter)
+  c.frame();                                                  // and a frame at a fixed time adds no sidereal drift
   assert.deepEqual([c.pose().az, c.pose().alt], [held.az, held.alt], "the held view does not move");
-  c.frame();
   assert.match(c.$("telemetry").innerHTML, /ZOOM<\/b> 8\.0× HELD/);
   c.setZoom(12); c.frame();
   assert.match(c.$("telemetry").innerHTML, /ZOOM<\/b> 12× HELD/, "no decimals from 10x");
@@ -318,6 +320,24 @@ test("hold mode: a selected target within 6 deg of the crosshair is centred, not
   c.setZoom(8);
   assert.deepEqual(c.S.manual, { az: T._az, alt: T._alt });
   assert.equal(c.S.snapped, true);
+});
+
+test("from 8x a dragged or held view turns with the sky, so a star stays in the view (sidereal tracking)", async () => {
+  const time = { t: Date.parse(AT) }, capella = { ra: 79.17, dec: 46.0 }, D2R = Math.PI / 180;
+  const c = loadCompass({ intro: "fail", search: `?debug=1&lat=${HERE.lat}&lon=${HERE.lon}`, time });
+  await c.$("go").onclick();
+  const seen = () => Sky.observe(capella, new Date(time.t), HERE.lat, HERE.lon);
+  const unit = (p) => [Math.sin(p.az * D2R) * Math.cos(p.alt * D2R), Math.cos(p.az * D2R) * Math.cos(p.alt * D2R), Math.sin(p.alt * D2R)];
+  const apart = (a, b) => Math.acos(Math.min(1, unit(a).reduce((s, x, i) => s + x * unit(b)[i], 0))) / D2R;
+  const start = seen();
+  c.S.manual = { az: start.az, alt: start.alt };
+  c.setZoom(300);
+  c.$("hud").dispatch("pointerdown", { pointerId: 1, isPrimary: true, clientX: 200, clientY: 400 });   // a finger rests on the sky
+  c.frame();
+  for (let i = 0; i < 20; i++) { time.t += 30000; c.frame(); }    // 10 minutes, a frame every 30 s
+  c.$("hud").dispatch("pointermove", { pointerId: 1, clientX: 200, clientY: 400 });
+  assert.ok(apart(c.S.manual, start) > 1, `the view turned ${apart(c.S.manual, start).toFixed(2)} deg with the sky`);
+  assert.ok(apart(c.S.manual, seen()) < 0.01, `${apart(c.S.manual, seen()).toFixed(4)} deg from Capella after 10 minutes`);
 });
 
 test("location note: a later GPS timeout does not claim the location was declined", async () => {

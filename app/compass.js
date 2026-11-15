@@ -219,6 +219,19 @@ function pose() {
   return { az: S.manual.az, alt: S.manual.alt, forward: f, up, right, ready: true };
 }
 let drag = null;
+// Sidereal tracking, like a telescope mount: from 8x a dragged or held view turns with the sky (east to west,
+// about the celestial pole), so a star stays in it. At 300x the view is 0.1 deg wide and the sky moves 0.25 deg
+// a minute. The time steps come from nowDate(), so a fixed ?at= time does not drift. Called once per frame.
+let trackAt = 0;
+function track(now, L) {
+  const dt = (now - trackAt) / 1000; trackAt = +now;
+  if (!(dt > 0 && dt <= 60) || (S.sensors && !S.hold) || S.zoom < 8) return;
+  const a = -360.98564736629 / 86400 * dt * D2R, c = Math.cos(a), s = Math.sin(a);     // the turn in dt (sidereal rate)
+  const k = [0, Math.cos(L.lat * D2R), Math.sin(L.lat * D2R)], v = vec(S.manual.az, S.manual.alt), kv = dot(k, v);
+  const kxv = [k[1] * v[2] - k[2] * v[1], k[2] * v[0], -k[1] * v[0]];                  // k x v (the pole has no east part)
+  const r = v.map((x, i) => x * c + kxv[i] * s + k[i] * kv * (1 - c));                // Rodrigues rotation about the pole
+  S.manual = { az: (Math.atan2(r[0], r[1]) / D2R + 360) % 360, alt: Math.max(-85, Math.min(85, Math.asin(r[2]) / D2R)) };
+}
 
 // ---------- zoom: two fingers on the sky, or the mouse wheel ----------
 // S.zoom multiplies the focal length (focalPx), so the drawn sky, the photographs and taps all follow it.
@@ -269,12 +282,13 @@ for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(typ
 $("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
 
-$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY, az: S.manual.az, alt: S.manual.alt }; $("hud").setPointerCapture(e.pointerId); } });
+$("hud").addEventListener("pointerdown", (e) => { if ((!S.sensors || S.hold) && !pinch) { drag = { x: e.clientX, y: e.clientY }; $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
-  const k = 70 / innerHeight / S.zoom;
-  S.manual.az = ((drag.az - (e.clientX - drag.x) * k) % 360 + 360) % 360;   // a long drag can pass a full turn
-  S.manual.alt = Math.max(-85, Math.min(85, drag.alt + (e.clientY - drag.y) * k));
+  const k = 70 / innerHeight / S.zoom;       // step by step, so the sidereal tracking between two moves is kept
+  S.manual.az = ((S.manual.az - (e.clientX - drag.x) * k) % 360 + 360) % 360;   // a long drag can pass a full turn
+  S.manual.alt = Math.max(-85, Math.min(85, S.manual.alt + (e.clientY - drag.y) * k));
+  drag.x = e.clientX; drag.y = e.clientY;
 });
 $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
@@ -312,6 +326,7 @@ function loop() { draw(); calibrationTick(); requestAnimationFrame(loop); }
 
 function draw() {
   const W = innerWidth, H = innerHeight, now = nowDate(), L = loc();
+  track(now, L);
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.clearRect(0, 0, W, H);
   const P = pose(), f = focalPx(W, H), cx = W / 2, cy = H / 2;
