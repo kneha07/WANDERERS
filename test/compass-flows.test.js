@@ -76,7 +76,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const env = {
     window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
     // realsky.js (the team's real-sky layer) draws extra sky detail; these flow tests only need it to be present
-    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, renderSaved() {}, projector: () => () => null },
+    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cancelGesture() {}, renderSaved() {}, projector: () => () => null },
     Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: pathView,
     getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
@@ -239,6 +239,29 @@ test("drag mode: a drag longer than a full turn keeps the heading in 0-360", asy
   assert.ok(Math.abs(az - (((180 - 8000 * 70 / 844) % 360) + 360) % 360) < 1e-9);
   hud.dispatch("pointermove", { clientX: -9000, clientY: 400 });
   assert.ok(c.S.manual.az >= 0 && c.S.manual.az < 360);
+});
+
+test("zoom: two fingers pinch the view, and the finger that stays down does not drag it", async () => {
+  const c = loadCompass({ intro: "fail" });
+  const hud = c.$("hud"), stop = { stopImmediatePropagation() {} };
+  const ev = (type, id, x, y) => hud.dispatch(type, { pointerId: id, clientX: x, clientY: y, ...stop });
+  ev("pointerdown", 1, 100, 400); ev("pointerdown", 2, 200, 400);
+  ev("pointermove", 2, 300, 400);                                    // fingers 100 px apart, then 200 px
+  assert.equal(c.S.zoom, 2);
+  assert.equal(c.S.manual.az, 180, "a pinch does not turn the view");
+  ev("pointermove", 2, 2000, 400);
+  assert.equal(c.S.zoom, 8, "zoom stops at 8x");
+  ev("pointermove", 2, 110, 400);
+  assert.equal(c.S.zoom, 0.5, "with no camera the view can widen, to half");
+  ev("pointerup", 2, 110, 400); ev("pointermove", 1, 600, 400);
+  assert.equal(c.S.manual.az, 180, "the remaining finger does not drag");
+  ev("pointerup", 1, 600, 400);
+  c.S.camOn = true; hud.dispatch("wheel", { deltaY: 5000 });
+  assert.equal(c.S.zoom, 1, "the camera picture cannot be made wider than the lens");
+  hud.dispatch("wheel", { deltaY: -200 });
+  assert.ok(c.S.zoom > 1.4 && c.$("cam").style.transform === `scale(${c.S.zoom})`, "the camera picture is enlarged by the same factor");
+  ev("pointerdown", 1, 0, 400); ev("pointermove", 1, 844, 400);       // one finger: 70 deg per screen height, divided by the zoom
+  assert.ok(Math.abs(c.S.manual.az - (180 - 70 / c.S.zoom)) < 1e-9);
 });
 
 test("location note: a later GPS timeout does not claim the location was declined", async () => {

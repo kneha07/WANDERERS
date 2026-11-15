@@ -13,7 +13,7 @@ const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const F = new Orient.Fusion();
 const S = {
   targets: [], sel: null, loc: null, locNote: "location not shared yet", place: null, cities: null,
-  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, regionImg: null, lastTele: 0, buzzed: {},
+  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, zoom: 1, regionImg: null, lastTele: 0, buzzed: {},
 };
 window.__wanderers = { F, S };   // debug handle for automated tests (feed sensor events with exact timestamps)
 // Links for checks and screenshots: ?at=2026-11-15T06:00:00Z&lat=47.6&lon=-122.3&go=1&intro=skip&cam=0&sky=eye
@@ -108,7 +108,7 @@ $("go").onclick = async () => {
 async function startCamera() {
   try {
     const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-    $("cam").srcObject = st; S.camOn = true;
+    $("cam").srcObject = st; S.camOn = true; setZoom(S.zoom);
   } catch { S.camOn = false; }
 }
 
@@ -219,10 +219,47 @@ function pose() {
   return { az: S.manual.az, alt: S.manual.alt, forward: f, up, right, ready: true };
 }
 let drag = null;
-$("hud").addEventListener("pointerdown", (e) => { if (!S.sensors) { drag = { x: e.clientX, y: e.clientY, az: S.manual.az, alt: S.manual.alt }; $("hud").setPointerCapture(e.pointerId); } });
+
+// ---------- zoom: two fingers on the sky, or the mouse wheel ----------
+// S.zoom multiplies the focal length (focalPx), so the drawn sky, the photographs and taps all follow it.
+// The camera picture is enlarged by the same factor (a digital zoom), so with the camera on the view can only
+// zoom in. Without the camera it can also widen. These listeners come before every other one on the canvas:
+// while two fingers are down, no drag and no tap may start.
+const ZOOM_MAX = 8;
+function setZoom(z) {
+  S.zoom = Math.max(S.camOn ? 1 : 0.5, Math.min(ZOOM_MAX, z));
+  $("cam").style.transform = S.zoom === 1 ? "" : `scale(${S.zoom})`;
+}
+const fingers = new Map();
+let pinch = null;
+const fingerGap = () => { const [a, b] = [...fingers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+$("hud").addEventListener("pointerdown", (e) => {
+  if (e.isPrimary) { fingers.clear(); pinch = null; }      // a first finger: forget any finger whose lift was missed
+  fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (fingers.size < 2) return;
+  e.stopImmediatePropagation();
+  if (fingers.size === 2) { pinch = { gap: fingerGap(), zoom: S.zoom }; drag = null; RealSky.cancelGesture(); }
+});
+$("hud").addEventListener("pointermove", (e) => {
+  const p = fingers.get(e.pointerId);
+  if (p) { p.x = e.clientX; p.y = e.clientY; }
+  if (!pinch) return;
+  e.stopImmediatePropagation();
+  if (fingers.size === 2) setZoom(pinch.zoom * fingerGap() / pinch.gap);
+});
+for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(type, (e) => {
+  fingers.delete(e.pointerId);
+  if (!pinch) return;
+  e.stopImmediatePropagation();           // the finger that stays down after a pinch must not drag or tap
+  if (!fingers.size) pinch = null;
+});
+$("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
+window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
+
+$("hud").addEventListener("pointerdown", (e) => { if (!S.sensors && !pinch) { drag = { x: e.clientX, y: e.clientY, az: S.manual.az, alt: S.manual.alt }; $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
-  const k = 70 / innerHeight;
+  const k = 70 / innerHeight / S.zoom;
   S.manual.az = ((drag.az - (e.clientX - drag.x) * k) % 360 + 360) % 360;   // a long drag can pass a full turn
   S.manual.alt = Math.max(-85, Math.min(85, drag.alt + (e.clientY - drag.y) * k));
 });
@@ -242,9 +279,9 @@ function focalPx(W, H) {
   const v = $("cam");
   if (S.camOn && v.videoWidth) {
     const vw = v.videoWidth, vh = v.videoHeight, scale = Math.max(W / vw, H / vh);      // object-fit: cover
-    return (Math.max(vw, vh) / 2) / Math.tan(LONG_SIDE_FOV / 2 * D2R) * scale;
+    return (Math.max(vw, vh) / 2) / Math.tan(LONG_SIDE_FOV / 2 * D2R) * scale * S.zoom;
   }
-  return (H / 2) / Math.tan(S.vfovNoCam / 2 * D2R);
+  return (H / 2) / Math.tan(S.vfovNoCam / 2 * D2R) * S.zoom;
 }
 
 // ---------- drawing ----------
@@ -512,6 +549,7 @@ function telemetry(now, L, P) {
     ["LAT", `${Math.abs(L.lat).toFixed(3)}°${L.lat >= 0 ? "N" : "S"}`], ["LON", `${Math.abs(L.lon).toFixed(3)}°${L.lon >= 0 ? "E" : "W"}`],
     ["LOCAL", `${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ${tz.split("/").pop().replace(/_/g, " ")}`],
     ["UTC", now.toISOString().slice(11, 19)], ["LST", hm(lst)], ["DECL", `${F.decl >= 0 ? "+" : ""}${F.decl.toFixed(1)}°`], ["CAL", cal],
+    ...(S.zoom !== 1 ? [["ZOOM", `${S.zoom.toFixed(1)}×`]] : []),
   ].map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
   if (!$("info").hidden) renderInfo(now, L, lst, tz);
   webbTick(P, now, L, lst);
@@ -771,7 +809,7 @@ RealSky.init({
   },
 });
 $("infoBtn").addEventListener("click", () => RealSky.renderSaved());
-if (Q.get("debug")) Object.assign(window.__wanderers, { RealSky, pose, focal: focalPx, nowDate,
+if (Q.get("debug")) Object.assign(window.__wanderers, { RealSky, pose, focal: focalPx, nowDate, setZoom,
   // where a J2000 position is on the screen now, in CSS pixels (null when behind the camera)
   screenOf: (ra, dec) => { const W = innerWidth, H = innerHeight, L = loc(), o = Sky.observe({ ra, dec }, nowDate(), L.lat, L.lon);
     return RealSky.projector(pose(), focalPx(W, H), W, H)([Math.sin(o.az * D2R) * Math.cos(o.alt * D2R), Math.cos(o.az * D2R) * Math.cos(o.alt * D2R), Math.sin(o.alt * D2R)]); } });

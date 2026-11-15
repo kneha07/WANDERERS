@@ -137,7 +137,7 @@ async function main() {
   for (const [az, alt] of [[180, 30], [0, 60], [90, 10], [300, 45], [200, 84]]) { await page.eval(aim(az, alt)); await reg(`az ${az} alt ${alt}`); }
   for (const [a, b, gm] of [[30, 120, 25], [200, 130, -35], [60, 140, -20], [300, 125, 30]]) { await page.eval(feed(a, b, gm)); await reg(`phone pose alpha ${a} beta ${b} gamma ${gm}`); }
   check("registration covered a leaning phone", report.registration.some((r) => Math.abs(r.roll) > 15));
-  await page.eval(aim(300, 45)); await sleep(3000); await page.shot("deep-phone.png");
+  await page.eval(aim(300, 45)); const z0 = await reg("az 300 alt 45 again, before zooming"); await page.shot("deep-phone.png");
 
   // ---- 1b. Infrared ----
   await page.eval(`(document.querySelector('#surveySeg [data-survey="infrared"]').click(), true)`);
@@ -162,6 +162,34 @@ async function main() {
   })()`);
   check("service worker trim keeps the 5 newest pictures, oldest dropped first", sw.before > 5 && JSON.stringify(sw.kept) === JSON.stringify(sw.newest), `${sw.before} → ${sw.kept.length}`);
   check("service worker drops the recent cache once it is older than the age limit", sw.gone);
+
+  // ---- 1c2. zoom, and a survey that the archive has reissued ----
+  await page.eval(`(RealSky.setSky("deep"), ${W8}.setZoom(4), true)`); await page.eval(aim(300, 45));
+  await sleep(4000);
+  const z = await page.eval(`RealSky.selfTest()`), wide = (r) => [].concat(r.fov)[0];
+  report.registration.push({ label: "zoomed in 4 times, az 300 alt 45", objects: z.stars.length, worst: z.worst, roll: z.roll, pxPerDeg: z.pxPerDeg });
+  check("zoom: photographs and canvas still agree when zoomed in 4 times", z.worst <= 3 && z.stars.length >= 1 && Math.abs(z.pxPerDeg / z0.pxPerDeg - 4) < 0.05,
+    `${z.stars.length} objects, worst ${z.worst} px (1° = ${z.pxPerDeg} px)`);
+  check("zoom: the photographs show a quarter of the view", Math.abs(wide(z) - 2 * Math.atan(Math.tan(wide(z0) * Math.PI / 360) / 4) * 180 / Math.PI) < 0.05, `${wide(z0).toFixed(2)}° → ${wide(z).toFixed(2)}°`);
+  await page.shot("deep-zoom-phone.png");
+  await page.eval(`(RealSky.setSky("off"), ${W8}.setZoom(1), true)`); await sleep(2500);
+  const rel = await page.eval(`(async () => {
+    const base = RealSky.DEEP.base, data = await caches.open(Hips.CONFIG.caches.pinned), stamp = Hips.releaseUrl(base);
+    const read = async () => { const r = await data.match(stamp); return r ? r.json() : null; };
+    const tiles = async () => (await caches.has("wanderers-sky-v1")) ? (await (await caches.open("wanderers-sky-v1")).keys()).filter((k) => k.url.startsWith(base + "/Norder")).length : 0;
+    const first = await read(), before = await tiles();
+    await fetch(base + "/properties"); await new Promise((r) => setTimeout(r, 1500));
+    const same = await tiles();                                    // checked less than a day ago: nothing happens
+    await data.put(stamp, new Response(JSON.stringify({ at: 0, release: "1999-01-01T00:00Z" })));
+    await fetch(base + "/properties");
+    let now = null;
+    for (let i = 0; i < 60 && !(now && now.at); i++) { await new Promise((r) => setTimeout(r, 250)); now = await read(); }
+    return { first, before, same, after: await tiles(), now };
+  })()`);
+  check("the survey's issue date is recorded with its pictures", !!rel.first && /^\d{4}-\d\d-\d\d/.test(rel.first.release), rel.first && rel.first.release);
+  check("a survey checked less than a day ago is left alone", rel.before > 0 && rel.same === rel.before, `${rel.before} pictures`);
+  check("a reissued survey: its recent pictures are dropped and the new date is recorded", rel.after === 0 && !!rel.now && rel.now.release === rel.first.release,
+    `${rel.before} → ${rel.after}, ${JSON.stringify(rel.now)}`);
 
   // ---- 1d. Eye ----
   await page.goto("sky=eye&limit=dark");
@@ -255,6 +283,21 @@ async function main() {
   check("saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest", st.tiles === 60 && st.saved.length === 65, `${st.tiles} tiles, ${st.saved.length} files`);
   check("no saved picture is also kept as a recent one", st.both === 0, `${st.both} duplicates`);
   check("the place is listed from its manifest", st.places.length === 1 && st.places[0].order === 1 && Math.round(st.places[0].lat) === 48 && st.list.length === 1, JSON.stringify(st.list));
+  // the archive reissues the survey: every saved picture is fetched again, in place (one is spoiled first, as proof)
+  const renew = await page.eval(`(async () => {
+    const base = Hips.CONFIG.surveys.visible.hosts[0], data = await caches.open(Hips.CONFIG.caches.pinned), stamp = Hips.releaseUrl(base);
+    const saved = await caches.open("wanderers-sky-saved-v1"), tile = (await saved.keys()).map((k) => k.url).find((u) => /Npix\\d+\\.jpg$/.test(u));
+    const size = async () => (await (await saved.match(tile)).blob()).size, files = async () => (await saved.keys()).length;
+    await saved.put(tile, new Response("old"));
+    const spoiled = await size(), before = await files();
+    await data.put(stamp, new Response(JSON.stringify({ at: 0, release: "1999-01-01T00:00Z" })));
+    await fetch(base + "/properties");
+    let now = null;
+    for (let i = 0; i < 480 && !(now && now.at && !now.savedDue); i++) { await new Promise((r) => setTimeout(r, 250)); const r = await data.match(stamp); now = r ? await r.json() : null; }
+    return { spoiled, size: await size(), before, after: await files(), now };
+  })()`);
+  check("a reissued survey: the saved pictures are fetched again in place", renew.spoiled === 3 && renew.size > 1000 && renew.after === renew.before && !!renew.now && renew.now.savedDue === false,
+    `spoiled tile ${renew.spoiled} → ${renew.size} bytes, ${renew.before} → ${renew.after} files, ${JSON.stringify(renew.now)}`);
   const seattle = st.places[0].urls;
   st = await saveFor(-33.9, 2, "Standard, 34° S");
   check("Standard, 34° S: about 190 tiles of its own on top", st.places.length === 2 && st.tiles > 200 && st.list.length === 2, `${st.tiles} tiles in all; ${st.list.join(" | ")}`);

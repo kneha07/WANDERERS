@@ -9,6 +9,10 @@
  *   3. The compass page itself (SHELL below): fetched and stored when the worker installs, then network first with
  *      the stored copy when there is no answer in 4 seconds. So the page opens with no signal after one visit,
  *      and a new deploy still shows at once when there is one.
+ *   4. A survey's `properties` file, which carries its issue date (hips_release_date): answered like a tile, and at
+ *      most once a day the archive is asked for the current one. The surveys are archives of old photographs, so
+ *      this is the only way they change. When the date is newer, the recent pictures of that survey are dropped
+ *      (they load again when looked at) and the saved ones are fetched again, but not over mobile data.
  * Saved places ("wanderers-sky-saved-v1") are written by realsky.js and are never trimmed here. */
 importScripts("hips.js");
 
@@ -35,7 +39,7 @@ self.addEventListener("activate", (e) => e.waitUntil(Promise.all([self.clients.c
 self.addEventListener("fetch", (e) => {
   const url = e.request.url;
   if (e.request.method !== "GET") return;
-  if (url.startsWith(TILES) || url.startsWith(TILES2)) e.respondWith(tile(url, e));
+  if (url.startsWith(TILES) || url.startsWith(TILES2)) e.respondWith(url.endsWith("/properties") ? properties(url, e) : tile(url, e));
   else if (url.startsWith(ALADIN) || url.startsWith(THREE_JS)) e.respondWith(pinned(url));
   else if (IS_SHELL.has(bare(url))) e.respondWith(fresh(e.request));
 });
@@ -47,6 +51,55 @@ async function tile(url, e) {
   const res = await fetch(url, { mode: "cors", credentials: "omit" });
   if (res.ok) e.waitUntil(keep(url, res.clone()));
   return res;
+}
+
+async function properties(url, e) {
+  const res = await tile(url, e);
+  if (res.ok) e.waitUntil(recheck(url.slice(0, -"/properties".length), res.clone()).catch(() => {}));
+  return res;
+}
+
+// Is the survey at `base` still the issue our stored pictures came from? `served` is the properties file just answered.
+const checking = new Set();
+async function recheck(base, served) {
+  if (checking.has(base)) return;
+  checking.add(base);
+  try {
+    const data = await caches.open(DATA), old = await data.match(Hips.releaseUrl(base)), rec = old ? await old.json() : null;
+    const save = (r) => data.put(Hips.releaseUrl(base), new Response(JSON.stringify({ at: Date.now(), ...r })));
+    if (!rec) return await save({ release: Hips.releaseDate(await served.text()) });     // first sight: what we hold is this issue
+    if (Date.now() - rec.at < CFG.recheckMs) return;
+    const res = await fetch(base + "/properties", { mode: "cors", credentials: "omit", cache: "no-store" });
+    const release = res.ok ? Hips.releaseDate(await res.text()) : "";
+    if (!release) return;                            // no answer: ask again at the next visit
+    const changed = !!rec.release && rec.release !== release;
+    if (changed) await dropRecent(base);
+    const savedDue = changed || !!rec.savedDue;      // written first, so a refresh that is cut short is tried again
+    await save({ release, savedDue });
+    await expire();                                  // the 7-day rule, which otherwise runs only when the worker is replaced
+    const net = self.navigator.connection;
+    if (savedDue && !(net && (net.saveData || net.type === "cellular")) && (await renewSaved(base))) await save({ release, savedDue: false });
+  } finally { checking.delete(base); }
+}
+
+async function dropRecent(base) {
+  if (!(await caches.has(AUTO))) return;
+  const cache = await caches.open(AUTO);
+  for (const k of await cache.keys()) if (k.url.startsWith(base + "/")) await cache.delete(k);
+}
+
+// Fetch every saved picture of one survey again, in place. True when all of the tiles came.
+async function renewSaved(base) {
+  if (!(await caches.has(SAVED))) return true;
+  const cache = await caches.open(SAVED), urls = (await cache.keys()).map((k) => k.url).filter((u) => u.startsWith(base + "/") && !Hips.isManifest(u));
+  let next = 0, ok = true;
+  await Promise.all([1, 2, 3, 4].map(async () => {
+    while (next < urls.length) {
+      const u = urls[next++], r = await fetch(u, { mode: "cors", credentials: "omit", cache: "reload" }).catch(() => null);
+      if (r && r.ok) await cache.put(u, r); else if (/Npix\d+\.jpg$/.test(u)) ok = false;
+    }
+  }));
+  return ok;
 }
 
 async function pinned(url) {

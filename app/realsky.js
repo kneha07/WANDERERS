@@ -300,6 +300,16 @@
     for (const k of keys) { const r = await c.match(k); bytes += +(r && r.headers.get("content-length")) || TILE_BYTES; }
     return { n: keys.length, bytes };
   }
+  // What sw.js recorded for the survey on screen: { release, at } (its issue date, and when that was last checked).
+  async function surveyVersion() {
+    if (!cacheOk || !(await caches.has(Hips.CONFIG.caches.pinned))) return null;
+    const c = await caches.open(Hips.CONFIG.caches.pinned);
+    for (const h of [DEEP.survey === R.survey && DEEP.base, ...surveyOf(R.survey).hosts].filter(Boolean)) {
+      const r = await c.match(Hips.releaseUrl(h)), v = r ? await r.json() : null;
+      if (v && v.release) return v;
+    }
+    return null;
+  }
   const DETAIL = { 1: "Basic", 2: "Standard", 3: "Sharp" };
   const planFor = (lat, order, survey) => { const v = surveyOf(survey); return Hips.plan(v.hosts[0], lat, order, v); };
   const SAVE = { order: 2, running: false, stop: false };
@@ -327,10 +337,11 @@
   }
   async function renderSaved() {
     if (!cacheOk) { $("savedRow").textContent = "This browser cannot keep pictures on the device."; $("saveGo").disabled = true; return; }
-    const [auto, saved, mine] = await Promise.all([cacheStats(CACHE_AUTO), cacheStats(CACHE_SAVED), savedPlaces()]);
-    const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const [auto, saved, mine, ver] = await Promise.all([cacheStats(CACHE_AUTO), cacheStats(CACHE_SAVED), savedPlaces(), surveyVersion()]);
+    const day = (iso, year) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year });
     $("savedRow").textContent = `Recent: ${auto.n ? `${auto.n} pictures, ${SkyView.fmtBytes(auto.bytes)} (cleared after 7 days)` : "none"}. ` +
-      `Saved: ${saved.n ? `${saved.n} pictures, ${SkyView.fmtBytes(saved.bytes)}` : "none"}.`;
+      `Saved: ${saved.n ? `${saved.n} pictures, ${SkyView.fmtBytes(saved.bytes)}` : "none"}.` +
+      (ver ? ` The archive last updated its ${R.survey} photographs on ${day(ver.release, "numeric")}. Checked for newer ones on ${day(ver.at)}, at most once a day.` : "");
     const rows = mine.places.map((p, i) => [i, `Latitude ${SkyView.fmtLat(p.lat)}, ${DETAIL[p.order]}${p.survey === "infrared" ? ", infrared" : ""}, ` +
       `${p.tiles} pictures, saved ${day(p.savedAt)}`]);
     if (mine.loose.n) rows.push(["loose", `${mine.loose.n} pictures from a save that did not finish (${SkyView.fmtBytes(mine.loose.bytes)})`]);
@@ -420,6 +431,8 @@
   }
 
   // ---------- wiring ----------
+  let grab = null, tap = null;                       // the finger dragging the sky, and the press that may be a tap
+  const cancelGesture = () => { grab = null; tap = null; };   // compass.js: a second finger came down (pinch to zoom)
   function init(ctx) {
     C = ctx;
     $("skySeg").querySelectorAll("button").forEach((b) => (b.onclick = () => setSky(b.dataset.sky)));
@@ -440,7 +453,6 @@
     $("skyCredit").textContent = [SkyView.CREDITS.eye, SkyView.CREDITS.deep, SkyView.CREDITS.infrared].join(" ");
 
     // Gestures on the AR canvas. Registered before compass.js's own drag-to-look, so "drag the sky" can take them.
-    let grab = null, tap = null;
     const hud = $("hud");
     hud.addEventListener("pointerdown", (e) => {
       tap = { x: e.clientX, y: e.clientY, t: Date.now() };
@@ -460,6 +472,6 @@
     setSky(R.sky);
   }
 
-  const api = { init, draw, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
+  const api = { init, draw, cancelGesture, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
   root.RealSky = api;
 })(window);
