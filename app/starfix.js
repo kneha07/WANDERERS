@@ -50,8 +50,9 @@
       b.canvas.setAttribute("aria-label", h.headline);
       b.link.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=7/${lat}/${lon}`;
       b.gpsKey.hidden = !gps; b.gps = gps;
-      // window: half-height 4 x the larger of the radius and the GPS distance; 6 to 40 degrees across, 2:1
-      const span = Math.min(40, Math.max(6, 16 * Math.max(c.radiusKm, gps ? C.distKm(gps, c) : 0) / 111.19));
+      // window: half-height 4 x the larger of the radius and the GPS distance; 16 to 40 degrees across, 2:1.
+      // 16 at least: a closer crop of the 2048 px day.jpg blurs the coastline and the place is lost
+      const span = Math.min(40, Math.max(16, 16 * Math.max(c.radiusKm, gps ? C.distKm(gps, c) : 0) / 111.19));
       draw(b, { lat: c.lat, lon: c.lon, r: c.radiusKm, span });
     }
     rows.forEach((r, i) => {

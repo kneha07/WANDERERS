@@ -48,14 +48,14 @@ The one skip is in `fields.test.js` ("python3 not available"); it is also on the
 | U6 | PASS | The line shows and the control is disabled only after `/api/health` fails (static server). |
 | U7 | PASS | Unit tests for `clear()` and `restore()`. Playwright: focus to the upload control, "Photos removed. Undo" for 8 s, Undo restores 4 results with 0 requests. |
 | U8 | PASS | Playwright: drop state with "Drop to add"; `notes.txt` and a 31 MB file get their rows without a request. |
-| U9 | PASS | The window and the circle glide together (400 ms), a newer answer starts from the drawn state, no motion under reduced motion. Now visible: the circle is about 1/8 of the map height. |
+| U9 | PASS | The window and the circle glide together (400 ms), a newer answer starts from the drawn state, no motion under reduced motion. Now visible: the 65 km circle is 22 px (desktop) or 13 px (phone) in radius. |
 | U10 | PASS | `aria-live="polite"`: "Reading photo N of M", then the final headline once. |
 
 ## 3. Fix round 1
 
 | Item | Fix | Evidence | Commit |
 |---|---|---|---|
-| M1 map | Window from the data: half-height = 4 x max(radius, GPS distance), 2:1, 6 to 40 degrees across; crop of `day.jpg`, smooth upscale. Ponytail note: about 20 km per pixel of `day.jpg`. | 65 km circle: radius about 38 px at 608 px width, 22 px at 358 px (was 9 and 5 px). | `10ff89b` |
+| M1 map | Window from the data: half-height = 4 x max(radius, GPS distance), 2:1, 16 to 40 degrees across (the 16 degree minimum keeps the coastline readable); crop of `day.jpg`, smooth upscale. Ponytail note: about 20 km per pixel of `day.jpg`. | 65 km circle: radius about 22 px at 608 px width, 13 px at 358 px (was 9 and 5 px); Victoria and Tasmania readable. | `10ff89b`, then the 16 degree minimum |
 | M2 doors | Row right under the lede; one row from a 1024 px window (text column 470 px and up), compact text while narrow; stacked below. | Door 3 bottom: 671 of 720 px (1280 x 720), 615 of 768 (1024 x 768). `home-1280.png`. | `5db6315` |
 | M3 U4 | `touched` from the summary click; no automatic change after that. | Playwright, see U4. | `10ff89b` |
 | M4 CLS | The drop hint has its own line (as the wireframe). | CLS 0.003 to 0.006 at 390 px. | `10ff89b` |

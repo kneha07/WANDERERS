@@ -394,8 +394,9 @@ Words (all user text comes from `describe()` and `headline()` in `starfixcore.js
 | Example block | Same lines, but "Your phone's GPS" reads "The phone's GPS". |
 
 Map: a `<canvas>` that draws a window of `data/earth/day.jpg` (2048 x 1024, plate carree) centred on the answer. The window comes from the data
-(fix round 1): half-height = 4 x the larger of the radius and the GPS distance, 2:1, from 6 to 40 degrees across. So the circle is about
-1/8 of the map height, clearly bigger than the reticle, and the map glides in as photos arrive. The crop of the 2048 px image is upscaled (blurry).
+(fix round 1): half-height = 4 x the larger of the radius and the GPS distance, 2:1, from 16 to 40 degrees across (8 to 20 tall).
+The 16 degree minimum keeps the coastline readable: a closer crop of the 2048 px image blurs it. At 65 km the circle radius is about
+22 px on a 608 px map and 13 px on a phone, clearly bigger than the reticle, and the map glides as photos arrive.
 Draw only two marks, in the language of the WANDERERS emblem (`BRAND.md`): the star answer is the solid point with the four-tick reticle
 ("the position measured now") inside the circle from `circle()`; the phone's GPS is a hollow ring ("recorded"). The legend is two words on the map: "stars", "phone GPS".
 No dot per photo: it adds a third mark and no decision. Give the canvas an `aria-label` that repeats the headline.
