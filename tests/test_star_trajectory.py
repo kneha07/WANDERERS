@@ -66,6 +66,14 @@ class PredictTests(unittest.TestCase):
         ra, dec = st.predict(ref, [2010.5, 2030.0])
         self.assertTrue(np.allclose(ra, 76.956) and np.allclose(dec, 30.401))
 
+    def test_ra_stays_in_range_across_0h(self):
+        # a nearby star sitting on RA 0h: its yearly parallax loop takes it to both sides of the line
+        for ra0 in (0.00001, 359.99999):
+            ra, dec = st.predict({"ra": ra0, "dec": 10.0, "epoch": 2016.0, "pmra": 0, "pmdec": 0, "parallax": 500.0},
+                                 np.linspace(2016.0, 2017.0, 13))
+            self.assertTrue(np.all((ra >= 0) & (ra < 360)), ra)
+            self.assertLess(np.max(np.minimum(ra, 360 - ra)) * 3600, 1.0)      # still within 1" of 0h
+
 
 @unittest.skipUnless(TARGETS, "no committed targets in app/data")
 class CommittedTargetTests(unittest.TestCase):
