@@ -495,7 +495,7 @@ test("validation: completeness by motion and brightness, false alarms, famous st
   assert.match(h, /<span class="bl">0\.15–0\.3<\/span>[\s\S]*?<b class="mono">55%<\/b><small>220 of 400<\/small>/);
   assert.match(h, /<span class="bl">14\.5–15\.5<\/span>[\s\S]*?<b class="mono">58%<\/b>/);
   assert.match(h, /<b class="mono">2<\/b> false movers in 8 test tiles with no real movers/);
-  assert.match(h, /8 of 9 known high-motion objects/);
+  assert.match(h, /8 of 9 known high-motion stars/);
   for (const name of ["Barnard&#39;s Star", "Kapteyn&#39;s Star", "WISE 0855-0714"]) assert.match(h, new RegExp(`<th scope="row">${name}</th><td>✓ found`));
   assert.match(h, /<th scope="row">61 Cygni A<\/th><td>✗ missed<small>Saturated/);
   assert.match(h, /median of 5\.2 mas\/yr \(1\.1%\)/);

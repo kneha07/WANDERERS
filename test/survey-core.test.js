@@ -311,3 +311,34 @@ test("investigate links carry the candidate's coordinates", () => {
   assert.match(C.links({ ra: 10, dec: 5, pm: 200 }).simbad, /Coord=10\.00000%20%2B5\.00000&Radius=1&/);
   assert.equal(C.copyText({ ra: 77.95994, dec: -45.04381 }), "05h11m50.39s -45d02m37.7s (RA 77.95994°, Dec -45.04381°)");
 });
+
+// A star checked on a small cut-out and again on its survey tile is counted once (the survey-tile check wins).
+test("oneRowPerStar keeps one row per star, preferring the survey-tile check, in first-seen order", () => {
+  const rows = [
+    { name: "Kapteyn's Star", recovered: true, note: "(real NEOWISE detections within 4′ of the star, fixture)" },
+    { name: "WISE 0855-0714", recovered: true, note: "fixture" },
+    { name: "Barnard's Star", recovered: true, note: "(survey tile 7945)" },
+    { name: "Kapteyn's Star", recovered: true, note: "(survey tile 8545)" },
+    { name: "wise 0855-0714", recovered: false, note: "(survey tile 10226)" },
+    { name: "61 Cygni A", recovered: false, note: "(survey tile 3325)" },
+  ];
+  const out = C.oneRowPerStar(rows);
+  assert.deepEqual(out.map((r) => r.name), ["Kapteyn's Star", "wise 0855-0714", "Barnard's Star", "61 Cygni A"]);
+  assert.match(out[0].note, /survey tile 8545/);
+  assert.equal(out.filter((r) => r.recovered).length, 2);
+});
+
+test("oneRowPerStar: a later cut-out check never replaces a survey-tile check; single rows pass through", () => {
+  const out = C.oneRowPerStar([{ name: "A", note: "survey tile 1" }, { name: "A", note: "fixture" }, { name: "B", note: "x" }]);
+  assert.deepEqual(out.map((r) => r.note), ["survey tile 1", "x"]);
+  assert.deepEqual(C.oneRowPerStar([]), []);
+});
+
+test("normValidation counts each known star once", () => {
+  const v = C.normValidation({ known: [
+    { name: "S", recovered: true, pm_true: 1, pm_measured: 1, note: "fixture" },
+    { name: "S", recovered: true, pm_true: 1, pm_measured: 1, note: "survey tile 5" },
+    { name: "T", recovered: false, pm_true: 2, note: "survey tile 6" }] });
+  assert.equal(v.known.length, 2);
+  assert.equal(v.known.filter((k) => k.recovered).length, 1);
+});
