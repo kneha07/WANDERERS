@@ -33,6 +33,15 @@ test("epoch timeline: WISE, NEOWISE and SPHEREx each get their own stretch, labe
   assert.equal(ax.children.length, EPS.length);
 });
 
+test("home copy matches the data: how many targets, and the NEOWISE years", () => {
+  const html = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "app", "index.html"), "utf8");
+  const n = require("../app/data/index.json").length, words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+  const h = /<h2 id="c4">([^<]+)<\/h2>/.exec(html)[1];
+  assert.match(h, new RegExp(`^(${words[n]}|${n})\\b`, "i"), `"${h}" for ${n} target cards`);
+  if (EPS.some((f) => f.mission === "NEOWISE")) assert.match(html, /NEOWISE 2014–2024 and SPHEREx 2025–26/, "hero caption names NEOWISE");
+  assert.doesNotMatch(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "app", "home.js"), "utf8"), /Run the pipeline|README/);
+});
+
 test("epoch timeline: a NEOWISE frame is not called a stack of SPHEREx images", async (t) => {
   const p = openPage("index.html", "");
   t.after(p.close);
