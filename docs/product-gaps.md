@@ -49,6 +49,7 @@ The brief asks for a public tool that helps "as many people as possible pitch in
 - `app/`: "What else moved in this field?" under the viewer. **Show** draws the pair on the image; `?target=wise0855&pick=2` shares it.
 - Result on the five fields: 6 pairs proposed, 0 left unexplained. Epsilon Indi B: the target found, one edge artefact. WISE 0855: one wrong pairing of the target, two static Gaia stars, one edge artefact.
 - **What this exposed:** the search recovers its own target in 1 of the 3 fields where the target moves (not Barnard's Star, not WISE 0855). The page says so. Until `find_movers` is fixed, an empty list means "nothing found", not "nothing there".
+- **Update (15 Nov 2026):** with every target regenerated after the `find_movers` fix, the search grades its own target `target` in 8 of the 9 fields where the target moves (Barnard's Star, Epsilon Indi B, Luhman 16, Wolf 359, Lalande 21185, Proxima Centauri, 61 Cygni, Kapteyn's Star). It still misses WISE 0855, which is barely visible at 3.4 µm; its four proposed pairs are all rejected.
 - Tests: `tests/test_vet.py` (12 cases).
 
 Still open for this feature: fix `find_movers` itself (needs the FITS cache, which is not in this checkout); an asteroid check (needs per-image times, which `target.json` does not keep); the same list in `/explore/`.

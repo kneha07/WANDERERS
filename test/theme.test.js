@@ -9,7 +9,7 @@ const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
-const PAGES = ["app/index.html", "app/observatory.html", "app/compass.html"];
+const PAGES = ["app/index.html", "app/observatory.html", "app/compass.html", "app/survey.html"];
 const KEY = "wanderers-theme";
 
 // ---- a tiny fake browser, just enough for the theme scripts ----

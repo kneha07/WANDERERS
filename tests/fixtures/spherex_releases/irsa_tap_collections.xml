@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture, hand-written in the shape of an IRSA TAP sync answer (VOTable, TABLEDATA). IRSA answered 502 when
+     these tests were written, so this is not a captured answer. The collection names are the ones
+     docs/research/spherex-data-access.md lists for SIA: spherex_dr1, spherex_dr1_deep, spherex_dr1_cube,
+     spherex_qr3, spherex_qr3_deep. They are listed in IRSA's alphabetical order. -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+ <RESOURCE type="results">
+  <INFO name="QUERY_STATUS" value="OK"/>
+  <TABLE>
+   <FIELD name="collection" datatype="char" arraysize="*"/>
+   <DATA>
+    <TABLEDATA>
+     <TR><TD>spherex_dr1</TD></TR>
+     <TR><TD>spherex_dr1_cube</TD></TR>
+     <TR><TD>spherex_dr1_deep</TD></TR>
+     <TR><TD>spherex_qr3</TD></TR>
+     <TR><TD>spherex_qr3_deep</TD></TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

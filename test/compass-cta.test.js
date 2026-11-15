@@ -8,11 +8,18 @@ const { openPage } = require("./fakepage");
 
 const html = (p) => fs.readFileSync(path.join(__dirname, "..", "app", p), "utf8");
 
+// The two pages word this button differently on purpose: the console header is one compact action,
+// the home hero is one of three equal two-line doors (Observatory / Sky Compass / Star Fix).
+const COMPASS_BUTTON = {
+  "observatory.html": /<span class="cc-text">Visualise with Sky Compass<\/span>/,
+  "index.html": /<span class="cc-text"><b>See it in the sky<\/b><small>Sky Compass \u00b7 point your phone up<\/small><\/span>/,
+};
+
 test("console and home page show a real Sky Compass button, not a small text link", () => {
-  for (const p of ["observatory.html", "index.html"]) {
+  for (const [p, wanted] of Object.entries(COMPASS_BUTTON)) {
     const a = html(p).match(/<a class="btn [^"]*compass-cta"[^>]*href="compass\.html"[^>]*>[\s\S]*?<\/a>/);
     assert.ok(a, `${p}: button`);
-    assert.match(a[0], /See it in the sky/, p);
+    assert.match(a[0], wanted, p);
     assert.match(a[0], /<svg class="cc-icon"/, p);
   }
   assert.doesNotMatch(html("observatory.html"), /class="ws-link" href="compass\.html"/);
@@ -22,7 +29,7 @@ test("the button follows the target on screen", async () => {
   const p = openPage("observatory.html", "?target=wise0855");
   await p.settle(150);
   assert.equal(p.$("compassCta").href, "compass.html?target=wise0855");
-  assert.match(p.$("compassCtaSub").textContent, /Find WISE 0855-0714 with your phone/);
+  assert.match(p.$("compassCta").title, /aimed at WISE 0855-0714/);
   assert.deepEqual(p.errors, []);
   p.close();
 });

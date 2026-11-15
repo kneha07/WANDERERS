@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: a VOTable that answers a different question (no "collection" column). -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+ <RESOURCE type="results">
+  <INFO name="QUERY_STATUS" value="OK"/>
+  <TABLE>
+   <FIELD name="table_name" datatype="char" arraysize="*"/>
+   <DATA>
+    <TABLEDATA>
+     <TR><TD>spherex.obscore</TD></TR>
+    </TABLEDATA>
+   </DATA>
+  </TABLE>
+ </RESOURCE>
+</VOTABLE>

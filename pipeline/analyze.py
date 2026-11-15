@@ -15,6 +15,14 @@ Science choices, so they can be defended to judges:
   * The spectrum is aperture photometry at the target in every SPHEREx image, each placed
     at the wavelength that image recorded at the target's pixel (from the WCS-WAVE table).
   * Pixels flagged by the SPHEREx pipeline (e.g. saturation) are left out of photometry.
+  * Six-detector view. SPHEREx has six detectors, each covering one slice of 0.75-5.0 um. Besides one co-add per
+    detector and survey visit ("d1".."d6"), the "all" channel stacks the six co-adds of a visit after putting each
+    on the same footing: background subtracted and divided by its own robust noise (median and MAD). So no detector
+    dominates because its sky is brighter, and an object seen by several detectors gains signal-to-noise. It mixes
+    wavelengths, so it is a picture for finding things, never used for the wavelength-matched motion measurement.
+  * Every displayed frame carries its observation metadata (mission, detector, wavelength at the target, dates,
+    images stacked) and a contamination check from the SPHEREx FLAGS planes at the target, ending in a verdict
+    (good / caution / poor) with its reason. Flag names and their meanings are read from each file's own header.
 """
 import json, sys, warnings
 from pathlib import Path
@@ -72,6 +80,312 @@ def bad_mask(flags_hdu, names=BAD_NAMES):
                if k.startswith("MSKN") and str(h[k]).strip() in names)
     return (flags_hdu.data & bits) != 0
 
+
+# ---- contamination metadata at the target ------------------------------------------------------------------
+APERTURE_R = 3.0                      # photometry aperture radius in SPHEREx pixels (photometry(), flags_at())
+SATURATION_FLAG = "OVERFLOW"          # header text: "Overflow detected during SUR"; the pixel's charge overflowed
+INFO_FLAGS = {"SOURCE", "FULLSAMPLE"}  # informational planes (a known source is here; full sample history kept)
+# The SPHEREx detectors and the slice of the spectrum each covers, in um (as labelled on the detector channels).
+DETECTOR_BANDS = {1: (0.75, 1.09), 2: (1.10, 1.62), 3: (1.63, 2.41), 4: (2.42, 3.82), 5: (3.83, 4.41), 6: (4.42, 5.00)}
+DETECTOR_ARRAY = {1: "SWIR", 2: "SWIR", 3: "SWIR", 4: "MWIR", 5: "MWIR", 6: "MWIR"}   # header: "1-3: SWIR, 4-6: MWIR"
+COMBINED = "all"
+COMBINED_LABEL = "All 6 detectors combined (0.75–5.0 µm)"
+MIN_COMBINED_DETECTORS = 2            # a visit seen by one detector only has nothing to combine
+QUALITY_RULES = [
+    "One SPHEREx image is poor when the pixel at the target is saturated (OVERFLOW), blank, outside the image or "
+    "carries a flag that makes a pixel unusable; caution when the target pixel is fine but another pixel within "
+    "3 pixels of the target is flagged or blank (that image is then left out of the spectrum); otherwise good.",
+    "A stacked frame is poor when at least half of its images are poor, or the stacked picture is blank at the "
+    "target; caution when any image is saturated at the target, at least a quarter are poor, at least half have "
+    "flagged or blank pixels within 3 pixels of the target, or an image did not pass the SPHEREx pipeline's own "
+    "quality check (L2DQAFLG); otherwise good. A frame of one image takes that image's verdict.",
+    "The combined frame is poor when at least half of its detector co-adds are poor; caution when any co-add is "
+    "poor, any image is saturated at the target, or at least half of the co-adds need caution; otherwise good.",
+    "WISE and NEOWISE frames come without flag planes here, so only blank pixels and a saturated (blanked) core "
+    "are checked: poor when the core is saturated or the target pixel is blank, caution when a pixel within 3 "
+    "pixels of the target is blank.",
+]
+
+
+def flag_planes(flags_hdu):
+    """{name: (bitmask, description)} for every flag plane named in a SPHEREx FLAGS header
+    (MSKNnnnn = name, MSKMnnnn = bitmask, MSKDnnnn = the pipeline's own description)."""
+    h, out = flags_hdu.header, {}
+    for k in h:
+        if not k.startswith("MSKN"):
+            continue
+        m = h.get("MSKM" + k[4:])
+        if m is None:
+            continue
+        out[str(h[k]).strip()] = (int(m), str(h.get("MSKD" + k[4:], "")).strip())
+    return out
+
+
+def _names(value, planes, skip=INFO_FLAGS):
+    """Flag names whose bit is set in value, in bit order, informational planes left out."""
+    return [n for n, (bit, _) in sorted(planes.items(), key=lambda p: p[1][0]) if value & bit and n not in skip]
+
+
+def _plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def image_quality(flags_hdu, img, x, y, r=APERTURE_R, dqa=None):
+    """Contamination at the target in one SPHEREx image, from its FLAGS plane.
+
+    x, y: the target's pixel position in this image (0-based). Counts use the photometry aperture (r pixels), and
+    'bad' means what photometry() leaves out: a flag from BAD_NAMES, or a blank (non-finite) pixel.
+    dqa: the pipeline's L2 data-quality outcome (header L2DQAFLG), if known."""
+    planes = flag_planes(flags_hdu)
+    d = np.asarray(flags_hdu.data).astype(np.int64)
+    img = np.asarray(img, float)
+    ny, nx = d.shape
+    yy, xx = np.indices(d.shape)
+    ap = np.hypot(xx - x, yy - y) <= r
+    bad_bits = sum(bit for n, (bit, _) in planes.items() if n in BAD_NAMES)
+    any_bits = sum(bit for n, (bit, _) in planes.items() if n not in INFO_FLAGS)
+    bad = ((d & bad_bits) != 0) | ~np.isfinite(img)
+    ix, iy = int(np.floor(x + 0.5)), int(np.floor(y + 0.5))
+    inside = bool(0 <= ix < nx and 0 <= iy < ny)
+    pix = int(d[iy, ix]) if inside else 0
+    sat = bool(inside and SATURATION_FLAG in planes and pix & planes[SATURATION_FLAG][0])
+    q = {"flags_aperture": _names(int(np.bitwise_or.reduce(d[ap])) if ap.any() else 0, planes),
+         "flags_target_pixel": _names(pix, planes), "saturated": sat, "target_in_image": inside,
+         "target_blank": bool(inside and not np.isfinite(img[iy, ix])),
+         "aperture_px": int(ap.sum()), "bad_px_aperture": int((bad & ap).sum()),
+         "flagged_px_aperture": int((((d & any_bits) != 0) & ap).sum()), "dqa": dqa}
+    q["quality"], q["quality_reason"] = image_verdict(q)
+    return q
+
+
+# what image_quality() adds to each row of target.json -> "metadata" (flags_at_target is the older aperture list)
+IMAGE_META_KEYS = ("flags_target_pixel", "saturated", "target_blank", "aperture_px", "bad_px_aperture",
+                   "flagged_px_aperture", "dqa", "quality", "quality_reason")
+
+
+def image_verdict(q):
+    """(verdict, reason) for one SPHEREx image, from image_quality()'s fields. Rules: QUALITY_RULES[0]."""
+    bad_at_pixel = [f for f in q.get("flags_target_pixel", []) if f in BAD_NAMES and f != SATURATION_FLAG]
+    if not q.get("target_in_image", True):
+        return "poor", "The target falls outside this image."
+    if q.get("saturated"):
+        return "poor", "The pixel at the target is saturated (OVERFLOW flag)."
+    if q.get("target_blank"):
+        return "poor", "The pixel at the target is blank (no value)."
+    if bad_at_pixel:
+        return "poor", f"The pixel at the target is flagged {', '.join(bad_at_pixel)}."
+    n, of = q.get("bad_px_aperture", 0), q.get("aperture_px", 0)
+    if n:
+        return "caution", (f"{n} of {of} pixels within 3 pixels of the target {'is' if n == 1 else 'are'} flagged or blank, "
+                           "so this image is left out of the spectrum.")
+    return "good", "No flagged or blank pixel within 3 pixels of the target."
+
+
+def _is(n, one="is", many="are"):
+    return one if n == 1 else many
+
+
+def _why_unusable(poor):
+    """' (1 saturated, 2 flagged)': why the poor images are unusable at the target."""
+    kinds = [("outside the image", lambda q: not q.get("target_in_image", True)), ("saturated", lambda q: q.get("saturated")),
+             ("blank", lambda q: q.get("target_blank")), ("flagged", lambda q: True)]
+    counts = {}
+    for q in poor:
+        k = next(name for name, test in kinds if test(q))
+        counts[k] = counts.get(k, 0) + 1
+    parts = [f"{counts[k]} {k}" for k, _ in kinds if counts.get(k)]
+    return f" ({', '.join(parts)})" if parts else ""
+
+
+def stack_quality(per_image, blank_at_target=False):
+    """Verdict for a frame stacked from several SPHEREx images (QUALITY_RULES[1]), with the counts behind it.
+
+    per_image: image_quality() results of the stacked images. blank_at_target: the stacked picture has no value
+    at the target's position."""
+    n = len(per_image)
+    counts, pix_counts = {}, {}
+    for q in per_image:
+        for f in q.get("flags_aperture", []):
+            counts[f] = counts.get(f, 0) + 1
+        for f in q.get("flags_target_pixel", []):
+            pix_counts[f] = pix_counts.get(f, 0) + 1
+    poor = [q for q in per_image if q.get("quality") == "poor"]
+    sat = sum(bool(q.get("saturated")) for q in per_image)
+    with_bad = sum(q.get("bad_px_aperture", 0) > 0 for q in per_image)
+    dqa_fail = sum(q.get("dqa") not in (None, "Pass") for q in per_image)
+    worst = max(per_image, key=lambda q: (q.get("bad_px_aperture", 0), q.get("aperture_px", 0)), default={})
+    out = {"flags_checked": True, "flag_counts": counts, "pixel_flag_counts": pix_counts, "n_saturated": sat,
+           "aperture_px": worst.get("aperture_px", 0), "bad_px_worst": worst.get("bad_px_aperture", 0),   # the worst image's own counts
+           "images_with_bad_px": with_bad, "n_poor": len(poor), "n_dqa_fail": dqa_fail}
+    of = f"of {_plural(n, 'image')}"
+    unusable = f"{len(poor)} {of} {_is(len(poor))} unusable at the target{_why_unusable(poor)}"
+    if n == 0:
+        out.update(verdict="poor", reason="No SPHEREx image went into this frame.")
+    elif blank_at_target:
+        outside = sum(not q.get("target_in_image", True) for q in per_image)
+        out.update(verdict="poor", reason=("The target falls outside " + ("this image." if n == 1 else f"all {n} images.")
+                                           if outside == n else "The stacked picture is blank at the target."))
+    elif n == 1:                               # one image: its own verdict
+        v, r = per_image[0].get("quality", "good"), per_image[0].get("quality_reason", "")
+        if v == "good" and dqa_fail:
+            v, r = "caution", "The image did not pass the SPHEREx pipeline's own quality check (L2DQAFLG)."
+        out.update(verdict=v, reason=r)
+    elif 2 * len(poor) >= n:
+        out.update(verdict="poor", reason=f"{unusable}.")
+    elif sat:
+        out.update(verdict="caution", reason=f"{sat} {of} {_is(sat)} saturated at the target, so the object is near "
+                                             "the brightest this detector can record.")
+    elif 4 * len(poor) >= n:
+        out.update(verdict="caution", reason=f"{unusable}.")
+    elif 2 * with_bad >= n:
+        out.update(verdict="caution", reason=f"{with_bad} {of} {_is(with_bad, 'has', 'have')} flagged or blank pixels "
+                                             "within 3 pixels of the target.")
+    elif dqa_fail:
+        out.update(verdict="caution", reason=f"{dqa_fail} {of} did not pass the SPHEREx pipeline's own quality check "
+                                             "(L2DQAFLG).")
+    elif poor:
+        out.update(verdict="good", reason=f"{unusable}: fewer than a quarter, the others are clean at the target.")
+    elif with_bad:
+        out.update(verdict="good", reason=f"The target pixel is clean in all {_plural(n, 'image')}; {with_bad} "
+                                          f"{_is(with_bad, 'has', 'have')} a flagged or blank pixel nearby.")
+    else:
+        out.update(verdict="good", reason="No flagged or blank pixel within 3 pixels of the target in "
+                                          f"{'the image' if n == 1 else f'any of the {n} images'}.")
+    return out
+
+
+def combined_quality(det_quality, per_image, blank_at_target=False):
+    """Verdict for the combined frame (QUALITY_RULES[2]) from the verdicts of its detector co-adds
+    ({detector: stack_quality()}), with the flag counts of all its images (per_image)."""
+    out = stack_quality(per_image, blank_at_target)
+    out["detector_verdicts"] = {str(d): q["verdict"] for d, q in sorted(det_quality.items())}
+    nd = len(det_quality)
+    poor = [d for d, q in sorted(det_quality.items()) if q["verdict"] == "poor"]
+    warn = [d for d, q in sorted(det_quality.items()) if q["verdict"] == "caution"]
+    names = lambda ds: ", ".join(f"D{d}" for d in ds)
+    if blank_at_target:
+        verdict, reason = "poor", "The stacked picture is blank at the target."
+    elif nd == 0:
+        verdict, reason = "poor", "No detector co-add went into this frame."
+    elif 2 * len(poor) >= nd:
+        verdict, reason = "poor", f"{len(poor)} of {nd} detector co-adds {_is(len(poor))} poor at the target ({names(poor)})."
+    elif poor:
+        verdict, reason = "caution", (f"Detector co-add {names(poor)} {_is(len(poor))} poor at the target"
+                                      + (f" and {names(warn)} {_is(len(warn), 'needs', 'need')} caution" if warn else "")
+                                      + "; the other detectors are usable.")
+    elif out["n_saturated"]:
+        verdict, reason = "caution", (f"{out['n_saturated']} of {_plural(len(per_image), 'image')} "
+                                      f"{_is(out['n_saturated'])} saturated at the target.")
+    elif 2 * len(warn) >= nd:
+        verdict, reason = "caution", f"{len(warn)} of {nd} detector co-adds need caution ({names(warn)})."
+    elif warn:
+        verdict, reason = "good", f"{len(warn)} of {nd} detector co-adds {_is(len(warn), 'needs', 'need')} caution ({names(warn)}); the rest are good."
+    else:
+        verdict, reason = "good", f"All {nd} detector co-adds are good at the target."
+    out.update(verdict=verdict, reason=reason)
+    return out
+
+
+def wise_quality(img, x, y, saturated_core=False, r=APERTURE_R):
+    """Verdict for a WISE or NEOWISE frame (QUALITY_RULES[3]): no flag planes, so blank pixels only.
+    img: the archive image; x, y: the target there (0-based pixels)."""
+    img = np.asarray(img, float)
+    ny, nx = img.shape
+    yy, xx = np.indices(img.shape)
+    ap = np.hypot(xx - x, yy - y) <= r
+    ix, iy = int(np.floor(x + 0.5)), int(np.floor(y + 0.5))
+    inside = bool(0 <= ix < nx and 0 <= iy < ny)
+    blank = int((~np.isfinite(img) & ap).sum())
+    out = {"flags_checked": False, "flag_counts": None, "pixel_flag_counts": None, "n_saturated": int(bool(saturated_core)),
+           "aperture_px": int(ap.sum()), "bad_px_worst": blank, "images_with_bad_px": None, "n_poor": None, "n_dqa_fail": None}
+    note = " WISE flag images are not used here, so only blank pixels are checked."
+    if not inside:
+        out.update(verdict="poor", reason="The target falls outside this image.")
+    elif saturated_core:
+        out.update(verdict="poor", reason="The star's core is saturated: the archive left it blank, so its position "
+                                          "comes from the centre of the blank hole and its brightness cannot be measured." + note)
+    elif not np.isfinite(img[iy, ix]):
+        out.update(verdict="poor", reason="The pixel at the target is blank (no value)." + note)
+    elif blank:
+        out.update(verdict="caution", reason=f"{blank} of {out['aperture_px']} pixels within 3 pixels of the target "
+                                             f"{'is' if blank == 1 else 'are'} blank." + note)
+    else:
+        out.update(verdict="good", reason="No blank pixel within 3 pixels of the target." + note)
+    return out
+
+
+def robust_scale(img):
+    """(background, noise) of an image: median and 1.4826 x median absolute deviation of its finite pixels.
+    None when there are too few pixels or no spread to divide by."""
+    a = np.asarray(img, float)
+    fin = a[np.isfinite(a)]
+    if fin.size < 20:
+        return None
+    bg = float(np.median(fin))
+    noise = float(1.4826 * np.median(np.abs(fin - bg)))
+    return (bg, noise) if np.isfinite(noise) and noise > 0 else None
+
+
+def combine_detectors(images, min_detectors=MIN_COMBINED_DETECTORS):
+    """Stack per-detector images of one visit into one picture with more signal-to-noise.
+
+    images: {detector: 2D array or None}, all on the same grid. Each image is background-subtracted and divided by
+    its robust noise (robust_scale), so every detector counts in units of its own noise and none dominates because
+    its sky is brighter or its units larger. The normalised images are summed and divided by sqrt(number of detectors
+    with a value at that pixel), so the result is again in noise units: a source seen by several detectors gains.
+    Pixels blank in every detector stay blank. Returns (image or None, [(detector, background, noise)] used)."""
+    used, z = [], []
+    for det in sorted(images):
+        a = images[det]
+        if a is None:
+            continue
+        sc = robust_scale(a)
+        if sc is None:
+            continue
+        used.append((int(det), sc[0], sc[1]))
+        z.append((np.asarray(a, float) - sc[0]) / sc[1])
+    if len(used) < max(1, min_detectors):
+        return None, used
+    Z = np.array(z)
+    n = np.isfinite(Z).sum(axis=0)
+    total = np.nansum(Z, axis=0)
+    return np.where(n > 0, total / np.sqrt(np.maximum(n, 1)), np.nan), used
+
+
+def spherex_obs(sel, detectors=None):
+    """Observation metadata of a frame stacked from SPHEREx images (load_spherex() entries)."""
+    dets = sorted({s["det"] for s in sel}) if detectors is None else list(detectors)
+    lams = [s["lam"] for s in sel if np.isfinite(s.get("lam", np.nan))]
+    mjds = [s["mjd"] for s in sel]
+    one = len(dets) == 1
+    return {"mission": "SPHEREx",
+            "instrument": (f"SPHEREx detector D{dets[0]} ({DETECTOR_ARRAY.get(dets[0], '?')} array)" if one
+                           else f"SPHEREx detectors {', '.join(f'D{d}' for d in dets)}"),
+            "detectors": dets,
+            "band_um": ([DETECTOR_BANDS[dets[0]][0], DETECTOR_BANDS[dets[0]][1]] if one and dets[0] in DETECTOR_BANDS else
+                        [min(DETECTOR_BANDS[d][0] for d in dets), max(DETECTOR_BANDS[d][1] for d in dets)]
+                        if dets and all(d in DETECTOR_BANDS for d in dets) else None),
+            "lam_um": [round(min(lams), 3), round(max(lams), 3)] if lams else None,
+            "lam_note": "wavelength each image recorded at the target's pixel (WCS-WAVE)",
+            "start": Time(min(mjds), format="mjd").iso[:16] if mjds else None,
+            "end": Time(max(mjds), format="mjd").iso[:16] if mjds else None,
+            "time_note": "mid-exposure times of the first and last image, UTC"}
+
+
+def build_combined(det_frames, min_detectors=MIN_COMBINED_DETECTORS):
+    """The combined frame of one survey visit from that visit's per-detector frames {detector: frame}, each with
+    'img' (the detector co-add on the display grid) and '_sel' (its SPHEREx images). None if too few detectors."""
+    img, used = combine_detectors({d: f.get("img") for d, f in det_frames.items()}, min_detectors)
+    if img is None:
+        return None
+    sel = [s for d, _, _ in used for s in det_frames[d]["_sel"]]
+    yr = float(np.mean([s["year"] for s in sel]))
+    return {"year": yr, "label": f"SPHEREx {Time(yr, format='jyear').datetime:%b %Y}", "mission": "SPHEREx",
+            "png": None, "img": img, "n_images": len(sel), "detectors": [d for d, _, _ in used],
+            "normalisation": [{"det": d, "n_images": len(det_frames[d]["_sel"]), "background": float(f"{bg:.4g}"),
+                               "noise": float(f"{nz:.4g}")} for d, bg, nz in used],
+            "_sel": sel, "_parts": {d: det_frames[d] for d, _, _ in used}}
+
 # Molecular absorption bands that matter for cold objects in SPHEREx's range (microns).
 BANDS = [
     {"name": "H2O", "lo": 1.30, "hi": 1.50}, {"name": "H2O", "lo": 1.75, "hi": 2.05},
@@ -125,9 +439,28 @@ def load_spherex(tid, ref):
         except Exception:
             lam = np.nan
         det = int(hd.get("DETECTOR", 0))
+        dqa = hd.get("L2DQAFLG")
         out.append(dict(file=f, mjd=float(mjd), year=yr, det=det, lam=lam, x=float(x), y=float(y),
-                        sr=pixel_sr(w, float(x), float(y)), bunit=hd.get("BUNIT", "")))
+                        sr=pixel_sr(w, float(x), float(y)), bunit=hd.get("BUNIT", ""),
+                        q=image_quality(h["FLAGS"], h["IMAGE"].data, float(x), float(y),
+                                        dqa=str(dqa).strip() if dqa is not None else None),
+                        planes=flag_planes(h["FLAGS"])))
     return out
+
+
+def flag_legend(spx):
+    """Every flag plane the SPHEREx headers define, with the header's own description, whether it makes a pixel
+    unusable (BAD_NAMES) or is hidden in the pictures (DISPLAY_BAD), and in how many images it touches the target."""
+    planes = {}
+    for s in spx:
+        for name, (bit, desc) in s.get("planes", {}).items():
+            planes.setdefault(name, (bit, desc))
+    n_ap = {n: sum(n in s["q"]["flags_aperture"] for s in spx) for n in planes}
+    n_px = {n: sum(n in s["q"]["flags_target_pixel"] for s in spx) for n in planes}
+    return [{"name": n, "bit": int(bit).bit_length() - 1, "description": desc, "bad": n in BAD_NAMES,
+             "informational": n in INFO_FLAGS, "hidden_in_pictures": n in DISPLAY_BAD,
+             "images_aperture": n_ap[n], "images_target_pixel": n_px[n]}
+            for n, (bit, desc) in sorted(planes.items(), key=lambda p: p[1][0])]
 
 
 def flags_at(flags_hdu, x, y, r=3.0):
@@ -135,7 +468,8 @@ def flags_at(flags_hdu, x, y, r=3.0):
     h, d = flags_hdu.header, flags_hdu.data
     yy, xx = np.indices(d.shape)
     v = int(np.bitwise_or.reduce(d[np.hypot(xx - x, yy - y) <= r].astype(np.int64))) if d.size else 0
-    return [str(h[k]).strip() for k in h if k.startswith("MSKN") and v & int(h[k.replace("MSKN", "MSKM")]) and str(h[k]).strip() != "SOURCE"]
+    return [str(h[k]).strip() for k in h if k.startswith("MSKN") and v & int(h[k.replace("MSKN", "MSKM")])
+            and str(h[k]).strip() not in INFO_FLAGS]
 
 
 def photometry(img, bad, x, y, r=3.0, r_in=5.0, r_out=8.0):
@@ -340,6 +674,57 @@ def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=(), pat
     return movers
 
 
+def _iso(s):
+    """'2010-05-03T08:45:24.456' -> '2010-05-03 08:45' (minutes, like the per-image dates); None stays None."""
+    return str(s).replace("T", " ")[:16] if s else None
+
+
+def describe_frame(f, ch, gw, ref, wise_lam=None):
+    """Add 'obs' (mission, instrument, detectors, wavelength at the target, dates) and 'quality' (contamination at
+    the target and a good / caution / poor verdict with its reason) to one displayed frame. Reads the frame's
+    internal keys: '_sel' (its SPHEREx images), 'img' or '_img' (the stacked picture), '_native' and '_header'."""
+    def blank_at_target(fr):
+        img = fr["img"] if fr.get("img") is not None else fr.get("_img")
+        if img is None:
+            return False
+        px, py = gw.world_to_pixel(predict(ref, fr["year"]))
+        ix, iy = int(np.floor(float(px) + .5)), int(np.floor(float(py) + .5))
+        return bool(0 <= iy < img.shape[0] and 0 <= ix < img.shape[1] and not np.isfinite(img[iy, ix]))
+    if f["mission"] == "SPHEREx":
+        sel = f.get("_sel") or []
+        f["obs"] = spherex_obs(sel, f.get("detectors"))
+        if f.get("_parts"):                   # the combined frame: judged by its detector co-adds
+            det_q = {d: stack_quality([s["q"] for s in pf.get("_sel") or []], blank_at_target(pf))
+                     for d, pf in f["_parts"].items()}
+            f["quality"] = combined_quality(det_q, [s["q"] for s in sel], blank_at_target(f))
+        else:
+            f["quality"] = stack_quality([s["q"] for s in sel], blank_at_target(f))
+        return f
+    hdr, band = f.get("_header"), f.get("_band", ch.upper())
+    get = (lambda k: hdr.get(k)) if hdr is not None else (lambda k: None)
+    if f["mission"] == "WISE":
+        start, end = _iso(get("DATEOBS1")), _iso(get("DATEOBS2"))
+        inst, note = f"WISE {band} band · AllWISE atlas image", "earliest and latest WISE frame of this atlas tile, UTC"
+    else:
+        mjd = get("MJD-OBS")
+        start = end = Time(float(mjd), format="mjd").iso[:16] if mjd is not None else None
+        inst, note = f"WISE {band} band · NEOWISE-R exposures stacked by WANDERERS", "mean time of the stacked exposures, UTC"
+    f["obs"] = {"mission": f["mission"], "instrument": inst, "detectors": None, "band_um": None,
+                "lam_um": [round(wise_lam, 3), round(wise_lam, 3)] if wise_lam else None,
+                "lam_note": "effective wavelength of the WISE band (AllWISE header)",
+                "start": start, "end": end, "time_note": note}
+    if f.get("_native") is not None:
+        data, wcs = f["_native"]
+        x, y = wcs.world_to_pixel(predict(ref, f["year"]))
+        f["quality"] = wise_quality(data, float(x), float(y), bool(f.get("saturated_core")))
+    return f
+
+
+def public(f):
+    """A frame as saved in target.json: without the picture and the internal '_' keys."""
+    return {k: v for k, v in f.items() if k != "img" and not k.startswith("_")}
+
+
 def analyze(tid):
     global NPIX
     t = TARGETS[tid]
@@ -377,11 +762,12 @@ def analyze(tid):
     }
     # Each SPHEREx detector covers one slice of the spectrum; adding all of a detector's images from a survey
     # together raises the signal-to-noise (suggested in the challenge brief).
-    for k, (lo, hi) in enumerate([(0.75, 1.09), (1.10, 1.62), (1.63, 2.41), (2.42, 3.82), (3.83, 4.41), (4.42, 5.00)], 1):
+    for k, (lo, hi) in DETECTOR_BANDS.items():
         channels[f"d{k}"] = {"label": f"Detector {k} · {lo}–{hi} µm co-add", "wise": None, "slices": False,
                              "spx": (lambda kk: (lambda s: s["det"] == kk))(k)}
     frames = {}      # one frame per epoch (WISE, each SPHEREx survey): used for measurements
     flip = {}        # what the flipbook plays: WISE, then short time slices inside each survey
+    # Keys starting with "_" hold what the metadata step needs (the stacked images, the archive image); never saved.
     for ch, spec in channels.items():
         frames[ch], flip[ch] = [], []
         wf = CACHE / tid / spec["wise"] if spec["wise"] else None
@@ -389,7 +775,8 @@ def analyze(tid):
             h = fits.open(wf)[0]
             img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(npix, npix))
             name = f"{ch}_wise2010.png"; save_png(img, out / name)
-            fr = {"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name, "img": img}
+            fr = {"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name, "img": img,
+                  "_native": (h.data, WCS(h.header).celestial), "_header": h.header, "_band": ch.upper()}
             frames[ch].append(fr); flip[ch].append(fr)
         # NEOWISE: one stacked image per sky visit, Dec 2013 - 2024, same band (pipeline/neowise.py)
         band = {"w2": "w2", "w1": "w1"}.get(ch)
@@ -401,7 +788,8 @@ def analyze(tid):
             yr = float(Time(h.header["MJD-OBS"], format="mjd").jyear)
             name = f"{ch}_neowise_{nf.stem.split('_')[1]}.png"; save_png(img, out / name)
             fr = {"year": yr, "label": f"NEOWISE {Time(yr, format='jyear').datetime:%b %Y}", "mission": "NEOWISE",
-                  "png": name, "img": img, "n_images": int(h.header.get("NFRAMES", 0))}
+                  "png": name, "img": img, "n_images": int(h.header.get("NFRAMES", 0)),
+                  "_native": (h.data, WCS(h.header).celestial), "_header": h.header, "_band": ch.upper()}
             frames[ch].append(fr); flip[ch].append(fr)
         for i, v in enumerate(visits):
             sel = sorted([s for s in spx if visit_of(s["year"]) == i and spec["spx"](s)], key=lambda s: s["year"])
@@ -418,7 +806,7 @@ def analyze(tid):
             yr = float(np.mean([s["year"] for s in sel]))
             name = f"{ch}_spherex_v{i + 1}.png"; save_png(img, out / name)
             vf = {"year": yr, "label": f"SPHEREx {Time(yr, format='jyear').datetime:%b %Y}",
-                  "mission": "SPHEREx", "png": name, "img": img, "n_images": len(sel)}
+                  "mission": "SPHEREx", "png": name, "img": img, "n_images": len(sel), "_sel": sel, "_visit": i}
             frames[ch].append(vf)
             # Time slices: images taken within ~1.5 days of each other become one flipbook frame.
             groups, g = [], [0]
@@ -433,7 +821,22 @@ def analyze(tid):
                 sname = f"{ch}_spherex_v{i + 1}_{j + 1}.png"; save_png(sub, out / sname)
                 flip[ch].append({"year": sy, "label": f"SPHEREx {Time(sy, format='jyear').datetime:%d %b %Y}",
                                  "mission": "SPHEREx", "png": sname, "img": None, "n_images": len(gi),
-                                 "survey": i + 1})
+                                 "survey": i + 1, "_sel": [sel[k] for k in gi], "_img": sub})
+
+    # ---- all six detectors of a visit combined (noise-normalised stack, see combine_detectors) ---------------
+    frames[COMBINED], flip[COMBINED] = [], []
+    for i in range(len(visits)):
+        per_det = {k: f for k in DETECTOR_BANDS for f in frames.get(f"d{k}", []) if f.get("_visit") == i}
+        cf = build_combined(per_det)
+        if cf is None:
+            continue
+        cf["png"] = f"{COMBINED}_spherex_v{i + 1}.png"; save_png(cf["img"], out / cf["png"])
+        cf["_visit"] = i
+        px, py = gw.world_to_pixel(predict(ref, cf["year"]))
+        snr = detection_snr(cf["img"], float(px), float(py), 4.0)   # same rule as the 3.4 and 4.6 µm SPHEREx frames
+        cf["detected"], cf["snr"] = snr >= 5, round(snr, 1)
+        frames[COMBINED].append(cf); flip[COMBINED].append(cf)
+    channels[COMBINED] = {"label": COMBINED_LABEL}
 
     # ---- difference image between the two SPHEREx visits (same instrument, same band) ----
     for ch in list(frames):
@@ -534,7 +937,8 @@ def analyze(tid):
         flux, nbad = photometry(im_, bad_, s["x"], s["y"])
         images_meta.append({"image": s["file"].stem, "date": Time(s["mjd"], format="mjd").iso[:16], "detector": s["det"],
                             "lam_um": round(s["lam"], 3) if np.isfinite(s["lam"]) else None,
-                            "flags_at_target": flags_at(h["FLAGS"], s["x"], s["y"]), "used_in_spectrum": nbad == 0})
+                            "flags_at_target": flags_at(h["FLAGS"], s["x"], s["y"]), "used_in_spectrum": nbad == 0,
+                            **{k: s["q"][k] for k in IMAGE_META_KEYS}})
         if np.isfinite(flux) and np.isfinite(s["lam"]):
             # MJy/sr summed over pixels -> mJy
             pts.append({"lam": round(s["lam"], 4), "flux_mjy": flux * s["sr"] * 1e9, "year": s["year"],
@@ -590,6 +994,19 @@ def analyze(tid):
             color["ratio"] = f40 / max(3 * e33, 1e-6)
             color["lower_limit"] = True
 
+    # ---- observation metadata and contamination check for every displayed frame ----------
+    wise_lam = {}                  # effective wavelength of each WISE band, from the AllWISE header (NEOWISE: same band)
+    for ch in ("w1", "w2"):
+        f0 = next((f for f in frames.get(ch, []) if f["mission"] == "WISE"), None)
+        if f0 is not None and f0["_header"].get("WAVELEN") is not None:
+            wise_lam[ch] = float(f0["_header"]["WAVELEN"])
+    for ch in flip:
+        seen = {}
+        for f in flip[ch] + frames.get(ch, []):
+            seen[id(f)] = f
+        for f in seen.values():
+            describe_frame(f, ch, gw, ref, wise_lam.get(ch))
+
     # ---- Gaia ghosts: where every catalogued star should be in each frame -----------------
     ghosts = {}
     for ch in flip:
@@ -611,20 +1028,26 @@ def analyze(tid):
         "id": tid, "name": t["name"], "kind": t["kind"], "story": t["story"],
         "reference": ref, "target_in_gaia": target_in_gaia,
         "grid": {"npix": NPIX, "arcsec_per_pix": GRID_PIX, "centre_ra": mid.ra.deg, "centre_dec": mid.dec.deg},
-        "frames": {ch: [{k: v for k, v in f.items() if k != "img"} for f in flip[ch]] for ch in flip if flip[ch]},
+        "frames": {ch: [public(f) for f in flip[ch]] for ch in flip if flip[ch]},
         "channels": {ch: channels[ch]["label"] for ch in flip if flip[ch]},
-        "stacks": {ch: [{k: v for k, v in f.items() if k != "img"} for f in frames[ch]]
-                   for ch in ("w2", "w1") if ch in frames},
+        "stacks": {ch: [public(f) for f in frames[ch]] for ch in ("w2", "w1") if ch in frames},
         "diff": {ch: frames.get(ch + "_diff") for ch in flip},
         "fov_arcsec": NPIX * GRID_PIX,
         "metadata": images_meta,
+        "flag_legend": flag_legend(spx), "quality_rules": QUALITY_RULES,
+        "detector_bands": {str(k): list(v) for k, v in DETECTOR_BANDS.items()},
+        "combined": {"channel": COMBINED, "label": COMBINED_LABEL, "min_detectors": MIN_COMBINED_DETECTORS,
+                     "method": "Each detector's co-add of a visit is background-subtracted and divided by its own robust "
+                               "noise (median and 1.4826 x MAD); the co-adds are then summed and divided by the square root "
+                               "of their number, so the picture is in units of the noise and no detector dominates. It "
+                               "mixes wavelengths, so motion is still measured at 3.4 and 4.6 µm only."},
         "ghosts": ghosts, "track": track, "motion": motion, "movers_experimental": movers,
         "spectrum": spectrum, "spectrum_points": len(pts), "flagged_points": len(pts) - len(good),
         "variability": variability, "ir_color": color, "bands": BANDS,
         "spherex_visits": [{"year": y, "n_images": len(v)} for y, v in zip(vyear, visits)],
     }
     (out / "target.json").write_text(json.dumps(result, indent=1, default=float))
-    print(f"   flipbook frames: {[(ch, len(flip.get(ch, []))) for ch in ('w2', 'w1')]}  spectrum bins: {len(spectrum)} "
+    print(f"   flipbook frames: {[(ch, len(flip.get(ch, []))) for ch in ('w2', 'w1', COMBINED)]}  spectrum bins: {len(spectrum)} "
           f"(points {len(pts)}, flagged {len(pts) - len(good)})", flush=True)
     if motion:
         print(f"   motion: measured {motion['measured_arcsec_per_yr']:.2f}\"/yr vs expected "
