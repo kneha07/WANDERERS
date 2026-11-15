@@ -88,6 +88,37 @@ The heading is weak when the photo points within about 15 deg of the zenith (pho
 
 What gives the longitude: the date plus the UTC offset of the 7 pm time. Then the LST error of about +-0.5 h gives about +-7 deg of longitude.
 
+## 2c. Adding the date and time zone (owner input: mid-June, GMT+10, no compass)
+
+UTC of the photos = 19:00 - 10 h = 09:00 UTC on about 15 June. GMST then = 2.58 h. Longitude = 15 x (LST - GMST).
+
+| Source | Longitude |
+|---|---|
+| Photos 2 + 3, glow "up" | 126 E (68 %: 119-133 E) |
+| Photos 2 + 3, "up = image top" | 133 E |
+| Photos 1 + 4, glow "up" | 111 E. **Rejected:** to match the zone it needs the sun above the horizon. |
+| GMT+10 land in the south (QLD, NSW, ACT, VIC, TAS) | 141-154 E |
+
+Joint fit (`artifacts/star-fix/fix.py`): for each candidate place on a 1-deg grid, predict the "up" direction in each photo and compare it with the glow (+-15 deg).
+
+| Model | Best place | Best place inside 141-154 E |
+|---|---|---|
+| Glow "up" | 53 S, 124 E (good fit) | 42 S, 141 E (poor fit, about 3 sigma) |
+| "Up = image top" | 35 S, 131 E (68 %: 15-47 S, 122-142 E) | 27 S, 141 E (inside the 68 % region) |
+
+The stars and the time zone disagree by about 1-1.5 h of sidereal time (15-25 deg of longitude).
+`artifacts/star-fix/clock.py` shows that photos 2 + 3 match 145-151 E if the photos were taken at **17:45-18:10**, not 19:00.
+The sun is then 7-12 deg below the horizon (nautical twilight). This fits the blue sky in photos 2 and 3.
+
+Best combined estimate: **south-eastern Australia, latitude about 35 S (+-8 deg)**. The time zone sets the longitude. The stars set the hemisphere and the latitude.
+
+Lessons for the app:
+
+1. The time must be exact. Each 30 min of clock error moves the longitude by 7.5 deg. Read the time from the photo metadata, not from user memory.
+2. Sky-glow "up" is the weakest input: about +-10 deg of latitude and up to 25 deg of sidereal-time bias. A compass heading and a tilt reading at the shutter would fix this.
+3. Use the time zone as a check. If the star longitude falls outside the zone, show "the photo time may be wrong" and solve for the time instead.
+4. Two photos that point the same way (photos 1 and 4) give almost parallel lines. Ask for photos in two different directions.
+
 ## 3. Options
 
 | Option | Time from | "Up" from | Expected error | Risk |
