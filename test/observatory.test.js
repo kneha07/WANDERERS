@@ -367,10 +367,15 @@ test("What else moved shows with the time-lapse only", async (t) => {
 });
 
 test("a channel with one frame: no blink, compare, stack or difference", async (t) => {
-  const p = open("?target=eps_indi_b&ch=d2");
+  // Since Quick Release 3 no committed channel has a single frame, so keep only eps Ind B's first D2 frame here
+  // (analyze.py writes no difference image for a channel with one frame).
+  const real = JSON.parse(JSON.stringify(require("../app/data/eps_indi_b/target.json")));
+  real.frames.d2 = real.frames.d2.slice(0, 1);
+  real.diff.d2 = null;
+  const p = open("?target=eps_indi_b&ch=d2", { files: { "data/eps_indi_b/target.json": real } });
   t.after(p.close);
   await p.settle(200);
-  assert.equal(require("../app/data/eps_indi_b/target.json").frames.d2.length, 1);
+  assert.equal(real.frames.d2.length, 1);
   for (const id of ["play", "frame", "mOp", "mA", "mB", "mixMode", "stackAll", "tDiff"]) assert.equal(p.$(id).disabled, true, id);
   assert.match(p.$("frameLbl").textContent, /only one frame/);
   p.key(p.document.body, " ");

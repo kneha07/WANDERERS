@@ -692,6 +692,7 @@ images every week). Which releases exist, and how recent our prepared targets ar
   plus the `WCS-WAVE` table. The cutouts are byte-for-byte the same as IRSA's (same extensions, header cards, pixel
   offsets and pixels; checked against 21 cached IRSA cutouts). The search is saved as
   `data/cache/<target>/<release>_s3.json`, which counts as "searched" here when the index covered every week folder.
+  `python pipeline/fetch.py --s3 <ids>` takes this path without asking IRSA first (useful while IRSA flickers).
 
 The explorer and the home page show this as one line, for example *SPHEREx Quick Release 3 · data through Sep 2026 ·
 last synced 15 Nov 2026 · checked 15 Nov 2026*, with a short note when new data is available (`app/release.js`; the
