@@ -222,10 +222,20 @@
     DEEP.last = null; DEEP.op = null; NOTE = ""; note();              // the next frame sets the photographs' opacity
   }
   let NOTE = "";
+  // The note always names what is on screen. Zoomed in, it names the survey, says it is an archive photograph,
+  // and says when the direction is only approximate (no sight check, no snap to a target).
   function note() {
-    const F = C.F, pt = SkyView.pointing({ haveSensor: C.S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
+    const F = C.F, S = C.S, t = scope(), pt = SkyView.pointing({ haveSensor: S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
     const state = R.sky === "deep" && DEEP.state === "loading" ? "Loading sky photographs… " : R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "";
-    const text = [R.msg, state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky], pt.text].filter(Boolean).join(" · ");
+    const scoped = t > 0 && DEEP.state === "ready";
+    const text = [R.msg,
+      scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
+        : state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky],
+      scoped && S.sensors && !F.compassFrozen && !S.snapped && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
+      S.hold && "View held. Drag to move. Pinch out to follow the phone again.",
+      t > 0 && navigator.onLine === false && "No connection: no finer photographs.",
+      t > 0 && DEEP.failed && "Telescope photographs are not reachable now.",
+      pt.text].filter(Boolean).join(" · ");
     const key = text + pt.needsCal;
     if (key === NOTE) return;
     NOTE = key;
