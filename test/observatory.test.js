@@ -308,6 +308,7 @@ test("a star found by name: heading, evidence, Webb and the path follow it; Time
   p.$("tabFlip").onclick();                                    // back to the time-lapse: Barnard's Star again, with its own path
   await p.settle(300);
   assert.equal(p.$("tName").textContent, nameOf("barnard"));
+  assert.equal(p.$("starCard").hidden, true, "the Vega card goes with the subject");
   assert.match(p.$("verdict").innerHTML, /KNOWN OBJECT|CANDIDATE/);
   assert.match(p.$("pathBody").innerHTML, /hip87937/);
   await nameSearch(p, "Vega");
