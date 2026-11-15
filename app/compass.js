@@ -353,15 +353,17 @@ function draw() {
   // the real sky: Eye stars, constellation lines and planets; Deep keeps the photographs lined up (realsky.js)
   RealSky.draw(g, P, f, W, H, now, L);
 
-  // altitude rings and azimuth lines
+  // altitude rings and azimuth lines (above 6x they are left out: drawn as 5 deg chords they would be visibly wrong)
   const poly = (pts, style, w, dash) => {
     g.strokeStyle = style; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath();
     let on = false;
     for (const v of pts) { const q = proj(v); if (!q) { on = false; continue; } on ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); on = true; }
     g.stroke(); g.setLineDash([]);
   };
-  for (const alt of [30, 60]) poly(Array.from({ length: 73 }, (_, i) => vec(i * 5, alt)), "rgba(108,196,255,.18)", 1);
-  for (let az = 0; az < 360; az += 30) poly(Array.from({ length: 19 }, (_, i) => vec(az, -5 + i * 5)), "rgba(108,196,255,.12)", 1);
+  if (S.zoom <= 6) {
+    for (const alt of [30, 60]) poly(Array.from({ length: 73 }, (_, i) => vec(i * 5, alt)), "rgba(108,196,255,.18)", 1);
+    for (let az = 0; az < 360; az += 30) poly(Array.from({ length: 19 }, (_, i) => vec(az, -5 + i * 5)), "rgba(108,196,255,.12)", 1);
+  }
   poly(Array.from({ length: 145 }, (_, i) => vec(i * 2.5, 0)), "rgba(255,255,255,.7)", 1.5);
   g.font = "600 13px 'JetBrains Mono', monospace"; g.textAlign = "center"; g.textBaseline = "bottom";
   for (let az = 0; az < 360; az += 45) {

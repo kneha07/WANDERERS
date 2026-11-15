@@ -32,10 +32,11 @@ function fakeElement(id) {
     querySelector() { return this.querySelectorAll("button")[0] || null; },
     setAttribute() {}, removeAttribute() {}, focus() {}, blur() {},
     setPointerCapture() {}, play: () => Promise.resolve(), remove() {}, appendChild() {},
-    texts: [],   // canvas fillText calls: [text, x, y]
+    texts: [], strokes: [],   // canvas fillText calls: [text, x, y]; every strokeStyle set
     getContext() {
-      const texts = this.texts, base = { fillText: (t, x, y) => texts.push([String(t), x, y]), measureText: (t) => ({ width: String(t).length * 7 }) };
-      return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })), set: (t, k, v) => ((t[k] = v), true) });
+      const texts = this.texts, strokes = this.strokes, base = { fillText: (t, x, y) => texts.push([String(t), x, y]), measureText: (t) => ({ width: String(t).length * 7 }) };
+      return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })),
+        set: (t, k, v) => { if (k === "strokeStyle") strokes.push(v); t[k] = v; return true; } });
     },
   };
 }
@@ -338,6 +339,20 @@ test("from 8x a dragged or held view turns with the sky, so a star stays in the 
   c.$("hud").dispatch("pointermove", { pointerId: 1, clientX: 200, clientY: 400 });
   assert.ok(apart(c.S.manual, start) > 1, `the view turned ${apart(c.S.manual, start).toFixed(2)} deg with the sky`);
   assert.ok(apart(c.S.manual, seen()) < 0.01, `${apart(c.S.manual, seen()).toFixed(4)} deg from Capella after 10 minutes`);
+});
+
+test("above 6x the altitude rings and azimuth lines are left out; the horizon line stays", async () => {
+  const c = loadCompass({ intro: "fail", search: "?debug=1" });
+  await c.$("go").onclick();
+  const strokes = () => { c.$("hud").strokes.length = 0; c.frame(); return c.$("hud").strokes; };
+  const RING = "rgba(108,196,255,.18)", AZ_LINE = "rgba(108,196,255,.12)", HORIZON = "rgba(255,255,255,.7)";
+  assert.ok(strokes().includes(RING), "rings at 1x");
+  c.setZoom(6);
+  assert.ok(strokes().includes(AZ_LINE), "still drawn at 6x");
+  c.setZoom(12);
+  const s = strokes();
+  assert.ok(!s.includes(RING) && !s.includes(AZ_LINE), "no rings or azimuth lines at 12x");
+  assert.ok(s.includes(HORIZON), "the horizon line stays");
 });
 
 test("location note: a later GPS timeout does not claim the location was declined", async () => {
