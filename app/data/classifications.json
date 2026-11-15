@@ -15,16 +15,39 @@
   "unknown_class": 0,
   "unknown_id": 0
  },
- "issues_read": 0,
+ "issues_read": 1,
  "label": "classification",
- "last_issue": 0,
- "last_vote": null,
+ "last_issue": 70,
+ "last_vote": "2026-11-15T18:16:26Z",
  "min_agreement": 0.6,
  "min_voters": 3,
- "objects": {},
+ "objects": {
+  "rw_aur": {
+   "agreement": 1.0,
+   "consensus": null,
+   "counts": {
+    "artifact": 0,
+    "moving": 1,
+    "stationary": 0,
+    "unsure": 0,
+    "variable": 0
+   },
+   "kind": "target",
+   "last_vote": "2026-11-15T18:16:26Z",
+   "voters": 1,
+   "votes": [
+    {
+     "at": "2026-11-15T18:16:26Z",
+     "class": "moving",
+     "issue": 70,
+     "user": "rajryadav4"
+    }
+   ]
+  }
+ },
  "replaced": 0,
  "repo": "kneha07/WANDERERS",
  "schema": 1,
  "template": ".github/ISSUE_TEMPLATE/classification.yml",
- "votes_counted": 0
+ "votes_counted": 1
 }
