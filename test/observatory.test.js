@@ -88,7 +88,7 @@ test("?ch= only picks a channel the target really has frames in", async () => {
     assert.deepEqual(p.errors, [], ch);
     const n = require("../app/data/barnard/target.json").frames[want].length;
     assert.match(p.$("frameLbl").textContent, new RegExp(`^1/${n} `), ch);
-    assert.match(p.$("channels").innerHTML, new RegExp(`data-ch="${want}" class="on"`), ch);
+    assert.match(p.$("channels").innerHTML + p.$("detPick").innerHTML, new RegExp(`data-ch="${want}" class="on"`), ch);   // D1-D6 sit in the detector switch
     p.close();
   }
 });
