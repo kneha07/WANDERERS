@@ -90,8 +90,9 @@ class FakeLocation {
   toString() { return this.u.href; }
 }
 
-/* open("observatory.html", "?target=barnard", { delays: { "r_dra/target.json": 300 }, scripts: [...] })
- * delays: substring of a fetched/loaded URL -> milliseconds, or a function (url, nth call) -> milliseconds. */
+/* open("observatory.html", "?target=barnard", { delays: { "r_dra/target.json": 300 }, files: { "data/index.json": [...] } })
+ * delays: substring of a fetched/loaded URL -> milliseconds, or a function (url, nth call) -> milliseconds.
+ * files: path under app/ -> JSON to serve instead of the real file. api(url, init): answers for /api/ calls. */
 function openPage(page, query = "", opts = {}) {
   const html = fs.readFileSync(path.join(APP, page), "utf8");
   const doc = { badDraws: [], activeElement: null };
@@ -140,6 +141,8 @@ function openPage(page, query = "", opts = {}) {
           return r ? resolve(r) : resolve({ ok: false, status: 404, json: async () => ({ error: "not found" }), text: async () => "not found" });
         }
         if (u.origin !== location.origin) return reject(new TypeError("Failed to fetch"));
+        const given = opts.files && opts.files[u.pathname.slice(1)];   // { "data/index.json": {...} } replaces a file
+        if (given !== undefined) return resolve({ ok: true, status: 200, json: async () => structuredClone(given), text: async () => JSON.stringify(given) });
         const f = fileOf(url);
         if (!fs.existsSync(f) || fs.statSync(f).isDirectory())
           return resolve({ ok: false, status: 404, json: async () => { throw new SyntaxError("Unexpected token '<'"); }, text: async () => "not found" });

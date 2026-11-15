@@ -73,3 +73,47 @@ test("?ch= only picks a channel the target really has frames in", async () => {
     p.close();
   }
 });
+
+// ---------- the coordinate box ----------
+function typeCoords(p, ra, dec) {
+  p.$("raIn").value = ra; p.$("decIn").value = dec;
+  p.$("coordForm").onsubmit({ preventDefault() {} });
+  return p.$("coordMsg").textContent;
+}
+
+test("coordinates: hours, degrees and the Star database's own format all read the same way", async () => {
+  const p = open("?target=barnard");
+  await p.settle(150);
+  const cases = [
+    [["08h55m10.831s", "-07d14m42.53s"], /Matched WISE 0855/],
+    [["133.795", "-7.245"], /Matched WISE 0855/],
+    [["08h 55m 10.83s", "−07° 14′ 42.5″"], /Matched WISE 0855/],      // copied from the Star database card (Unicode minus and primes)
+    [["17h 57m 48.50s", "+04° 41′ 36.2″"], /Matched Barnard/],
+    [["17 57 48.5", "+04 41 36"], /Matched Barnard/],                  // sexagesimal RA without letters is hours
+    [["12:30:00", "-45:00:00"], /--ra 187\.50000 --dec -45\.00000/],
+    [["12 30 00", "-45 00 00"], /--ra 187\.50000 --dec -45\.00000/],
+    [["24h00m00s", "0"], /--ra 0\.00000 --dec 0\.00000/],              // 24h is 0h
+    [["0", "-90"], /--ra 0\.00000 --dec -90\.00000/],
+    [["359.9999", "89.9"], /--ra 359\.99990 --dec 89\.90000/],
+  ];
+  for (const [[ra, dec], want] of cases) assert.match(typeCoords(p, ra, dec), want, `${ra} ${dec}`);
+  p.close();
+});
+
+test("coordinates: impossible positions are refused instead of searched", async () => {
+  const p = open("?target=barnard");
+  await p.settle(150);
+  for (const [ra, dec] of [["10", "95"], ["10", "-90.5"], ["1e5", "1e5"], ["400", "0"], ["-0.5", "0"], ["25h", "0"]])
+    assert.match(typeCoords(p, ra, dec), /RA runs from 0 to 360/, `${ra} ${dec}`);
+  for (const [ra, dec] of [["", ""], ["abc", "def"], ["12", ""], ["12 30 00 -45 00 00", "0"]])
+    assert.equal(typeCoords(p, ra, dec), "Could not read those coordinates.", `${ra} ${dec}`);
+  p.close();
+});
+
+test("coordinates: a target just across RA 0h is still matched", async () => {
+  const files = { "data/index.json": [{ id: "barnard", name: "Near zero", teaser: "", ra: 359.998, dec: 10, fov: 300 }] };
+  const p = open("?target=barnard", { files });
+  await p.settle(150);
+  assert.match(typeCoords(p, "0.002", "10"), /Matched Near zero \(14″ away\)/);
+  p.close();
+});
