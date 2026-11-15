@@ -1,6 +1,6 @@
 # Star Fix: find your position from a photo of the sky
 
-Status: design evaluation, 2026-11-14. Nothing is built yet.
+Status: design evaluation, 2026-11-14. Nothing is built yet. Tracking: [kneha07/WANDERERS#39](https://github.com/kneha07/WANDERERS/issues/39). Related risk: #27 (the star-predict spawn uses the wrong Python lookup on Windows).
 
 ## 1. What a position fix needs
 
