@@ -2,7 +2,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import { labelRange, monthTicks } from './data'
-import type { Result } from './data'
+import type { GaiaStar, Result } from './data'
 import { skyToPixel } from './sky'
 import type { RaDec } from './sky'
 
@@ -23,10 +23,11 @@ type StageProps = {
   bri: number
   con: number
   ring: boolean
-  gaia: boolean
+  ghosts: GaiaStar[] // the Gaia stars to draw (none when the overlay is off)
   cross: boolean
   marks: RaDec[]
   loading: boolean
+  stage: 'resolve' | 'frames' // what the load waits for: the name lookup, then the images
   elapsed: number
   query: string
   onMark: (x: number, y: number) => void
@@ -89,13 +90,12 @@ export function Stage(p: StageProps) {
       {src && glow && <img className="sky glow" src={src} alt="" aria-hidden="true" />}
       {r && (
         <svg viewBox={`0 0 ${n} ${n}`} aria-hidden="true">
-          {p.gaia &&
-            r.gaia?.stars.map((s) => {
+          {p.ghosts.map((s) => {
               const xy = s.xy[at]
               // Faint Gaia stars fade, so the bright ones that SPHEREx sees stand out (display only).
               const o = s.gmag == null ? 1 : Math.min(1, Math.max(0.3, (20 - s.gmag) / 5))
               return xy && <circle key={s.source_id} className="ghost" cx={xy[0]} cy={xy[1]} r={1.4} opacity={o} />
-            })}
+          })}
           {p.ring && ring && <circle className="ring" cx={ring.x} cy={ring.y} r={2.6} />}
           {p.cross && <path className="cross" d={`M${n / 2 - 3} ${n / 2}h2m2 0h2M${n / 2} ${n / 2 - 3}v2m0 2v2`} />}
           {p.marks.map((m, k) => {
@@ -115,8 +115,10 @@ export function Stage(p: StageProps) {
       {p.loading && (
         <p className="indicator" role="status">
           <span>
-            Fetching SPHEREx images of {p.query} from IRSA. The first load of a target takes up to a minute; later loads are
-            instant. <span className="mono">{p.elapsed} s</span>
+            {p.stage === 'resolve'
+              ? `Looking up ${p.query} in CDS Sesame…`
+              : `Getting the SPHEREx images of ${p.query} from IRSA and building the frames. The first load of a target takes up to a minute; later loads are instant.`}{' '}
+            <span className="mono">{p.elapsed} s</span>
           </span>
         </p>
       )}

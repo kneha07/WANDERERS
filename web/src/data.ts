@@ -140,3 +140,81 @@ export function monthTicks(a: number, b: number, max: number) {
   const step = Math.ceil(out.length / max)
   return out.filter((_, i) => i % step === 0)
 }
+
+const COMPASS = ['north', 'north-northeast', 'northeast', 'east-northeast', 'east', 'east-southeast', 'southeast', 'south-southeast',
+  'south', 'south-southwest', 'southwest', 'west-southwest', 'west', 'west-northwest', 'northwest', 'north-northwest']
+/** Position angle (degrees east of north) -> a 16-point compass word. */
+export const compass = (pa: number) => COMPASS[Math.round((((pa % 360) + 360) % 360) / 22.5) % 16]
+
+type Track = Pick<Result, 'pixel_arcsec' | 'pm'> & { frames: Pick<Frame, 'mjd_mean' | 'ring' | 'centroid'>[] }
+
+/** Shift between two PNG positions: arcsec, pixels and position angle (x grows to the west, y to the south). */
+function shiftOf(a: XY, b: XY, s: number) {
+  const px = Math.hypot(b.x - a.x, b.y - a.y)
+  return { px, arcsec: px * s, pa: ((Math.atan2(-(b.x - a.x), -(b.y - a.y)) * 180) / Math.PI + 360) % 360 }
+}
+
+/** Measured motion between the first and the last frame with a centroid, and the catalogue prediction for the same frames. */
+export function measuredMotion(r: Track) {
+  const meas = r.frames.filter((f) => f.centroid)
+  if (meas.length < 2) return null
+  const a = meas[0]
+  const b = meas[meas.length - 1]
+  const ca = a.centroid!
+  const cb = b.centroid!
+  const shift = shiftOf(ca, cb, r.pixel_arcsec)
+  const sigmaPx = Math.hypot(ca.ex, cb.ex, ca.ey, cb.ey) / Math.SQRT2 // 1 sigma of the shift, both axes averaged
+  const pred = r.pm && a.ring && b.ring ? shiftOf(a.ring, b.ring, r.pixel_arcsec) : null
+  // agree: the measured and the predicted shift differ by less than 3 sigma (and never ask for better than 0.5 px)
+  const agree = pred ? Math.hypot(cb.x - ca.x - (b.ring!.x - a.ring!.x), cb.y - ca.y - (b.ring!.y - a.ring!.y)) < Math.max(3 * sigmaPx, 0.5) : null
+  return { ...shift, days: b.mjd_mean - a.mjd_mean, sigmaPx, significant: shift.px >= 3 * sigmaPx, pred, agree }
+}
+
+const span = (days: number) =>
+  days < 45 ? `${Math.round(days)} days` : days < 730 ? `${Math.round(days / 30.44)} months` : `${(days / 365.25).toFixed(1)} years`
+
+/** One plain sentence for the Motion panel: how far, which way, how long, and whether the catalogue agrees. */
+export function motionSentence(r: Track) {
+  const m = measuredMotion(r)
+  if (!m)
+    return r.pm
+      ? 'SPHEREx did not measure its position in two frames, so there is no measured motion here.'
+      : 'No proper motion is known for a typed position, so there is no predicted position to measure.'
+  const t = span(m.days)
+  const moved = m.significant
+    ? `It moved ${m.arcsec.toFixed(1)}″ (about ${m.px.toFixed(1)} pixels) ${compass(m.pa)} in ${t}`
+    : `It did not move measurably in ${t} (less than ${(3 * m.sigmaPx * r.pixel_arcsec).toFixed(1)}″)`
+  if (!m.pred) return `${moved}. No catalogue motion is known for a typed position.`
+  if (m.significant && m.agree) return `${moved}, as its catalogue motion predicts.`
+  return `${moved}; its catalogue motion predicts ${m.pred.arcsec.toFixed(1)}″${m.significant ? ` ${compass(m.pred.pa)}` : ''}.`
+}
+
+/** SIMBAD prefixes and spacing do not make a different name: "V* R Dra" is "R Dra". */
+const bare = (s: string) =>
+  s
+    .replace(/^(NAME|V\*|\*\*|\*|EM\*)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+
+/** Heading: the name the user typed, plus the catalog id when it is a different name ("Kapteyn's Star · HD 33793"). */
+export function titleOf(r: Pick<Result, 'query' | 'name'>) {
+  return { title: r.query.trim(), catalog: r.name && bare(r.name) !== bare(r.query) ? r.name : null }
+}
+
+/** Gaia stars drawn by default: brighter than G 17, at most the 40 brightest (Barnard's field has 151). */
+export const brightGhosts = (stars: GaiaStar[]) =>
+  stars
+    .filter((s) => s.gmag != null && s.gmag < 17)
+    .sort((a, b) => a.gmag! - b.gmag!)
+    .slice(0, 40)
+
+/** True when the detector with the largest brightness change is D1 or D2: probably scattered light (issue #5). */
+export function scatteredLight(r: Pick<Result, 'detectors'>) {
+  let best: [string, number] | null = null
+  for (const [d, items] of Object.entries(r.detectors)) {
+    const c = brightnessChange(items.flatMap((x) => (x.photometry ? [x.photometry] : [])))
+    if (c && (!best || c.pct > best[1])) best = [d, c.pct]
+  }
+  return !!best && (best[0] === 'D1' || best[0] === 'D2')
+}

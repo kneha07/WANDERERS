@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { frameNotes, labelRange, marksFromParam, marksToParam, nearestGaia } from './data'
+import { brightGhosts, frameNotes, labelRange, marksFromParam, marksToParam, motionSentence, nearestGaia, scatteredLight, titleOf } from './data'
 
 describe('epoch labels', () => {
   it('reads a one-day label', () => {
@@ -57,5 +57,66 @@ describe('frame notes', () => {
   })
   it('keeps "no source" for a known motion with an empty fit', () => {
     expect(frameNotes({ ...frame, centroid: null, notes: [] })).toEqual(['No source above 5σ at the target'])
+  })
+})
+
+// Barnard's Star, cached answer of 2026-11-14: centroids and rings of frames 1 and 6 (391.9 days apart).
+const barnard = {
+  pixel_arcsec: 6.15,
+  pm: { pmra: -801.6, pmdec: 10362.4 },
+  frames: [
+    { mjd_mean: 60913.55, ring: { x: 24.45, y: 25.09 }, centroid: { x: 24.24, y: 24.993, ex: 0.123, ey: 0.124 } },
+    { mjd_mean: 61305.5, ring: { x: 24.59, y: 23.28 }, centroid: { x: 24.575, y: 23.471, ex: 0.234, ey: 0.213 } },
+  ],
+}
+
+describe('plain motion sentence', () => {
+  it('says how far, which way and how long, and that the catalogue agrees', () => {
+    expect(motionSentence(barnard)).toBe('It moved 9.6″ (about 1.6 pixels) north-northwest in 13 months, as its catalogue motion predicts.')
+  })
+  it('says what the catalogue predicts when it disagrees', () => {
+    const r = { ...barnard, frames: [barnard.frames[0], { ...barnard.frames[1], ring: { x: 22.0, y: 25.09 } }] }
+    expect(motionSentence(r)).toBe('It moved 9.6″ (about 1.6 pixels) north-northwest in 13 months; its catalogue motion predicts 15.1″ east.')
+  })
+  it('says when the shift is inside the errors', () => {
+    const c = { ex: 0.3, ey: 0.3 }
+    const r = { ...barnard, frames: [{ ...barnard.frames[0], centroid: { x: 24.5, y: 24.5, ...c } }, { ...barnard.frames[1], centroid: { x: 24.6, y: 24.5, ...c } }] }
+    expect(motionSentence(r)).toBe('It did not move measurably in 13 months (less than 7.8″); its catalogue motion predicts 11.2″.')
+  })
+  it('says that a typed position has no prediction', () => {
+    expect(motionSentence({ ...barnard, pm: null, frames: barnard.frames.map((f) => ({ ...f, ring: null, centroid: null })) })).toBe(
+      'No proper motion is known for a typed position, so there is no predicted position to measure.',
+    )
+  })
+})
+
+describe('heading name', () => {
+  it('keeps the typed name and adds the catalog id when it differs', () => {
+    expect(titleOf({ query: "Kapteyn's Star", name: 'HD 33793' })).toEqual({ title: "Kapteyn's Star", catalog: 'HD 33793' })
+  })
+  it('adds nothing when the catalog id is the same name', () => {
+    expect(titleOf({ query: 'R Dra', name: 'V* R Dra' }).catalog).toBe(null)
+    expect(titleOf({ query: "barnard's star", name: "Barnard's star" }).catalog).toBe(null)
+    expect(titleOf({ query: '269.45 4.69', name: null }).catalog).toBe(null)
+  })
+})
+
+describe('Gaia ghosts shown by default', () => {
+  const star = (g: number) => ({ source_id: String(g), ra: 0, dec: 0, pmra: 0, pmdec: 0, gmag: g, xy: [] })
+  it('shows only stars brighter than G 17', () => {
+    expect(brightGhosts([8, 12, 16.9, 17, 18].map(star)).map((s) => s.gmag)).toEqual([8, 12, 16.9])
+  })
+  it('shows at most the 40 brightest', () => {
+    expect(brightGhosts(Array.from({ length: 50 }, (_, i) => star(10 + i * 0.1))).length).toBe(40)
+  })
+})
+
+describe('scattered light', () => {
+  const det = (fluxes: number[]) => fluxes.map((flux, i) => ({ group_index: i, png: '', n_images: 4, photometry: { flux, err: 0.03 } }))
+  it('is suspected when the largest change is in D1 or D2 (Epsilon Indi B, issue #5)', () => {
+    expect(scatteredLight({ detectors: { D2: det([13.1, 35.97]), D3: det([11.7, 25.14]), D6: det([19.7, 23.85]) } })).toBe(true)
+  })
+  it('is not suspected when a long-wavelength detector changes most', () => {
+    expect(scatteredLight({ detectors: { D2: det([20, 22]), D5: det([29.94, 58.88]) } })).toBe(false)
   })
 })

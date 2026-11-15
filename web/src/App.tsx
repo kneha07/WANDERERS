@@ -8,7 +8,7 @@
 // (replaceState); popstate re-reads the URL, so Back returns to the previous target or home in one press.
 import { useEffect, useReducer, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { marksFromParam, marksToParam } from './data'
+import { brightGhosts, marksFromParam, marksToParam, titleOf } from './data'
 import type { Result } from './data'
 import { AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard } from './panels'
 import { COLOUR_LINE, EXAMPLES, FieldGuide, TaskTab, Thumbs, Tutorial, reportText } from './rail'
@@ -167,6 +167,8 @@ export default function App() {
   const [fps, setFps] = useState(2)
   const [showRing, setShowRing] = useState(true)
   const [showGaia, setShowGaia] = useState(true)
+  const [gaiaAll, setGaiaAll] = useState(false) // default: only the brightest Gaia stars (brightGhosts)
+  const [resolved, setResolved] = useState('') // the load whose name lookup is done: it now waits for the frames
   const [showCross, setShowCross] = useState(false)
   const [bri, setBri] = useState(1)
   const [con, setCon] = useState(1)
@@ -248,21 +250,27 @@ export default function App() {
     ;(async () => {
       let action: Action
       try {
+        // 1. Look the name up (a few seconds): a wrong name fails here, not after a minute of image search.
+        const look = await fetch(`/api/resolve?${new URLSearchParams({ q: state.q })}`, { signal: ctrl.signal })
+        const found = await look.json().catch(() => null)
+        if (!look.ok && look.status !== 404) throw Object.assign(new Error('resolve'), { failure: failureOf(look.status, found?.detail) })
+        setResolved(need) // (404: an older live API without /api/resolve)
         const res = await fetch(`/api/frames?${params}`, { signal: ctrl.signal })
         const body = await res.json().catch(() => null)
         if (res.ok && body) {
           cache.current.set(key, body)
           action = { type: 'loaded', key, result: body }
         } else action = { type: 'failed', key, failure: failureOf(res.status, body?.detail) }
-      } catch {
+      } catch (e) {
         if (ctrl.signal.reason !== 'timeout' && ctrl.signal.aborted) return // replaced by a newer place
         action = {
           type: 'failed',
           key,
           failure:
-            ctrl.signal.reason === 'timeout'
+            (e as { failure?: Failure }).failure ??
+            (ctrl.signal.reason === 'timeout'
               ? { kind: 'timeout', message: 'No answer after 3 minutes. IRSA may be slow. Try again.' }
-              : { kind: 'offline', message: 'Could not reach the server. Check the connection and the backend, then try again.' },
+              : { kind: 'offline', message: 'Could not reach the server. Check the connection and the backend, then try again.' }),
         }
       }
       // The indicator appears at 300 ms; once shown, it stays at least 500 ms.
@@ -402,6 +410,12 @@ export default function App() {
   }
 
   const busy = loading && input.trim() === state.q
+  const stage = resolved === need ? 'frames' : 'resolve'
+  const fresh = loading ? null : r // data panels never show the previous target under the new heading
+  const head = r && !loading ? titleOf(r) : null
+  const ghosts = showGaia && r?.gaia ? (gaiaAll ? r.gaia.stars : brightGhosts(r.gaia.stars)) : []
+  const fewer = r?.gaia ? r.gaia.stars.length - brightGhosts(r.gaia.stars).length : 0
+  const stale = loading && r ? `Showing ${titleOf(r).title} until ${state.q} loads.` : undefined
   const showDiff = state.view === 'diff' && !!r?.difference
   const rgbOk = !!r?.frames.some((f) => f.rgb_png)
   const wl = r?.rgb?.wavelength_um
@@ -456,9 +470,21 @@ export default function App() {
                   </span>
                 )}
               </p>
-              <button type="button" onClick={() => dispatch({ type: 'retry', at: Date.now() })}>
-                Retry
-              </button>
+              {state.failure.kind === 'input' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    searchRef.current?.focus()
+                    searchRef.current?.select()
+                  }}
+                >
+                  Edit the name
+                </button>
+              ) : (
+                <button type="button" onClick={() => dispatch({ type: 'retry', at: Date.now() })}>
+                  Retry
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -526,7 +552,10 @@ export default function App() {
             <div className="workspace">
               <section className="viewer" data-status={state.status} aria-label="Flipbook">
                 <div className="target-line" id="target-line">
-                  <h1 id="target-name">{loading || !r ? `Loading ${state.q}…` : (r.name ?? r.query)}</h1>
+                  <h1 id="target-name">
+                    {head ? head.title : `Loading ${state.q}…`}
+                    {head?.catalog && <span className="catalog"> · {head.catalog}</span>}
+                  </h1>
                   {r && !loading && (
                     <span className="mono muted">
                       {raText(r.center.ra)} {decText(r.center.dec)} · {r.pm ? 'J2026.0' : 'as entered'} · {r.fov_arcmin}′ ·{' '}
@@ -544,20 +573,23 @@ export default function App() {
                       bri={bri}
                       con={con}
                       ring={showRing && !!r?.pm}
-                      gaia={showGaia}
+                      ghosts={ghosts}
                       cross={showCross}
                       marks={state.marks}
                       loading={loading}
+                      stage={stage}
                       elapsed={elapsed}
                       query={state.q}
                       onMark={mark}
                     />
                     <p className="frame-label" aria-live={playing ? 'off' : 'polite'}>
-                      {!loading && frame && !showDiff
-                        ? `Frame ${at + 1} of ${count} · ${frame.label} · ${frame.n_images} images`
-                        : !loading && showDiff
-                          ? `Difference: ${r!.difference!.to} minus ${r!.difference!.from}`
-                          : ' '}
+                      {stale
+                        ? stale
+                        : !loading && frame && !showDiff
+                          ? `Frame ${at + 1} of ${count} · ${frame.label} · ${frame.n_images} images`
+                          : !loading && showDiff
+                            ? `Difference: ${r!.difference!.to} minus ${r!.difference!.from}${r!.difference!.detectors ? ` · ${r!.difference!.detectors.join(' ')}` : ''}`
+                            : ' '}
                     </p>
                     <p className="note">
                       {!loading && state.view === 'diff' && r
@@ -617,13 +649,25 @@ export default function App() {
                           aria-pressed={showGaia && !!r?.gaia}
                           disabled={!r?.gaia}
                           onClick={() => setShowGaia((v) => !v)}
-                          title={r?.gaia ? `${r.gaia.stars.length} ${r.gaia.release} stars` : 'No Gaia data in this answer'}
+                          title={r?.gaia ? `${r.gaia.release} stars, moved to each frame` : 'No Gaia data in this answer'}
                         >
                           <svg viewBox="0 0 16 16" aria-hidden="true">
                             <circle cx="8" cy="8" r="5" fill="none" strokeWidth="1.2" className="legend-ghost" />
                           </svg>
                           Gaia
                         </button>
+                        {fewer > 0 && (
+                          <button
+                            type="button"
+                            className="toggle"
+                            aria-pressed={gaiaAll && showGaia}
+                            disabled={!showGaia}
+                            onClick={() => setGaiaAll((v) => !v)}
+                            title="By default only Gaia stars brighter than G 17 are drawn (at most 40)"
+                          >
+                            All {r!.gaia!.stars.length}
+                          </button>
+                        )}
                         <button type="button" className="toggle" aria-pressed={showCross} onClick={() => setShowCross((v) => !v)}>
                           <svg viewBox="0 0 16 16" aria-hidden="true">
                             <path d="M2 8h4m4 0h4M8 2v4m0 4v4" strokeWidth="1.5" className="legend-cross" />
@@ -777,25 +821,25 @@ export default function App() {
 
             <div className="grid">
               <Panel id="motion" title="Motion · predicted vs measured">
-                {r ? <MotionPanel r={r} index={at} onPick={pickFrame} /> : <Skeleton lines={8} />}
+                {fresh ? <MotionPanel r={fresh} index={at} onPick={pickFrame} /> : <Skeleton lines={8} />}
               </Panel>
               <Panel id="brightness" title="Brightness · per frame">
-                {r ? (
-                  <BrightnessPanel key={key} r={r} index={at} deepLink={current && `/?target=${current.id}`} />
+                {fresh ? (
+                  <BrightnessPanel key={key} r={fresh} index={at} deepLink={current && `/?target=${current.id}`} />
                 ) : (
                   <Skeleton lines={8} />
                 )}
               </Panel>
-              <Panel id="sky-context" title="Sky context">
+              <Panel id="sky-context" title="Sky context" busy={stale}>
                 {r ? <SkyContext r={r} reduced={REDUCED_MOTION} /> : <Skeleton lines={8} />}
               </Panel>
               <Panel id="sky-now" title="Your sky now">
-                {r ? <SkyNow star={r.center} here={here} setHere={setHere} reduced={REDUCED_MOTION} say={say} /> : <Skeleton lines={8} />}
+                {fresh ? <SkyNow star={fresh.center} here={here} setHere={setHere} reduced={REDUCED_MOTION} say={say} /> : <Skeleton lines={8} />}
               </Panel>
             </div>
             <div className="grid">
               <Panel id="frames" title="Frames">
-                {r ? <FramesTable r={r} index={at} onPick={pickFrame} /> : <Skeleton lines={5} />}
+                {fresh ? <FramesTable r={fresh} index={at} onPick={pickFrame} /> : <Skeleton lines={5} />}
               </Panel>
             </div>
           </div>

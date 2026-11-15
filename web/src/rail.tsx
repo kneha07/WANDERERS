@@ -171,7 +171,10 @@ export function matchOf(r: Result, m: RaDec) {
   return { hit, known: !!hit && hit.sep < KNOWN_ARCSEC }
 }
 
-export function reportText(r: Result, marks: RaDec[], url: string) {
+/** True while the tool runs on this computer only: its links do not open anywhere else (issue #24). */
+export const localOnly = (host = location.hostname) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host)
+
+export function reportText(r: Result, marks: RaDec[], url: string, local = localOnly()) {
   const lines = marks.map((m, k) => {
     const { hit, known } = matchOf(r, m)
     const g = hit ? `nearest ${r.gaia!.release} ${hit.star.source_id} at ${hit.sep.toFixed(1)}″${known ? ' (known)' : ' (unexplained)'}` : 'no Gaia data'
@@ -179,9 +182,10 @@ export function reportText(r: Result, marks: RaDec[], url: string) {
   })
   return [
     `Candidate${marks.length === 1 ? '' : 's'} from WANDERERS Explore (NASA SPHEREx images from IRSA)`,
-    `Field: ${r.name ?? r.query}, ${r.fov_arcmin}′, frames ${r.frames[0]?.label} to ${r.frames[r.frames.length - 1]?.label}`,
+    `Field: ${r.query}${r.name && r.name !== r.query ? ` (${r.name})` : ''} at RA ${raText(r.center.ra)}, Dec ${decText(r.center.dec)} (${r.center.ra.toFixed(5)}, ${r.center.dec.toFixed(5)}), ${r.fov_arcmin}′`,
+    `Frames: first ${r.frames[0]?.label}, last ${r.frames[r.frames.length - 1]?.label}`,
     ...lines,
-    `Link: ${url}`,
+    local ? 'Link: none yet (the tool runs on my computer only; the RA and Dec above find the field).' : `Link: ${url}`,
   ].join('\n')
 }
 
@@ -268,6 +272,11 @@ export function TaskTab({ r, marks, onRemove, onCopyLink, onTalk }: TaskProps) {
       )}
       <h3 className="panel-title">Done &amp; Talk</h3>
       <p className="hint">The link holds the target, the view and your marks. The Talk button also copies a report you can paste.</p>
+      {localOnly() && (
+        <p className="hint" id="local-note">
+          This link opens only on this computer until the tool is hosted (issue #24). The report gives the RA and Dec instead.
+        </p>
+      )}
       <div className="actions">
         <button type="button" onClick={onCopyLink} disabled={!r}>
           Copy share link
