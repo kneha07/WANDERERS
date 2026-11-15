@@ -8,7 +8,8 @@
 // It needs the network (IRSA tiles, the Aladin Lite script) for parts 1 and 2. It then proves the offline
 // behaviour by starting the browser again with those hosts mapped to nowhere:
 //   1. registration: photographs and canvas put the same star on the same pixel, on a phone-sized screen,
-//      for dragged views and for fed phone poses that lean (roll); then Infrared, the cache trim, Eye, taps, drag the sky
+//      for dragged views and for fed phone poses that lean (roll); then Infrared, the cache trim, Eye, taps, drag the sky,
+//      and the telescope view (Eye at 12x on Capella, small moves at 150x and 300x, a pinch, hold with fed phone poses)
 //   2. save the sky for a latitude; the saved cache fills and the "recent" cache holds no copy of it
 //   3. same profile, archive unreachable AND our own server stopped: the page still opens, Eye and Deep work
 //   4. fresh profile, archive unreachable: Deep falls back to Eye and says so
@@ -244,6 +245,45 @@ async function main() {
   const fine = await page.eval(`({ az: ${W8}.F.fineAz, alt: ${W8}.F.fineAlt, frozen: ${W8}.F.compassFrozen })`);
   check("drag the sky: Done keeps it as the sight check", fine.frozen && (Math.abs(fine.az - ref.fine[0]) > 1 || Math.abs(fine.alt - ref.fine[1]) > 1),
     `direction ${fine.az.toFixed(2)}°, tilt ${fine.alt.toFixed(2)}°`);
+
+  // ---- 1g. the telescope view: Eye mode, no camera, zoomed in on Capella ----
+  // The photographs cover the view and stay on the canvas's pixels while the view moves by small steps at 150x and
+  // 300x and while it is pinched (each step is checked 2 frames later). Then hold mode with fed phone poses: the held
+  // view does not move when the phone turns. selfTest's worst is 0 when it compares nothing, so each check asks for
+  // compared >= 1.
+  await page.goto("sky=eye&limit=dark");
+  await page.until(`window.RealSky && !!RealSky.EYE.stars && !document.getElementById("ar").hidden`, 30000, "the star list");
+  const twoFrames = `new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(() => ok(true))))`;
+  await page.eval(`(() => { const o = Sky.observe({ ra: 79.172, dec: 45.998 }, ${W8}.nowDate(), 47.6, -122.3);
+    ${W8}.S.sensors = false; ${W8}.S.manual = { az: o.az, alt: o.alt }; ${W8}.setZoom(12); return true; })()`);
+  await page.until(deepReady, 60000, "the telescope photographs");
+  await sleep(3500);
+  const t12 = await page.eval(`({ cover: RealSky.cover(), r: RealSky.selfTest() })`);
+  check("telescope, Eye at 12x on Capella: the photographs cover the view", t12.cover === 1, `cover ${t12.cover}`);
+  check("telescope, Eye at 12x on Capella: photographs and canvas agree", t12.r.compared >= 1 && t12.r.worst <= 3,
+    `${t12.r.compared} compared (${t12.r.stars.map((s) => s.name).join(", ")}), worst ${t12.r.worst} px (1° = ${t12.r.pxPerDeg} px)`);
+  await page.shot("telescope-12x-phone.png");
+  const step = async (label, move) => {
+    await page.eval(`(${move}, ${twoFrames})`);
+    const r = await page.eval(`RealSky.selfTest()`);
+    check(`telescope: ${label}`, r.compared >= 1 && r.worst <= 3, `${r.compared} compared, worst ${r.worst} px (1° = ${r.pxPerDeg} px)`);
+  };
+  for (const z of [150, 300]) {
+    await page.eval(`(${W8}.setZoom(${z}), true)`); await sleep(2000);
+    for (let i = 1; i <= 4; i++) await step(`${z}x, step ${i} of 0.003° in azimuth`, `${W8}.S.manual.az += 0.003`);
+  }
+  await page.shot("telescope-300x-phone.png");
+  await step("a pinch from 300x to 280x", `${W8}.setZoom(280)`);
+  await page.eval(`(${W8}.setZoom(1), true)`);
+  await page.eval(feed(30, 120, 25)); await sleep(300);
+  await page.eval(`(${W8}.setZoom(10), ${twoFrames})`);
+  const held = `(() => { const w = ${W8}, p = w.pose(), q = w.F.pointing(); return { az: p.az, alt: p.alt, hold: w.S.hold, phone: q.az }; })()`;
+  const h0 = await page.eval(held);
+  await page.eval(feed(33, 120, 25)); await page.eval(twoFrames);
+  const h1 = await page.eval(held), turned = ((h1.phone - h0.phone) % 360 + 540) % 360 - 180;
+  check("telescope: held at 10x, a phone pose 3° away does not move the view",
+    h0.hold && h1.hold && h1.az === h0.az && h1.alt === h0.alt && Math.abs(turned) > 2,
+    `view ${h0.az.toFixed(4)}°, ${h0.alt.toFixed(4)}° -> ${h1.az.toFixed(4)}°, ${h1.alt.toFixed(4)}°; the phone turned ${turned.toFixed(2)}°`);
   check("no script errors on the page (online)", page.errors.length === 0, page.errors.slice(0, 2).join(" | "));
 
   // ---- 2. save the sky for places, through the info sheet; then remove one place ----

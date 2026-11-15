@@ -463,7 +463,8 @@
       const ax = a[0] + box.left, ay = a[1] + box.top;
       rows.push({ name: o.name, canvas: [Math.round(q[0]), Math.round(q[1])], aladin: [Math.round(ax), Math.round(ay)], off: +Math.hypot(ax - q[0], ay - q[1]).toFixed(1) });
     }
-    return { worst: Math.max(0, ...rows.map((r) => r.off)), stars: rows, roll: +rollOf(P).toFixed(1), fov: DEEP.aladin.getFov(), base: DEEP.base,
+    // compared: how many stars were measured. worst is 0 when none was, so every check must also ask for compared >= 1.
+    return { worst: Math.max(0, ...rows.map((r) => r.off)), compared: rows.length, stars: rows, roll: +rollOf(P).toFixed(1), fov: DEEP.aladin.getFov(), base: DEEP.base,
       pxPerDeg: +(f * Math.tan(D2R)).toFixed(1) };
   }
 
