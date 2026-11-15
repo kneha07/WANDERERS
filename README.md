@@ -27,6 +27,12 @@
   <img alt="Data are real" src="https://img.shields.io/badge/data-real%2C%20not%20simulated-16A34A">
 </p>
 
+
+<p align="center">
+  <img src="docs/img/wanderers-live-qr.png" alt="QR code: scan to open WANDERERS on your phone" width="220"><br>
+  <sub><b>Scan to open WANDERERS on your phone</b> (the live site above)</sub>
+</p>
+
 Pluto was found by flipping between two photos of the sky and spotting the dot that moved. WANDERERS does
 that with real infrared data spanning 2010 to 2026, then goes one step further: it uses SPHEREx's
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
