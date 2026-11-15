@@ -480,3 +480,13 @@ def test_http_reader_wraps_connection_errors():
     rd.pool.request = boom
     with pytest.raises(SX.NetworkError):
         rd.read("u", 0, 10)
+
+
+def test_tile_headers_kept_in_memory_are_capped(tmp_path, centre, monkeypatch):
+    p = write_cube(tmp_path / "c.fits", K)
+    st, _ = stage_for({K: p})
+    monkeypatch.setattr(SX, "MAX_LAYOUTS", 2)
+    for k in (1, 2, 3):
+        st.layouts[k] = object()
+    st.check_tile(K, [mover(*centre)])
+    assert set(st.layouts) == {K}

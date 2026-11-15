@@ -135,6 +135,7 @@ W2_SATURATION = 6.7                  # NEOWISE W2 brighter than this is saturate
 W2_RATIO_MAX = 2.5                   # SPHEREx 4-5 um flux within 1 mag (x2.5) of NEOWISE W2, else probably a blend
 MERGE_GAP_ROWS = 3                   # rows between two stamps read as one request
 BATCH_MOVERS = 8                     # movers whose reads are issued together
+MAX_LAYOUTS = 256                    # tile headers kept in memory between tiles
 
 # Spectral bands and indices (micron)
 BANDS_PER_DETECTOR = 4
@@ -1191,6 +1192,9 @@ class SpherexStage:
     def check_tile(self, k5: int, movers: list[dict], deadline: float | None = None) -> list[dict]:
         """SPHEREx dicts for the movers of tile k5, in order. Never raises."""
         t0 = self.clock()
+        with self._lock:
+            if len(self.layouts) > MAX_LAYOUTS:     # a whole-sky publish would otherwise keep 12,288 WCS objects
+                self.layouts.clear()
         n = len(movers)
         out: list[dict | None] = [None] * n
         try:
