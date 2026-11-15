@@ -1,7 +1,7 @@
 // Instrument panels. Every value comes from the API answer (docs/blink/api.md); nothing is hard-coded.
 import { Component, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSentence, nearestGaia, scatteredLight, sourceSeen, yearOf } from './data'
+import { brightestSeen, brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSentence, nearestGaia, scatteredLight, yearOf } from './data'
 import type { Frame, Phot, Result } from './data'
 import { decText, raText, skyToPixel } from './sky'
 import type { RaDec } from './sky'
@@ -569,7 +569,7 @@ export function BrightnessPanel({ r, index, deepLink }: { r: Result; index: numb
   const change = pick === 'each' ? null : brightnessChange(good.map((p) => p.phot!))
   // A change that is largest in D1 or D2 is probably scattered light (issue #5): never call it real.
   // NM1: no claim about a change where no source shows (typed coordinates of a star that has moved away)
-  const source = good.some((p) => sourceSeen(r.frames[p.frame], p.phot))
+  const source = brightestSeen(good.map((p) => ({ frame: p.frame, phot: p.phot! })), r.frames)
   const suspect = !!change && source && change.sigmas >= 3 && scatteredLight(r) && !/^D[3-6]$/.test(pick)
   const common = r.frames[0]?.stack_detectors
   const sameStack = !!common && r.frames.every((f) => f.stack_detectors?.join() === common.join())

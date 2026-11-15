@@ -1,18 +1,18 @@
 {
-  "baseUrl": "http://localhost:5183",
+  "baseUrl": "http://localhost:8071",
   "home": { "path": "/explore/", "ready": "#home-hint" },
   "setup": [{ "click": "#layer-close", "ifVisible": true }],
   "screens": [
     {
       "name": "Result (chip)",
-      "steps": [{ "click": "[data-target='RW Aur']", "wait": "#target-name:has-text('RW Aur')" }],
+      "steps": [{ "click": "[data-target='RW Aur']", "wait": ".viewer[data-status=result] #target-name:has-text('RW Aur')" }],
       "ready": ".viewer[data-status=result]"
     },
     {
       "name": "Second target",
       "steps": [
-        { "click": "[data-target='RW Aur']", "wait": "#target-name:has-text('RW Aur')" },
-        { "click": "[data-target=\"Barnard's Star\"]", "wait": "#target-name:has-text('Barnard')" }
+        { "click": "[data-target='RW Aur']", "wait": ".viewer[data-status=result] #target-name:has-text('RW Aur')" },
+        { "click": "[data-target=\"Barnard's Star\"]", "wait": ".viewer[data-status=result] #target-name:has-text('Barnard')" }
       ],
       "ready": ".viewer[data-status=result]"
     },

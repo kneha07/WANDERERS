@@ -1,7 +1,7 @@
 // "About this star": the answer of GET /api/about (docs/blink/api.md) and the three sentences of the card.
 // Sentence 1 and 3 come from catalogs and Wikipedia (backend/about.py); sentence 2 comes from our own SPHEREx
 // measurements in the frames answer. Pure functions, so the card can be tested without a browser.
-import { brightnessChange, KNOWN_ARCSEC, measuredMotion, motionClause, scatteredLight, sourceSeen, yearOf } from './data'
+import { brightestSeen, brightnessChange, KNOWN_ARCSEC, measuredMotion, motionClause, scatteredLight, yearOf } from './data'
 import type { Frame, Gaia, GaiaStar, Result } from './data'
 
 export type About = {
@@ -28,7 +28,8 @@ export function measuredSentence(r: Measured) {
   const m = measuredMotion(r)
   if (m?.significant) return `${motionClause(m)}.`
   const change = brightnessChange(r.frames.flatMap((f) => (f.photometry ? [f.photometry] : [])))
-  if (change && !r.frames.some((f) => sourceSeen(f, f.photometry)))
+  const points = r.frames.flatMap((f, frame) => (f.photometry ? [{ frame, phot: f.photometry }] : []))
+  if (change && !brightestSeen(points, r.frames))
     return 'In our SPHEREx frames no source shows at this position, so its brightness numbers are sky noise.'
   if (change) {
     if (change.sigmas < 3) return `In our SPHEREx frames it does not move measurably, and its brightness stays within the noise.`

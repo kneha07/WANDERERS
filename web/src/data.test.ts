@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { brightGhosts, frameNotes, labelRange, marksFromParam, marksToParam, motionSentence, nearestGaia, scatteredLight, titleOf } from './data'
+import { brightestSeen, brightGhosts, frameNotes, labelRange, marksFromParam, marksToParam, motionSentence, nearestGaia, scatteredLight, titleOf } from './data'
 
 describe('epoch labels', () => {
   it('reads a one-day label', () => {
@@ -114,6 +114,19 @@ describe('Gaia ghosts shown by default', () => {
   })
   it('shows at most the 40 brightest', () => {
     expect(brightGhosts(Array.from({ length: 50 }, (_, i) => star(10 + i * 0.1))).length).toBe(40)
+  })
+})
+
+describe('a brightness change needs a source', () => {
+  // The WISE 0855 challenge coordinates (its 2010 position), 2026-11-14: the stack photometry of 4 surveys.
+  // Survey 2 has a weak centroid, but the brightest survey (0.3114 ± 0.0643, 4.8σ) shows no source.
+  const typed = [{ flux: 0.3114, err: 0.0643 }, { flux: 0.0288, err: 0.0648 }, { flux: 0.147, err: 0.0501 }, { flux: 0.1291, err: 0.0669 }]
+  const frames = [{ centroid: null }, { centroid: { x: 24.5, y: 25, ex: 0.48, ey: 0.43 } }, { centroid: null }, { centroid: null }]
+  it('is sky noise when even the brightest survey shows no source', () => {
+    expect(brightestSeen(typed.map((phot, frame) => ({ frame, phot })), frames)).toBe(false)
+  })
+  it('counts when the brightest survey is a 5σ source (Epsilon Indi B, D2)', () => {
+    expect(brightestSeen([{ frame: 0, phot: { flux: 13.1, err: 0.03 } }, { frame: 1, phot: { flux: 35.97, err: 0.03 } }], [{ centroid: null }, { centroid: null }])).toBe(true)
   })
 })
 

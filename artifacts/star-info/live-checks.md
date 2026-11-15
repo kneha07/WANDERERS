@@ -70,3 +70,30 @@ app and started both servers. `POST /api/field {"ra": 150, "dec": 2.2}` (10h00m0
   type M4V) about 6.0 light-years away." (before: "Barnard's Star c is a planet ..."). The Gaia DR3 2016 position
   with `pmra=-801.551&pmdec=10362.394&epoch=2016` gives Barnard's Star; the same position without a proper motion
   finds no object within 5″.
+
+## Round 3 (through server.js: `PORT=8071 LIVE_PORT=8072 node start.js --no-open`)
+
+- NH1: `curl -m 2 "http://127.0.0.1:8071/api/frames?q=Gliese+445&fov=5"` (the client gives up after 2 s); 25 s later
+  `/api/health` 200 and `/explore/` 200. Browser: Barnard's Star, then type Gliese 412 (1440) or Gliese 1 (375), Show,
+  click R Dra while it loads; 8 s later the server answers 200 and R Dra shows. `ERR_STREAM` in the start.js log: 0.
+  Screenshots: `1440-switch-server-js.png`, `375-switch-server-js.png`, `375-switch-server-js-done.png`.
+- NM1, NM2: the WISE 0855 challenge coordinates show "A fast-moving star (WISEA J085510.74-071442.5, 8.2″/yr) is 127″
+  from here. Typed coordinates from an old catalogue may miss it — search it by name." under the image, and the
+  brightness panel says "No source at this position — the brightness numbers are sky noise." (`1440-typed-wise.png`).
+- NL6: after a switch the phone chip row is at scrollLeft 0 (Barnard's Star first).
+- Stress walk through server.js (`web/ux-walk.json`, baseUrl http://localhost:8071; the screen waits now wait for
+  the loaded result, because the heading names the target while it loads):
+
+| # | Check | Target | Result | Detail |
+|---|---|---|---|---|
+| N2 | Back (system) reaches home within 2 presses | Result (chip) | PASS | 1 press(es) |
+| N2 | Back (system) reaches home within 2 presses | Second target | PASS | 2 press(es) |
+| N2 | Back (system) reaches home within 2 presses | Candidate marked | PASS | 1 press(es) |
+| N2 | Back (system) reaches home within 2 presses | Tutorial layer | PASS | 0 press(es) |
+| D1 | No empty state before the first answer | Frames (deep link) | PASS | skeleton, cache or loading shown |
+| M1 | No layout shift when data lands (CLS ≤ 0.1) | Frames (deep link) | PASS | CLS 0.047 |
+| A1 | Press shows a response within 100 ms | Search button | PASS | 17 ms |
+| A2 | A double tap sends once | Search button | PASS | 1 request(s) |
+| L1 | At most one layer over a screen | all walked steps | PASS | never more than one |
+
+9 PASS, 0 FAIL. The server stayed up for the whole walk.

@@ -202,6 +202,14 @@ export function motionSentence(r: Track) {
  * Without one, a "change" is only sky noise (typed coordinates of a star that has moved away). */
 export const sourceSeen = (f: Pick<Frame, 'centroid'>, p: Phot | null | undefined) => !!f.centroid || (!!p && p.flux >= 5 * p.err)
 
+/** NM1: a brightness change counts only when the brightest survey shows a source there. If even the brightest
+ * point is no source, the spread is sky noise (a weak fit in another survey does not change that). */
+export function brightestSeen(points: { frame: number; phot: Phot }[], frames: Pick<Frame, 'centroid'>[]) {
+  if (!points.length) return false
+  const hi = points.reduce((a, b) => (b.phot.flux > a.phot.flux ? b : a))
+  return sourceSeen(frames[hi.frame], hi.phot)
+}
+
 /** SIMBAD prefixes and spacing do not make a different name: "V* R Dra" is "R Dra". */
 const bare = (s: string) =>
   s
