@@ -149,8 +149,10 @@ def wanderers_targets(stars):
             continue
         extras.append({"key": f"wanderers_{tid}", "name": t["name"], "aliases": [tid, "WANDERERS target"],
                        "ra": round(ref["ra"], 7), "dec": round(ref["dec"], 7), "mag": None,
-                       "dist_pc": round(1000 / ref["parallax"], 3) if ref.get("parallax") else None,
-                       "pmra": round(ref["pmra"], 2), "pmdec": round(ref["pmdec"], 2), "rv": None, "spect": None,
+                       "dist_pc": round(1000 / ref["parallax"], 3) if (ref.get("parallax") or 0) > 0 else None,
+                       # None for a Gaia two-parameter source (position only, no measured motion)
+                       "pmra": None if ref["pmra"] is None else round(ref["pmra"], 2),
+                       "pmdec": None if ref["pmdec"] is None else round(ref["pmdec"], 2), "rv": None, "spect": None,
                        "con": None, "hip": None, "epoch": ref["epoch"], "gaia_dr3": ref.get("source_id"),
                        "wanderers": tid, "source": ref.get("source", "WANDERERS")})
     return stars + extras
