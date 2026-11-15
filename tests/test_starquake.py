@@ -83,6 +83,23 @@ class ProcessingTests(unittest.TestCase):
         f = np.fft.rfftfreq(len(audio), 1 / Q.AUDIO_FS)
         self.assertAlmostEqual(f[np.argmax(np.abs(np.fft.rfft(audio)))], 126.0, delta=0.2)
 
+    def test_read_keeps_the_quarter_of_every_file(self):
+        import tempfile
+        from astropy.io import fits
+        paths = []
+        with tempfile.TemporaryDirectory() as d:
+            for i, q in enumerate((6, 7)):
+                cols = [fits.Column(name="TIME", format="D", array=np.arange(5.0) + 10 * i),
+                        fits.Column(name="PDCSAP_FLUX", format="E", array=np.full(5, 100.0)),
+                        fits.Column(name="SAP_QUALITY", format="J", array=np.zeros(5, int))]
+                p = Path(d) / f"f{i}.fits"
+                fits.HDUList([fits.PrimaryHDU(header=fits.Header({"QUARTER": q, "KEPLERID": 1})),
+                              fits.BinTableHDU.from_columns(cols)]).writeto(p)
+                paths.append(p)
+            t, f, hdr = Q.read(paths)
+        self.assertEqual(hdr["months"], [6, 7])
+        self.assertEqual(len(t), 10)
+
 
 @unittest.skipUnless((ROOT / "app" / "data" / "starquake").exists(), "no committed Kepler results")
 class KeplerResultTests(unittest.TestCase):
