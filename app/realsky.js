@@ -124,22 +124,32 @@
 
   // ---------- Deep: survey photographs under the canvas ----------
   // retryAt: no new start before this time (30 s after a failed one). failed: the last start failed (for the note).
-  // op: the opacity last written to #skyDeep, or "hidden". start: the id of the latest start.
-  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null, retryAt: 0, failed: false, op: null, start: 0 };
+  // op: the opacity last written to #skyDeep, or "hidden".
+  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null, retryAt: 0, failed: false, op: null };
   async function pickHost(name) {
     for (const h of surveyOf(name).hosts) {
       if (await fetch(h + "/properties", { signal: AbortSignal.timeout(6000) }).then((r) => r.ok).catch(() => false)) return h;
     }
     throw new Error("archive");
   }
+  // Every survey start goes through loadSurvey: the first start and every switch of survey. It finds a host that
+  // answers, then runs `more` (the first start loads the Aladin script), and resolves to [host, more's result]. A start
+  // that fails, or hangs for 20 s, rejects, and no automatic start comes for 30 s, so a failure while zoomed in does not
+  // retry every frame. A hung start that answers late is ignored: the race is already over.
+  async function loadSurvey(name, more = async () => null) {
+    let late;
+    try {
+      return await Promise.race([(async () => [await pickHost(name), await more()])(),
+        new Promise((ok, no) => { late = setTimeout(() => no(new Error("timeout")), 20000); })]);
+    } catch (e) { DEEP.retryAt = Date.now() + 30000; throw e; }
+    finally { clearTimeout(late); }
+  }
   async function startDeep() {
     if (DEEP.state !== "idle" || Date.now() < DEEP.retryAt) return;
-    const id = ++DEEP.start, survey = R.survey, late = setTimeout(() => id === DEEP.start && failDeep(), 20000);   // a start that hangs has failed
+    const survey = R.survey;
     DEEP.state = "loading"; note();
     try {
-      const base = await pickHost(survey);
-      const A = (await import(ALADIN_URL)).default; await A.init;
-      if (id !== DEEP.start) return;                  // given up on after 20 s: a late answer changes nothing
+      const [base, A] = await loadSurvey(survey, async () => { const A = (await import(ALADIN_URL)).default; await A.init; return A; });
       DEEP.base = base; DEEP.survey = survey; DEEP.A = A;
       // log: false. By default Aladin Lite reports this page's full address to a CDS logging server on start.
       DEEP.aladin = A.aladin("#skyDeep", { survey: base, projection: "TAN", fov: 60, cooFrame: "ICRSd", log: false,
@@ -148,25 +158,23 @@
         showFov: false, showStatusBar: false, showShareControl: false, showContextMenu: false, showSettingsControl: false });
       DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: survey, imgFormat: "jpeg" }));
       DEEP.state = "ready"; DEEP.last = null; DEEP.failed = false; note();
-    } catch { if (id === DEEP.start) failDeep(); }
-    finally { clearTimeout(late); }
-  }
-  // A failed start waits 30 s before the next one, so a failure while zoomed in does not retry every frame.
-  function failDeep() {
-    DEEP.start++; DEEP.state = "idle"; DEEP.retryAt = Date.now() + 30000; DEEP.failed = true;
-    if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
+    } catch {
+      DEEP.state = "idle"; DEEP.failed = true;
+      if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
+    }
   }
   async function setSurvey(name) {
     R.survey = SURVEYS[name] ? name : "visible"; store("wanderers.skySurvey", R.survey); setSky(R.sky);
     if (DEEP.state !== "ready" || DEEP.survey === R.survey) return;
+    const want = R.survey;
     DEEP.state = "loading"; note();
     try {
-      const base = await pickHost(R.survey);
-      DEEP.aladin.setBaseImageLayer(DEEP.A.imageHiPS(base, { name: R.survey, imgFormat: "jpeg" }));
-      DEEP.base = base; DEEP.survey = R.survey; DEEP.state = "ready"; DEEP.last = null; note();
+      const [base] = await loadSurvey(want);
+      DEEP.aladin.setBaseImageLayer(DEEP.A.imageHiPS(base, { name: want, imgFormat: "jpeg" }));
+      DEEP.base = base; DEEP.survey = want; DEEP.state = "ready"; DEEP.last = null; note();
     } catch {
       DEEP.state = "ready";                          // the old photographs are still on screen
-      const want = R.survey; R.survey = DEEP.survey; store("wanderers.skySurvey", R.survey);
+      R.survey = DEEP.survey; store("wanderers.skySurvey", R.survey);
       setSky(R.sky, `The ${want} photographs are not reachable. Kept the ${DEEP.survey} ones.`);
     }
   }

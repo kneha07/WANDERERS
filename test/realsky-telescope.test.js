@@ -19,13 +19,15 @@ function poseAt(az, alt) {
   return { az, alt, forward: f, up, right: [f[1] * up[2] - f[2] * up[1], f[2] * up[0] - f[0] * up[2], f[0] * up[1] - f[1] * up[0]] };
 }
 
-// archive: "ok", "down" (the probe fails) or "hang" (the probe answers only when calls.release() is called)
+// archive (calls.archive, can change in a test): "ok", "down" (the probe fails) or "hang" (the probe answers only when
+// calls.release() is called)
 function load({ sky = "eye", camOn = false, archive = "ok", online = true, connection } = {}) {
   const els = {}, timers = [], clock = { t: Date.parse("2026-11-15T06:00:00Z") };
-  const calls = { probes: 0, aladins: 0, views: [], release: null };
+  const calls = { archive, probes: 0, aladins: 0, views: [], release: null };
+  const buttons = { surveySeg: ["visible", "infrared"].map((survey) => ({ dataset: { survey }, classList: { toggle() {} }, setAttribute() {} })) };
   const el = (id) => els[id] || (els[id] = {
     id, hidden: id === "skyDeep" || id === "dragBar", style: {}, textContent: "", value: "", dataset: {}, listeners: {},
-    classList: { toggle() {} }, setAttribute() {}, querySelectorAll: () => [], replaceChildren() {}, setPointerCapture() {},
+    classList: { toggle() {} }, setAttribute() {}, querySelectorAll: () => buttons[id] || [], replaceChildren() {}, setPointerCapture() {},
     addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
     dispatch(type, e) { for (const fn of this.listeners[type] || []) fn({ stopImmediatePropagation() {}, ...e }); },
     append(...a) { this.textContent += a.map((x) => (typeof x === "string" ? x : `[${x.textContent}]`)).join(""); },
@@ -39,8 +41,8 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
     fetch: async (u) => {
       if (!/\/properties$/.test(u)) return { json: async () => STARS };      // the star list
       calls.probes++;                                                        // the archive probe before Aladin starts
-      if (archive === "down") throw new Error("unreachable");
-      if (archive === "hang") return new Promise((ok) => (calls.release = () => ok({ ok: true })));
+      if (calls.archive === "down") throw new Error("unreachable");
+      if (calls.archive === "hang") return new Promise((ok) => (calls.release = () => ok({ ok: true })));
       return { ok: true };
     },
     navigator: { onLine: online, connection }, AbortSignal: { timeout: () => undefined }, innerWidth: 390, innerHeight: 844,
@@ -141,7 +143,7 @@ test("a start that hangs for 20 s counts as failed, and its late answer changes 
   assert.match(c.note(), /^Loading telescope photographs… /);
   const guard = c.timers.find((t) => t.ms === 20000 && t.fn);
   assert.ok(guard, "a 20 s guard is set");
-  guard.fn();
+  guard.fn(); await c.settle();
   assert.equal(c.RS.DEEP.state, "idle");
   assert.equal(c.RS.DEEP.retryAt, c.clock.t + 30000, "the same 30 s wait as a failed start");
   c.frame();
@@ -154,6 +156,23 @@ test("a start that hangs for 20 s counts as failed, and its late answer changes 
   ok.S.zoom = 4; ok.frame(); await ok.settle();
   assert.equal(ok.RS.DEEP.state, "ready");
   assert.ok(!ok.timers.some((t) => t.ms === 20000 && t.fn), "a start in time clears its guard");
+});
+
+test("a survey switch that hangs ends after 20 s and keeps the photographs on screen; a late answer changes nothing", async () => {
+  const c = load({ sky: "deep" });
+  c.frame(); await c.settle();
+  assert.equal(c.RS.DEEP.survey, "visible");
+  c.calls.archive = "hang";
+  c.el("surveySeg").querySelectorAll("button")[1].onclick();          // Infrared
+  c.frame(); await c.settle();
+  assert.match(c.note(), /^Loading sky photographs… /);
+  const guard = c.timers.find((t) => t.ms === 20000 && t.fn);
+  assert.ok(guard, "the switch has the same 20 s guard as the first start");
+  guard.fn(); await c.settle(); c.frame();
+  assert.deepEqual([c.RS.DEEP.state, c.RS.DEEP.survey, c.RS.R.survey, c.opacity()], ["ready", "visible", "visible", 1]);
+  assert.match(c.note(), /^The infrared photographs are not reachable\. Kept the visible ones\./);
+  c.calls.release(); await c.settle(); c.frame();
+  assert.deepEqual([c.RS.DEEP.state, c.RS.DEEP.survey, c.RS.DEEP.base], ["ready", "visible", Hips.CONFIG.surveys.visible.hosts[0]]);
 });
 
 test("the note zoomed in names the survey and says 'archive photograph'; 'approximate' only without a sight check or snap", async () => {
