@@ -191,6 +191,55 @@ uncertainties grow. The Galaxy's gravity and orbits around companions are not in
 With `node server.js` running, any star without a stored prediction can be learnt from the page (about a minute):
 `POST /api/star-predict {"key": "hip1475"}`, then poll `GET /api/star-job/<n>`. One star is learnt at a time.
 
+### Starquakes: hear a star ring
+
+Stars like the Sun ring with sound waves driven by their boiling outer layers. **Starquakes** plays them sped
+up **42,000×**, the same factor Stanford's Sonification of Solar Harmonics (SoSH) project used for the Sun. At
+that speed the Sun's 3 mHz (five-minute) oscillations become a hum near 126 Hz, with slow beats about 5.7 Hz
+apart (its modes are 135 µHz apart). Every star uses the same factor, so pitch compares fairly: small, dense stars
+sound higher and big ones lower.
+
+The widget appears under every star in the Star database and in the spectrum panel for the five targets. Each
+sound is labelled with how we know it:
+
+- **Measured.** Real Kepler short-cadence light curves (58.85 s), processed by `pipeline/starquake.py` the way
+  SoSH treated the Sun's Doppler data: clean, interpolate short gaps (long gaps stay silent), band-pass around
+  ν<sub>max</sub>, speed up and write a WAV. ν<sub>max</sub> and Δν are measured from the data with the collapsed
+  autocorrelation method (Mosser & Appourchaux 2009). For four Kepler LEGACY stars, Δν matches the published values
+  (Lund et al. 2017) to 0.2–1.4%:
+
+  | Star | Δν measured / published (µHz) | Pitch | Beats |
+  |---|---|---|---|
+  | KIC 8006161 | 149.2 / 149.4 | 142 Hz | 6.3 Hz |
+  | KIC 6106415 | 104.4 / 104.1 | 94 Hz | 4.4 Hz |
+  | KIC 12258514 | 75.1 / 74.8 | 64 Hz | 3.2 Hz |
+  | KIC 3632418 | 61.6 / 60.7 | 49 Hz | 2.6 Hz |
+
+- **Published.** The Sun, α Centauri A and B, and Procyon: astronomers' measured ν<sub>max</sub> and Δν, with
+  the mode pattern from theory. Each value is listed with its reference in `app/data/starquake_stars.json`.
+- **Predicted.** Any other star with known temperature, brightness and distance. Its size and mass are estimated
+  from the catalogue, then put through the scaling relations: ν<sub>max</sub> ∝ g/√T<sub>eff</sub> and
+  Δν ∝ √(mean density), calibrated on the Sun. Red dwarfs and brown dwarfs (Barnard's Star, ε Indi B, WISE 0855)
+  are predicted to oscillate, but it has never been detected, and the page says so.
+- **No starquakes.** Stars hotter than about 7,000 K, such as Vega and Sirius, have no deep convection zone to
+  drive solar-like oscillations, so there is no button and the page says why.
+
+The model sound (`app/starquake.js`) treats each mode as a Lorentzian line about 1 µHz wide for the Sun. The modes
+are filled with random amplitudes (stochastic excitation by convection) and turned into sound with an inverse
+FFT. A 1 µHz line lives about 3.7 days, which becomes about 7.6 s of sound, so each tone swells and fades the way
+real modes do. Red giants oscillate too slowly to hear at 42,000× (1–10 Hz). They get one extra speed-up factor,
+and the page states it.
+
+```bash
+.venv/bin/python pipeline/starquake.py               # real Kepler stars -> app/data/starquake/*.wav, *.json
+node scripts/starquake_samples.js                    # artifacts/starquakes/sun.wav, small_to_large.wav
+node --test test/starquake.test.js                   # Sun calibration, 126 Hz, tonal (energy only at modes), labels
+.venv/bin/python -m unittest tests/test_starquake.py # band-pass removes a 0.1 mHz trend, gaps, nu_max/dnu recovery
+```
+
+Not done yet: playing the Sun's own measured Doppler data (SOHO/MDI, SDO/HMI or BiSON). JSOC data exports need a
+registered account, so the Sun currently uses its measured ν<sub>max</sub> and Δν with the model pattern.
+
 ### Frame details and data flags
 
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
@@ -220,6 +269,7 @@ Setup and details: [docs/blink/README.md](docs/blink/README.md).
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
 | astropy built-in solar-system ephemeris | Earth's position, for the parallax term of the predicted star paths |
 | HYG Database v4.1 (astronexus, CC BY-SA 4.0) | the searchable star list |
+| NASA Kepler short-cadence light curves (MAST) | real starquakes of four Kepler LEGACY stars |
 | ESA Gaia archive TAP (Gaia DR1-3, Hipparcos-2, Tycho-2, 2MASS, AllWISE, Pan-STARRS1, URAT1, UCAC4, PPMXL, GSC 2.3, CatWISE2020) | measured positions that train each star's trajectory model |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
@@ -238,7 +288,7 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ## Repo layout
 
 ```
-pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py
+pipeline/   fetch.py · analyze.py · evidence.py · explain.py · targets.py · star_trajectory.py · stardb.py · star_ml.py · starquake.py
 app/        index.html (home) · observatory.html · brand.css · theme.js · home.css · home.js · style.css · app.js · starpath.js · stardb.js · stars.js · starcore.js · longrange.js · data/<target>/ · data/stars/ (generated)
 server.js   local demo server with live Claude answers
 docs/field-shift/   our earlier Field Shift plan
