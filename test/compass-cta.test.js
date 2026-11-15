@@ -33,3 +33,12 @@ test("after typed coordinates it falls back to the plain Sky Compass", async () 
   assert.equal(p.$("compassCta").href, "compass.html");
   p.close();
 });
+
+test("on the home page the button sits in the hero, right after How It Works, not at the bottom", () => {
+  const h = html("index.html");
+  const hero = h.match(/<div class="cta">([\s\S]*?)<\/div>\s*<dl class="hero-stats"/);
+  assert.ok(hero, "hero buttons");
+  const links = [...hero[1].matchAll(/<a class="btn [^"]*"[^>]*href="([^"]+)"/g)].map((x) => x[1]);
+  assert.deepEqual(links, ["observatory.html", "#how", "compass.html"]);
+  assert.equal((h.match(/Visualise with Sky Compass/g) || []).length, 1, "only one copy on the page");
+});

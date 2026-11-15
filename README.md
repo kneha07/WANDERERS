@@ -27,6 +27,12 @@
   <img alt="Data are real" src="https://img.shields.io/badge/data-real%2C%20not%20simulated-16A34A">
 </p>
 
+
+<p align="center">
+  <img src="docs/img/wanderers-live-qr.png" alt="QR code: scan to open WANDERERS on your phone" width="220"><br>
+  <sub><b>Scan to open WANDERERS on your phone</b> (the live site above)</sub>
+</p>
+
 Pluto was found by flipping between two photos of the sky and spotting the dot that moved. WANDERERS does
 that with real infrared data spanning 2010 to 2026, then goes one step further: it uses SPHEREx's
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
@@ -49,7 +55,6 @@ timeline
 | I want to… | Do this |
 |---|---|
 | **Look around** | Open the live site (top of this page). Nothing to install. |
-| **Run it locally** | `node server.js`, then open <http://localhost:8000>. |
 | **Run everything** (any coordinates, live explorer) | `node start.js`, or double-click `start.cmd` / `start.command`. It sets up Python and the web build for you. |
 | **Rebuild the data** | See [Run it](#run-it). `app/data/` is committed, so you only need this to change the data. |
 | **Run the tests** | `for f in test/*.test.js; do node --test "$f"; done` and `python3 -m unittest discover -s tests -p "test_*.py"` |
@@ -180,8 +185,10 @@ projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMas
 and served by NASA/IPAC IRSA. They are decades old, not a live view. Tap a planet for a card, or a star to open its
 star sheet. "Drag the sky" in the Sight check sheet moves the sky onto something you can see. The page opens with no
 signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days, and "Save the sky for a place" in
-the ⓘ sheet keeps them for a latitude before a trip. Checks: `node --test test/sky.test.js test/hips.test.js
-test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network).
+the ⓘ sheet keeps them for a latitude before a trip (each saved place has its own Remove). Checks: `node --test test/sky.test.js test/hips.test.js
+test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network; `SHARP=1` also
+saves and removes the 34 MB Sharp level). GitHub Actions (`.github/workflows/checks.yml`) runs the Node, Python and
+`web/` tests on every pull request, plus this browser check, which is allowed to fail when an archive is down.
 Spec: `docs/specs/sky-compass-real-sky.md`.
 
 **No more 2010 → 2025 jump.** Between WISE 2010 and SPHEREx 2025 the time-lapse now shows one NEOWISE image per sky
