@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review: Star Fix (WANDERERS)</title>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { border-style: dashed; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); color: #e2e8f0; }
+      .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-12">
+      <header class="space-y-4">
+        <p class="label text-slate-500">kneha07/WANDERERS · feature/star-fix · 2026-11-15</p>
+        <h1 class="font-serif text-4xl">Architecture review: Star Fix</h1>
+        <p class="text-sm text-slate-600 max-w-3xl">
+          Scope: <code class="font-mono">git diff 1275527..HEAD -- pipeline server.js start.js app tests test</code> (20 commits, 15 files, +1418).
+          Read-only pass. Spec: <code class="font-mono">docs/specs/star-fix-build.md</code>. No <code>CONTEXT.md</code> and no <code>docs/adr/</code> exist, so the spec gives the domain words (photo, night, fix, place, radius).
+          Items in issue #58 are not repeated unless the friction is structural.
+        </p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 border-2 border-slate-500 bg-white"></span>module</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-0 border-t-2 border-dashed border-slate-500"></span>seam</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-0 border-t-2 border-red-600"></span>leak</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 deep"></span>deep module</span>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+          <p class="label text-slate-500 mb-2">Hot spots in this run (commits that touch the file)</p>
+          <div class="grid grid-cols-[12rem_1fr] gap-y-1 font-mono text-xs items-center">
+            <span>app/starfix.js</span><span class="h-3 bg-emerald-600" style="width:100%"></span>
+            <span>test/starfixcore.test.js</span><span class="h-3 bg-emerald-600" style="width:100%"></span>
+            <span>app/starfixcore.js</span><span class="h-3 bg-emerald-400" style="width:75%"></span>
+            <span>pipeline/star_fix.py</span><span class="h-3 bg-emerald-400" style="width:75%"></span>
+            <span>server.js</span><span class="h-3 bg-emerald-300" style="width:50%"></span>
+          </div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+        <!-- Candidate 1 -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl mr-2">1. Deepen the night module: one call gives the whole answer block</h2>
+            <span class="rounded-full bg-emerald-100 text-emerald-800 px-3 py-0.5 text-xs font-semibold">Strong</span>
+            <span class="rounded-full bg-slate-100 text-slate-700 px-3 py-0.5 text-xs">in-process</span>
+            <span class="rounded-full bg-indigo-100 text-indigo-800 px-3 py-0.5 text-xs">serves spec §8, §10.2</span>
+          </div>
+          <ul class="font-mono text-sm text-slate-700">
+            <li>app/starfixcore.js — night(), headline(), nearestCity(), describe(), photosLine()</li>
+            <li>app/starfix.js — fill(), isUsed(), map window (span) rule, list open rule</li>
+            <li>test/starfixcore.test.js</li>
+          </ul>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="label text-red-700 mb-2">Before: the page joins five core calls</p>
+              <pre class="mermaid">
+flowchart TB
+  F["starfix.js fill()"]
+  F --> N["night(rows)"]
+  F --> NC["nearestCity(lat, lon, cities)"]
+  F --> H["headline(c, city, gps, count, example, pending)"]
+  F --> D["describe(result, isOutlier)"]
+  F --> P["photosLine(used, total, pending)"]
+  F -.-> X["in the page, no test:<br/>isUsed, mark ✓ / !, map span,<br/>open rule, headline gate"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;
+  class X leak
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="label text-emerald-700 mb-2">After: one interface, the page only writes</p>
+              <div class="space-y-3">
+                <div class="rounded border-2 border-slate-500 p-2 text-center text-xs">starfix.js fill(b, view) — DOM writes only</div>
+                <div class="text-center text-slate-400 text-xs">▼ night(rows, {cities, example})</div>
+                <div class="border-t-2 border-dashed border-slate-400"></div>
+                <div class="deep rounded-lg p-4 space-y-2">
+                  <p class="label">night module (deep)</p>
+                  <div class="grid grid-cols-2 gap-2 text-[11px] opacity-70">
+                    <span class="border border-slate-500 rounded px-1">combine / outliers</span>
+                    <span class="border border-slate-500 rounded px-1">nearest city</span>
+                    <span class="border border-slate-500 rounded px-1">headline lines</span>
+                    <span class="border border-slate-500 rounded px-1">row mark + text + retry</span>
+                    <span class="border border-slate-500 rounded px-1">map window {lat, lon, r, span}</span>
+                    <span class="border border-slate-500 rounded px-1">summary + list open</span>
+                  </div>
+                </div>
+                <p class="text-xs text-slate-500">headline(), describe() and the others stay as internal seams.</p>
+              </div>
+            </div>
+          </div>
+
+          <dl class="grid sm:grid-cols-[7rem_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt class="font-semibold">Problem</dt>
+            <dd>The night module is shallow: the page must call five functions in the right order, and the rules between them (used or not, map span, list open) live in the DOM file with no test.</dd>
+            <dt class="font-semibold">Evidence</dt>
+            <dd><code>b62b108</code> changed the map span rule inside <code>starfix.js</code>; no test caught or now holds it. <code>isUsed()</code> repeats the outlier rule of <code>night()</code>. <code>headline()</code> takes six positional arguments, so its interface is nearly as wide as its implementation.</dd>
+            <dt class="font-semibold">Solution</dt>
+            <dd>Let <code>night(rows, {cities, example})</code> return everything one answer block shows. <code>fill()</code> becomes DOM writes and the canvas draw.</dd>
+            <dt class="font-semibold">Wins</dt>
+            <dd>
+              <ul class="list-disc pl-5">
+                <li>locality: block rules in one module</li>
+                <li>leverage: example and real nights, one call</li>
+                <li>map span rule gets a test</li>
+                <li>delete <code>isUsed</code> duplicate</li>
+                <li>tests cross one interface</li>
+              </ul>
+            </dd>
+            <dt class="font-semibold">Deletion test</dt>
+            <dd>Delete <code>headline()</code> today: its complexity moves into <code>fill()</code>, not away. So the logic earns its keep, but the seam sits one level too low.</dd>
+            <dt class="font-semibold">Cost</dt>
+            <dd>About 40 lines move from <code>starfix.js</code> to <code>starfixcore.js</code>. Existing <code>headline</code> and <code>describe</code> tests can stay. Update the §8 table in the spec.</dd>
+          </dl>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-serif text-2xl mr-2">2. Pull the solver process out of the HTTP route</h2>
+            <span class="rounded-full bg-amber-100 text-amber-800 px-3 py-0.5 text-xs font-semibold">Worth exploring</span>
+            <span class="rounded-full bg-slate-100 text-slate-700 px-3 py-0.5 text-xs">local-substitutable</span>
+            <span class="rounded-full bg-indigo-100 text-indigo-800 px-3 py-0.5 text-xs">serves spec §6, §9</span>
+          </div>
+          <ul class="font-mono text-sm text-slate-700">
+            <li>server.js — starFix(), the /api/star-fix route, starFixBusy</li>
+            <li>start.js — the same Windows kill-tree line</li>
+            <li>test/starfix-server.test.js</li>
+          </ul>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="label text-red-700 mb-2">Before: cross-section of one request</p>
+              <div class="space-y-1 text-xs">
+                <div class="h-9 border-l-4 border-slate-400 bg-slate-50 px-2 flex items-center">HTTP: method, 409 busy, body limit, 400 / 413</div>
+                <div class="h-9 border-l-4 border-red-500 bg-red-50 px-2 flex items-center">spawn python, write stdin (in route file)</div>
+                <div class="h-9 border-l-4 border-red-500 bg-red-50 px-2 flex items-center">60 s timer + taskkill /T (fixed, no seam)</div>
+                <div class="h-9 border-l-4 border-red-500 bg-red-50 px-2 flex items-center">last JSON line, "No module named" → message</div>
+                <div class="h-9 border-l-4 border-slate-400 bg-slate-50 px-2 flex items-center">reply(code, body), first answer wins</div>
+              </div>
+              <p class="text-xs text-red-700 mt-2">Only test path: boot server.js on a port. The 504 path has no test.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 p-4">
+              <p class="label text-emerald-700 mb-2">After: HTTP adapter over a deep solver module</p>
+              <div class="space-y-1 text-xs">
+                <div class="h-9 border-l-4 border-slate-400 bg-slate-50 px-2 flex items-center">HTTP adapter: busy, body limit, reply</div>
+                <div class="border-t-2 border-dashed border-slate-400 my-2"></div>
+                <div class="deep rounded-lg p-3 h-28 flex flex-col justify-between">
+                  <span class="label">solvePhoto(buf, {python, timeoutMs}) → {code, body}</span>
+                  <span class="opacity-70">spawn · stdin · timeout + kill tree · parse · classify the 500s</span>
+                  <span class="opacity-50 text-[11px]">later: a warm worker behind the same interface (#58)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <dl class="grid sm:grid-cols-[7rem_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt class="font-semibold">Problem</dt>
+            <dd>Process control leaks into the route: the 60 s limit, the kill tree and the error words have no seam, so tests must start a whole server and cannot reach the 504.</dd>
+            <dt class="font-semibold">Solution</dt>
+            <dd>Move <code>starFix()</code> to a module that returns a promise of <code>{code, body}</code> and takes the Python path and the time limit. The route stays an HTTP adapter.</dd>
+            <dt class="font-semibold">Wins</dt>
+            <dd>
+              <ul class="list-disc pl-5">
+                <li>504 testable in milliseconds</li>
+                <li>locality: one place for process rules</li>
+                <li>warm worker swap stays local</li>
+                <li>drop the source-regex test (A9)</li>
+              </ul>
+            </dd>
+            <dt class="font-semibold">Why not Strong</dt>
+            <dd>Today one adapter sits behind the seam (cold spawn), so the seam is hypothetical. It becomes real when the #58 warm-worker item starts. Do it then, as the first step of that work.</dd>
+          </dl>
+          <div class="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs">Structural link to #58: the "60 s kill has no test" and "one warm worker process" items both depend on this seam.</div>
+        </article>
+
+        <!-- Checked, not candidates -->
+        <article class="rounded-xl border border-slate-200 bg-stone-100 p-6 space-y-3">
+          <h2 class="font-serif text-xl">Checked and left alone</h2>
+          <ul class="text-sm space-y-2">
+            <li><span class="font-mono">pipeline/star_fix.py star_fix(data)</span> — deep: photo bytes in, one result dict out. Tests cross that interface with real photos. Deletion test: the complexity would spread to the caller. No change.</li>
+            <li><span class="font-mono">starfixcore.js photoQueue(send, onChange)</span> — deep, and <code>send</code> is a real seam: <code>fetch</code> in the page, a fake in six tests. No change.</li>
+            <li><span class="font-mono">result codes</span> (<code>zone_mismatch</code>, <code>missing</code>, statuses) — named in Python, in <code>TEXT/MISSING/WARN</code> and in the spec. Three codes, all pinned by tests against the spec words. A shared code table is speculative. No change.</li>
+            <li><span class="font-mono">start.js solver install</span> — install steps, not a module. The two duplicate kill-tree lines are one line each; candidate 2 absorbs the server copy.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="deep rounded-xl p-8 space-y-3">
+        <p class="label text-emerald-300">Top recommendation</p>
+        <h2 class="font-serif text-3xl"><a href="#c1" class="underline decoration-emerald-400">1. Deepen the night module</a></h2>
+        <p class="text-slate-300 max-w-3xl">The page file is the hottest file of this run, and its block rules have no test. One <code>night(rows, {cities, example})</code> call puts every rule of an answer block behind one tested interface, for about 40 moved lines and no new file.</p>
+      </section>
+    </main>
+  </body>
+</html>
