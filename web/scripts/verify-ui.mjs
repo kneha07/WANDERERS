@@ -123,7 +123,9 @@ const stale = await page.evaluate(() =>
 check('while B loads, no data panel shows A', stale.length === 0, stale.join(' ') || 'Motion, Brightness, Frames, Your sky now: skeletons')
 const marker = await page.locator('.frame-label').innerText()
 check('the dimmed old flipbook names itself', /Showing Barnard's Star until eps Ind B loads/.test(marker), marker)
-check('the wait text names the real step', /Getting the SPHEREx images of eps Ind B/.test(await page.locator('.indicator').innerText()))
+// The name lookup can take a few seconds on a cold server; then the text must move on to the image step.
+const step = await page.locator('.indicator', { hasText: 'Getting the SPHEREx images of eps Ind B' }).waitFor({ timeout: 20000 }).then(() => true, () => false)
+check('the wait text names the real step', step, 'Looking up … in CDS Sesame, then Getting the SPHEREx images …')
 await page.locator('.viewer[data-status=result]').waitFor({ timeout: 180000 })
 await page.unroute('**/api/frames?q=eps*')
 
