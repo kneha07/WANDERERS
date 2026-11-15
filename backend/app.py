@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from backend.about import get_about
 from backend.spherex import get_frames, resolve
 
 app = FastAPI(title="SPHEREx blink")
@@ -49,6 +50,18 @@ def resolve_name(q: str = Query(min_length=1, max_length=200)):
     coord, name, pm = resolve(checked(q))
     return {"query": q, "name": name, "ra": round(float(coord.ra.deg), 6), "dec": round(float(coord.dec.deg), 6),
             "pm": {"pmra": pm[0], "pmdec": pm[1]} if pm else None}
+
+
+@app.get("/api/about")
+def about(
+    q: str | None = Query(None, min_length=1, max_length=200),
+    ra: float | None = Query(None, ge=0, lt=360),
+    dec: float | None = Query(None, ge=-90, le=90),
+):
+    """'About this star': catalog facts and one history sentence, by name (q) or by position (ra, dec)."""
+    if not ((q is not None and ra is None and dec is None) or (q is None and ra is not None and dec is not None)):
+        raise HTTPException(400, "Give a name (q) or a position (ra and dec in degrees), not both.")
+    return get_about(q=checked(q)) if q is not None else get_about(ra=ra, dec=dec)
 
 
 @app.get("/api/frames")

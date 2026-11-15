@@ -403,7 +403,8 @@ def gaia_field(center, radius_deg):
 
 
 def sesame_resolver(name, urls):
-    """The first <Resolver> with a position that a Sesame mirror finds for name, or None if no mirror knows it.
+    """The first <Resolver> with a position that a Sesame mirror finds for name (its host in the attribute "mirror"),
+    or None if no mirror knows it.
     A mirror that fails or says "nothing found" passes the name to the next one. HTTPException(502) if all fail."""
     failed = []
     for url in urls:
@@ -414,6 +415,7 @@ def sesame_resolver(name, urls):
             log.warning("Sesame %s failed for %r: %s", url.split("/")[2], name, getattr(e, "detail", e))
             continue
         if hit is not None:
+            hit.set("mirror", url.split("/")[2])  # which host answered (about.py links SIMBAD on the same host)
             return hit
     if len(failed) == len(urls):
         raise HTTPException(502, f"CDS Sesame did not answer ({', '.join(failed)}). Try again in a minute.")
