@@ -330,3 +330,24 @@ test("Webb sheet: without a known motion the red cross stays on the catalogue po
   assert.deepEqual(rendered[0].mark, { ra: 10, dec: 20 });
   assert.doesNotMatch(c.$("wNote").innerHTML, /red cross/);
 });
+
+test("the selected star's trail labels are thinned so years never print on top of each other", async () => {
+  const yearLabels = async (spreadDeg) => {
+    const c = loadCompass({ intro: "fail" });
+    await c.flush();
+    await c.$("go").onclick();
+    c.S.manual = { az: 200, alt: 40 };
+    c.frame();
+    const cr = c.S.crosshair;
+    c.S.sel = c.S.targets.find((t) => t.id === "r_dra");
+    c.S.trailFor = `${c.S.sel.id}:${c.S.sel.name}`;          // hand the page a ready trail
+    c.S.trail = { half: 100000, now: 2026.9, pts: Array.from({ length: 81 }, (_, i) => ({ year: 2026.9 - 100000 + 2500 * i, ra: cr.ra, dec: cr.dec + spreadDeg * (i / 80 - 0.5) })) };
+    c.$("hud").texts.length = 0;
+    c.frame();
+    return c.$("hud").texts.filter(([t]) => /\d (BCE|CE)$/.test(t));
+  };
+  const crowded = await yearLabels(0.0001);                 // a slow star: the whole trail is a few pixels long
+  assert.equal(crowded.length, 1, JSON.stringify(crowded));
+  const spread = await yearLabels(8);                       // a fast star: four labels, 2 deg (25 px) apart
+  assert.equal(spread.length, 4, spread.map((t) => t[0]).join(" | "));
+});
