@@ -13,6 +13,7 @@ from PIL import Image
 from backend import spherex
 
 DAY = 86400
+REAL_GAIA_FIELD = spherex.gaia_field
 
 
 class FakeSky:
@@ -153,3 +154,29 @@ def test_typed_coordinates_without_a_source_say_no_motion_is_known_not_no_source
 def test_a_source_at_typed_coordinates_is_still_measured(sky):
     r = frames()
     assert all(f["centroid"] and f["notes"] == [] for f in r["frames"])
+
+
+class Response:
+    def __init__(self, text):
+        self.ok, self.status_code, self.text = True, 200, text
+
+
+def test_a_failed_gaia_query_costs_one_short_wait_then_the_overlay_stays_off_for_10_minutes(sky, monkeypatch):
+    calls, now = [], [time.time()]
+    def esa(url, params=None, timeout=None, **kw):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise spherex.requests.Timeout("ESA TAP did not answer")
+        return Response("source_id,ra,dec,pmra,pmdec,phot_g_mean_mag,parallax,parallax_over_error\n"
+                        "1,10.0,20.0,1.0,2.0,12.5,3.0,30.0\n")
+    monkeypatch.setattr(spherex, "gaia_field", REAL_GAIA_FIELD)
+    monkeypatch.setattr(spherex.requests, "get", esa)
+    monkeypatch.setattr(spherex.time, "time", lambda: now[0])
+    monkeypatch.setattr(spherex, "_down_until", {})
+    first = frames()
+    assert (first["gaia"], calls) == (None, [8])  # one try with a short timeout, not 3 x 30 s
+    assert any("Gaia" in n for n in first["notes"])
+    assert (frames()["gaia"], len(calls)) == (None, 1)  # within 10 minutes: no new wait
+    now[0] += 11 * 60
+    stars = frames()["gaia"]["stars"]
+    assert [(s["source_id"], s["parallax"]) for s in stars] == [("1", 3.0)]

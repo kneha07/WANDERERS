@@ -44,6 +44,8 @@ SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
 S3_URL = "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/"
 FSSPEC = {"block_size": 256 * 1024, "cache_type": "blockcache"}
+GAIA_TIMEOUT_S, GAIA_DOWN_S = 8, 600  # the Gaia overlay is optional: one short try, then skip it for 10 minutes
+_down_until = {}  # service URL -> time.time() until which it is skipped after a failure (a negative cache)
 # FLAGS bits that mark bad pixels (cosmic rays, hot/dead pixels, persistence). These show up as false blinkers.
 BAD_FLAGS = 1 | 4 | 64 | 512 | 1024 | 2048 | 131072  # TRANSIENT SUR_ERROR NONFUNC MISSING_DATA HOT COLD PERSIST
 OVERFLOW, BLOOM = 2, 67108864  # saturated pixel; pixel inside the bloom of a bright star
@@ -341,14 +343,14 @@ def stretch(img, lo, hi):
     return np.arcsinh(v / 0.1) / np.arcsinh(10)
 
 
-def http_get(url, stats=None, **params):
-    """GET with up to 3 tries; back off on 5xx and network errors. HTTPException(502) if all fail.
+def http_get(url, stats=None, tries=3, timeout=30, **params):
+    """GET with up to `tries` tries; back off on 5xx and network errors. HTTPException(502) if all fail.
 
     stats: optional dict; stats["retries"] counts the extra tries (reported in the response notes).
     """
-    for attempt in range(3):
+    for attempt in range(tries):
         try:
-            r = requests.get(url, params=params or None, timeout=30)
+            r = requests.get(url, params=params or None, timeout=timeout)
             if r.ok:
                 return r
             err = f"HTTP {r.status_code}"
@@ -356,7 +358,7 @@ def http_get(url, stats=None, **params):
                 break
         except requests.RequestException as e:
             err = type(e).__name__
-        if attempt < 2:
+        if attempt < tries - 1:
             if stats is not None:
                 stats["retries"] += 1
             time.sleep(3 * (attempt + 1))
@@ -365,17 +367,30 @@ def http_get(url, stats=None, **params):
 
 def gaia_field(center, radius_deg):
     """Gaia DR3 stars brighter than G = 19 within radius_deg of center: the ESA archive TAP query that WANDERERS
-    pipeline/fetch.py uses. Cached on disk, because the field does not change."""
-    path = CACHE_DIR / f"gaia-{center.ra.deg:.4f}-{center.dec.deg:.4f}-{radius_deg:.4f}.json"
-    if path.exists():
-        return json.loads(path.read_text())
-    query = ("SELECT TOP 2000 source_id, ra, dec, pmra, pmdec, phot_g_mean_mag FROM gaiadr3.gaia_source WHERE "
+    pipeline/fetch.py uses. Cached on disk, because the field does not change.
+
+    The overlay is optional, so the query gets one short try. After a failure, Gaia is skipped for GAIA_DOWN_S:
+    when ESA is down, later requests answer at once instead of waiting again.
+    """
+    path = CACHE_DIR / f"gaia2-{center.ra.deg:.4f}-{center.dec.deg:.4f}-{radius_deg:.4f}.json"
+    stars, _ = read_cache(path)
+    if stars is not None:
+        return stars
+    if time.time() < _down_until.get(GAIA_TAP, 0):
+        raise HTTPException(502, "the ESA Gaia archive failed a few minutes ago; it is tried again after 10 minutes")
+    query = ("SELECT TOP 2000 source_id, ra, dec, pmra, pmdec, phot_g_mean_mag, parallax, parallax_over_error "
+             "FROM gaiadr3.gaia_source WHERE "
              f"1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{center.ra.deg},{center.dec.deg},{radius_deg})) "
              "AND phot_g_mean_mag < 19 ORDER BY phot_g_mean_mag")
-    r = http_get(GAIA_TAP, REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query)
+    try:
+        r = http_get(GAIA_TAP, tries=1, timeout=GAIA_TIMEOUT_S, REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query)
+    except HTTPException:
+        _down_until[GAIA_TAP] = time.time() + GAIA_DOWN_S
+        raise
     num = lambda v: float(v) if v not in ("", None) else None  # noqa: E731 - masked Gaia values are empty
     stars = [{"source_id": row["source_id"], "ra": float(row["ra"]), "dec": float(row["dec"]), "pmra": num(row["pmra"]),
-              "pmdec": num(row["pmdec"]), "gmag": num(row["phot_g_mean_mag"])}
+              "pmdec": num(row["pmdec"]), "gmag": num(row["phot_g_mean_mag"]), "parallax": num(row["parallax"]),
+              "parallax_over_error": num(row["parallax_over_error"])}
              for row in csv.DictReader(io.StringIO(r.text))]
     write_json(path, stars)
     return stars
