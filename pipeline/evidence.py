@@ -147,7 +147,8 @@ def main():
         d.write_text(json.dumps(t, indent=1))
         ref = t["reference"]
         index.append({"id": t["id"], "name": t["name"], "teaser": TEASER.get(t["id"], t.get("teaser", t["kind"])),
-                      "ra": t["grid"]["centre_ra"], "dec": t["grid"]["centre_dec"]})
+                      "ra": t["grid"]["centre_ra"], "dec": t["grid"]["centre_dec"],
+                      "fov": round(t["grid"]["npix"] * t["grid"]["arcsec_per_pix"])})   # side of the field, arcsec
         print(f"{t['name']:<18} {t['evidence']['status']:<9} {t['evidence']['classification']:<38} "
               f"confidence {t['evidence']['confidence']}")
     index.sort(key=lambda x: ORDER.index(x["id"]) if x["id"] in ORDER else 99)

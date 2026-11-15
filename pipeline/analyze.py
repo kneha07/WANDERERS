@@ -34,6 +34,7 @@ from scipy import ndimage
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
 from fetch import predict, CACHE, ROOT, FIELD_ARCSEC
+from fov import fov_of, npix_for
 
 warnings.simplefilter("ignore")
 from astropy import log as _astropy_log
@@ -41,7 +42,7 @@ _astropy_log.setLevel("WARNING")   # the spectral WCS triggers an expected SIP n
 OUT = ROOT / "app" / "data"
 RECENTRE_ON_MOVERS = False         # experimental mover search; see find_movers()
 GRID_PIX = 2.0                      # arcsec per display pixel
-NPIX = int(FIELD_ARCSEC / GRID_PIX)
+NPIX = int(FIELD_ARCSEC / GRID_PIX)         # default grid; a target with its own field of view uses npix_for()
 
 
 def pixel_sr(w, x, y):
@@ -80,11 +81,11 @@ BANDS = [
 ]
 
 
-def grid_wcs(centre):
+def grid_wcs(centre, npix=NPIX):
     w = WCS(naxis=2)
     w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
     w.wcs.crval = [centre.ra.deg, centre.dec.deg]
-    w.wcs.crpix = [NPIX / 2 + 0.5, NPIX / 2 + 0.5]
+    w.wcs.crpix = [npix / 2 + 0.5, npix / 2 + 0.5]
     w.wcs.cdelt = [-GRID_PIX / 3600, GRID_PIX / 3600]
     return w
 
@@ -294,7 +295,8 @@ def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=()):
 def analyze(tid):
     global NPIX
     t = TARGETS[tid]
-    NPIX = int(t.get("fov", FIELD_ARCSEC) / GRID_PIX)     # field of view chosen at lookup time (default 300")
+    NPIX = npix_for(fov_of(t), GRID_PIX)        # field of view chosen at lookup time (default 300"): one grid size for every step
+    npix = NPIX                                 # local name used by the field-of-view code from main
     meta = json.loads((CACHE / tid / "gaia.json").read_text())
     ref, stars = meta["ref"], meta["field_stars"]
     out = OUT / tid; out.mkdir(parents=True, exist_ok=True)
@@ -318,7 +320,7 @@ def analyze(tid):
 
     # Display grid centred between the first and last epoch, so the whole trail fits.
     mid = predict(ref, (2010.5 + vyear[-1]) / 2)
-    gw = grid_wcs(mid)
+    gw = grid_wcs(mid, npix)
 
     # ---- flipbook frames, two wavelength-matched channels -------------------------------
     channels = {
@@ -337,7 +339,7 @@ def analyze(tid):
         wf = CACHE / tid / spec["wise"] if spec["wise"] else None
         if wf is not None and wf.exists():
             h = fits.open(wf)[0]
-            img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(NPIX, NPIX))
+            img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(npix, npix))
             name = f"{ch}_wise2010.png"; save_png(img, out / name)
             fr = {"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name, "img": img}
             frames[ch].append(fr); flip[ch].append(fr)
@@ -350,7 +352,7 @@ def analyze(tid):
                 h = fits.open(s["file"])
                 im = h["IMAGE"].data.astype(float)
                 im[bad_mask(h["FLAGS"], DISPLAY_BAD)] = np.nan
-                r, _ = reproject_interp((im, WCS(h["IMAGE"].header).celestial), gw, shape_out=(NPIX, NPIX))
+                r, _ = reproject_interp((im, WCS(h["IMAGE"].header).celestial), gw, shape_out=(npix, npix))
                 stack.append(r)
             img = np.nanmedian(np.array(stack), axis=0)
             yr = float(np.mean([s["year"] for s in sel]))
@@ -390,7 +392,7 @@ def analyze(tid):
     if old is not None and news:
         new = max(news, key=lambda f: (f.get("n_images", 0), f["year"]))
         mids = [(f["img"], f["year"]) for f in news if f is not new and f.get("n_images", 0) >= 3]
-        movers = find_movers(old["img"], new["img"], old["year"], new["year"], gw, stars, NPIX, mids)
+        movers = find_movers(old["img"], new["img"], old["year"], new["year"], gw, stars, npix, mids)
     # For a typed-in position, an unexplained mover whose path passes within 10" of the spot is
     # almost certainly what the user meant (fast, cold objects are often missing from Gaia).
     # Experimental: chance pairings still slip through on noisy fields, so re-centring on an
@@ -533,7 +535,7 @@ def analyze(tid):
                              pm_dec=st["pmdec"] * u.mas / u.yr, obstime=Time(2016.0, format="jyear"))
                 p = c.apply_space_motion(new_obstime=Time(f["year"], format="jyear"))
                 x, y = gw.world_to_pixel(p)
-                if 0 <= x < NPIX and 0 <= y < NPIX:
+                if 0 <= x < npix and 0 <= y < npix:
                     pos.append([round(float(x), 1), round(float(y), 1), round(st["g"], 1)])
             ghosts[f["png"]] = pos
 

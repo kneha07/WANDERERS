@@ -27,13 +27,14 @@ from astropy.time import Time
 
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
+from fov import DEFAULT_FOV, fov_of, clamp_fov, position_id
 
 warnings.simplefilter("ignore")
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "cache"
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap"
 SIA = "https://irsa.ipac.caltech.edu/SIA"
-FIELD_ARCSEC = 300          # side of the square field we analyse
+FIELD_ARCSEC = DEFAULT_FOV  # default side of the square field we analyse; a target can set its own (see fov.py)
 SPX_PIX = 6.15              # SPHEREx pixel scale, arcsec
 KEEP_HDUS = ("IMAGE", "FLAGS", "VARIANCE", "WCS-WAVE")
 MAX_IMAGES = 150            # SPHEREx cutouts per target (see fetch())
@@ -135,7 +136,7 @@ def resolve(tid, t):
 
     # Field stars: everything Gaia sees within the analysis field, for the "ghost" overlay.
     centre = predict(ref, 2025.7)
-    rad = FIELD_ARCSEC * 0.75 / 3600
+    rad = fov_of(t) * 0.75 / 3600
     field = gaia(f"SELECT source_id, ra, dec, pmra, pmdec, parallax, phot_g_mean_mag FROM gaiadr3.gaia_source "
                  f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{centre.ra.deg},{centre.dec.deg},{rad})) "
                  f"AND phot_g_mean_mag < 19")
@@ -225,7 +226,7 @@ def fetch(tid):
         pick |= {i for i, r in enumerate(spx) if stem(r) in cached}
         spx = spx[sorted(pick)]
     print(f"   SPHEREx DR1: {n_all} images, using {len(spx)}", flush=True)
-    fov = t.get("fov", FIELD_ARCSEC)
+    fov = fov_of(t)
     size_px = int(fov / SPX_PIX) + 4
 
     def one(row):
@@ -258,15 +259,20 @@ def fetch(tid):
         rows = aw[(aw["energy_bandpassname"] == band) & (aw["dataproduct_subtype"] == "science")]
         if len(rows) == 0:
             print(f"   AllWISE {band}: none"); continue
-        f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(t.get("fov", FIELD_ARCSEC) * 1.6)}arcsec"))
+        f.write_bytes(get(f"{rows[0]['access_url']}?center={cmid.ra.deg},{cmid.dec.deg}&size={int(fov * 1.6)}arcsec"))
     print(f"   AllWISE W1/W2 cached", flush=True)
 
 
 def add_position(ra, dec, name=None, fov=None):
-    """Register a user-chosen sky position as a target and return its id."""
-    tid = f"pos_{ra:.4f}_{dec:+.4f}".replace(".", "p").replace("+", "n").replace("-", "s") + (f"_f{fov}" if fov and fov != FIELD_ARCSEC else "")
+    """Register a user-chosen sky position as a target and return its id.
+
+    fov is the side of the square field in arcseconds (see fov.py). The default field keeps the
+    original id; other sizes get a suffix, so each size is cached separately.
+    """
+    fov = clamp_fov(fov)
+    tid = position_id(ra, dec, fov)
     t = {"name": name or f"RA {ra:.4f}, Dec {dec:+.4f}", "kind": "A sky position entered by a user",
-         "position": {"ra": ra, "dec": dec}, "story": "explore", **({"fov": fov} if fov else {})}
+         "position": {"ra": ra, "dec": dec}, "story": "explore", "fov_arcsec": fov}
     d = CACHE / tid; d.mkdir(parents=True, exist_ok=True)
     (d / "target_def.json").write_text(json.dumps(t, indent=1))
     TARGETS[tid] = t
@@ -280,7 +286,7 @@ if __name__ == "__main__":
         a = sys.argv
         ra, dec = float(a[a.index("--ra") + 1]), float(a[a.index("--dec") + 1])
         name = a[a.index("--name") + 1] if "--name" in a else None
-        fov = int(a[a.index("--fov") + 1]) if "--fov" in a else None       # field of view in arcsec (e.g. 300, 600)
+        fov = float(a[a.index("--fov") + 1]) if "--fov" in a else None      # arcseconds per side
         tid = add_position(ra, dec, name, fov)
         print(f"target id: {tid}  (next: python pipeline/analyze.py {tid} && python pipeline/evidence.py)")
         fetch(tid)

@@ -1,0 +1,47 @@
+{
+  "baseUrl": "http://localhost:5183",
+  "home": { "path": "/explore/", "ready": "#home-hint" },
+  "setup": [{ "click": "#layer-close", "ifVisible": true }],
+  "screens": [
+    {
+      "name": "Result (chip)",
+      "steps": [{ "click": "[data-target='RW Aur']", "wait": "#target-name:has-text('RW Aur')" }],
+      "ready": ".viewer[data-status=result]"
+    },
+    {
+      "name": "Second target",
+      "steps": [
+        { "click": "[data-target='RW Aur']", "wait": "#target-name:has-text('RW Aur')" },
+        { "click": "[data-target=\"Barnard's Star\"]", "wait": "#target-name:has-text('Barnard')" }
+      ],
+      "ready": ".viewer[data-status=result]"
+    },
+    {
+      "name": "Candidate marked",
+      "steps": [
+        { "click": "[data-target='RW Aur']", "wait": ".viewer[data-status=result]" },
+        { "click": "#stage", "wait": ".cand" }
+      ],
+      "ready": ".cand"
+    },
+    {
+      "name": "Tutorial layer",
+      "steps": [{ "click": "#help-btn", "wait": "dialog[open]" }],
+      "ready": "dialog[open]"
+    }
+  ],
+  "lists": [
+    { "name": "Frames (deep link)", "path": "/explore/?q=RW%20Aur&fov=5", "api": "/api/frames", "empty": "#empty-state" }
+  ],
+  "sends": [
+    {
+      "name": "Search button",
+      "steps": [{ "fill": "#q", "value": "R Dra" }],
+      "button": "#search-btn",
+      "api": "/api/frames",
+      "method": "GET"
+    }
+  ],
+  "layerSelector": "dialog[open]",
+  "throttleMs": 2500
+}
