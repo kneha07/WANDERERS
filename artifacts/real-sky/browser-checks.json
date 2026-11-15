@@ -1,5 +1,5 @@
 {
- "when": "2026-11-15T18:02:44.942Z",
+ "when": "2026-11-15T18:30:00.047Z",
  "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
@@ -239,7 +239,7 @@
   {
    "name": "a reissued survey: its recent pictures are dropped and the new date is recorded",
    "ok": true,
-   "detail": "8 → 0, {\"at\":1794765822110,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "8 → 0, {\"at\":1794767456825,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "Eye, dark site: about 2,500 stars above the horizon",
@@ -265,6 +265,66 @@
    "name": "drag the sky: Done keeps it as the sight check",
    "ok": true,
    "detail": "direction -7.44°, tilt 5.31°"
+  },
+  {
+   "name": "telescope, Eye at 12x on Capella: the photographs cover the view",
+   "ok": true,
+   "detail": "cover 1"
+  },
+  {
+   "name": "telescope, Eye at 12x on Capella: photographs and canvas agree",
+   "ok": true,
+   "detail": "2 compared (Capella, Gl 194B), worst 0 px (1° = 153.1 px)"
+  },
+  {
+   "name": "telescope: 150x, step 1 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 150x, step 2 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 150x, step 3 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 150x, step 4 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 300x, step 1 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.9 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: 300x, step 2 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 1 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: 300x, step 3 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 1 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: 300x, step 4 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 1 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: a pinch from 300x to 280x",
+   "ok": true,
+   "detail": "2 compared, worst 0.9 px (1° = 3572.3 px)"
+  },
+  {
+   "name": "telescope: held at 10x, a phone pose 3° away does not move the view",
+   "ok": true,
+   "detail": "view 316.5649°, 26.9462° -> 316.5649°, 26.9462°; the phone turned -3.00°"
   },
   {
    "name": "no script errors on the page (online)",
@@ -294,7 +354,7 @@
   {
    "name": "a reissued survey: the saved pictures are fetched again in place",
    "ok": true,
-   "detail": "spoiled tile 3 → 43673 bytes, 65 → 65 files, {\"at\":1794765834413,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "spoiled tile 3 → 48299 bytes, 65 → 65 files, {\"at\":1794767481268,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "save Standard, 34° S: finished",
