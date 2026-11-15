@@ -37,6 +37,13 @@ class EvidenceCardTests(unittest.TestCase):
         self.assertEqual(c['classification'], 'Nearby star with fast proper motion')
         self.assertEqual(c['confidence'], 'high')
 
+    def test_motion_years_are_calendar_years(self):
+        # Kapteyn's Star: last SPHEREx frame at 2026.67 is still 2026, and WISE 2010.5 is 2010
+        m = dict(motion(), from_year=2010.5, to_year=2026.6693)
+        self.assertIn('between 2010 and 2026', evidence.card(target(motion=m))['checks'][0]['text'])
+        m['shift_spherex_pixels'] = 1
+        self.assertEqual(evidence.card(target(motion=m))['checks'][0]['text'], 'No measurable motion between 2010 and 2026')
+
     def test_motion_below_pixel_threshold(self):
         c = evidence.card(target(motion=motion(pixels=1.99)))
         self.assertEqual(c['classification'], 'Steady star (no change in these snapshots)')

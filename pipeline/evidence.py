@@ -29,10 +29,11 @@ def card(t):
 
     if m:
         moved = m["shift_spherex_pixels"] >= 2 and m["measured_arcsec_per_yr"] >= 0.3
+        y0, y1 = int(m["from_year"]), int(m["to_year"])   # calendar years: 2026.67 is still 2026 (":.0f" said 2027)
         checks.append({"state": "ok" if moved else "no",
-                       "text": (f"Moved {m['shift_arcsec']:.0f}″ between {m['from_year']:.0f} and {m['to_year']:.0f} "
+                       "text": (f"Moved {m['shift_arcsec']:.0f}″ between {y0} and {y1} "
                                 f"({m['shift_spherex_pixels']:.1f} SPHEREx pixels)") if moved else
-                               f"No measurable motion between {m['from_year']:.0f} and {m['to_year']:.0f}"})
+                               f"No measurable motion between {y0} and {y1}"})
         # Below the detection limit the centroid shift is mostly noise (R Draconis: saturated core), so say so.
         numbers.append({"label": "measured motion" if moved else "apparent drift (below the detection limit, not a real motion)",
                         "value": f"{m['measured_arcsec_per_yr']:.2f}″/yr"})
