@@ -44,7 +44,7 @@ type Action =
 const TARGETS = [
   { id: 'barnard', q: "Barnard's Star", det: '', label: "Barnard's Star", note: 'fastest-moving star' },
   { id: 'eps_indi_b', q: 'eps Ind B', det: '', label: 'Epsilon Indi B', note: 'fast brown dwarf pair' },
-  { id: 'wise0855', q: 'WISE J085510.83-071442.5', det: 'D6', label: 'WISE 0855', note: 'cold brown dwarf, D6 stack (2026 position)' },
+  { id: 'wise0855', q: 'WISE J085510.83-071442.5', det: 'D6', label: 'WISE 0855', note: 'uses its 2026 position; the challenge coordinates are from 2010' },
   { id: 'rw_aur', q: 'RW Aur', det: '', label: 'RW Aurigae', note: 'young variable star' },
   { id: 'r_dra', q: 'R Dra', det: '', label: 'R Draconis', note: 'pulsating giant, many images' },
 ]

@@ -17,7 +17,9 @@ export type Frame = {
   saturated: boolean
   wavelength_um?: Range
   detectors?: string[]
+  stack_detectors?: string[] // the detectors in png and photometry (the ones every frame has)
   centroid?: Centroid | null
+  notes?: string[]
   photometry?: Phot | null
 }
 export type DetectorFrame = { group_index: number; png: string; n_images: number; photometry?: Phot | null; wavelength_um?: Range }
@@ -43,14 +45,14 @@ export type Result = {
   size_px: number
   frames: Frame[]
   detectors: Record<string, DetectorFrame[]>
-  difference: { png: string; from: string; to: string } | null
+  difference: { png: string; from: string; to: string; detectors?: string[] | null } | null
   n_images_used: number
   n_failed: number
   cached: boolean
   photometry_unit?: string
   gaia?: Gaia | null
   notes?: string[]
-  quality?: { n_images_used: number; n_failed: number; cache_age_s: number | null }
+  quality?: { n_images_used: number; n_failed: number; epochs_dropped?: number; cache_age_s: number | null }
   rgb?: Rgb | null
 }
 
@@ -110,7 +112,8 @@ export function frameNotes(f: Frame) {
   const notes: string[] = []
   if (f.saturated) notes.push(f.centroid?.saturated ? 'Saturated core; position from the wings' : 'Saturated core')
   if (f.saturated && f.photometry === null) notes.push('no brightness')
-  if (f.centroid === null) notes.push('No source above 5σ at the target')
+  if (f.centroid === null && !f.notes?.length) notes.push('No source above 5σ at the target')
+  for (const n of f.notes ?? []) notes.push(n[0].toUpperCase() + n.slice(1)) // e.g. no proper motion known for a typed RA/Dec
   if (f.n_images < 4) notes.push(`Only ${f.n_images} image${f.n_images === 1 ? '' : 's'}: noisy`)
   return notes
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { labelRange, marksFromParam, marksToParam, nearestGaia } from './data'
+import { frameNotes, labelRange, marksFromParam, marksToParam, nearestGaia } from './data'
 
 describe('epoch labels', () => {
   it('reads a one-day label', () => {
@@ -46,5 +46,16 @@ describe('nearest Gaia star', () => {
   })
   it('gives null without Gaia data', () => {
     expect(nearestGaia(view, null, { x: 1, y: 1 })).toBe(null)
+  })
+})
+
+describe('frame notes', () => {
+  const frame = { label: '2025-05-05', mjd_mean: 60800, date: '2025-05-05', n_images: 12, png: '', ring: null, saturated: false }
+  it('says plainly that a typed position has no predicted position, not that nothing is there', () => {
+    const notes = frameNotes({ ...frame, centroid: null, notes: ['no proper motion known: no predicted position'] })
+    expect(notes).toEqual(['No proper motion known: no predicted position'])
+  })
+  it('keeps "no source" for a known motion with an empty fit', () => {
+    expect(frameNotes({ ...frame, centroid: null, notes: [] })).toEqual(['No source above 5σ at the target'])
   })
 })

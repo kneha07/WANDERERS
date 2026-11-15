@@ -140,3 +140,16 @@ def test_without_a_detector_in_every_frame_each_frame_stacks_all_its_detectors_a
     assert [f["stack_detectors"] for f in r["frames"]] == [["D1", "D2"], ["D3"], ["D1"]]
     assert r["difference"]["detectors"] == ["D1"]  # the first and the last frame share D1
     assert any("No detector is in every frame" in n for n in r["notes"])
+
+
+def test_typed_coordinates_without_a_source_say_no_motion_is_known_not_no_source(sky):
+    # A typed RA/Dec has no proper motion, so a fast mover is not at the typed position: an empty fit there means
+    # "no predicted position", not "nothing above 5 sigma".
+    sky.bright = {"D1": 0.0, "D2": 0.0}
+    r = frames()
+    assert [(f["centroid"], f["notes"]) for f in r["frames"]] == [(None, ["no proper motion known: no predicted position"])] * 2
+
+
+def test_a_source_at_typed_coordinates_is_still_measured(sky):
+    r = frames()
+    assert all(f["centroid"] and f["notes"] == [] for f in r["frames"])

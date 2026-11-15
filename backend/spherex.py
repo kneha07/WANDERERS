@@ -59,6 +59,7 @@ CENTROID_FLOOR_PX = 0.1, 0.3
 # A fit further than this from the predicted position is another source: WISE 0855 sits 1.2 px from a brighter
 # star, which the short-wavelength detectors see alone. (The PSF FWHM is 1.2 px.)
 CENTROID_MAX_SHIFT_PX = 1.0
+NO_PM_NOTE = "no proper motion known: no predicted position"
 # False-colour image: detectors per channel, short wavelengths blue (D1 0.75 um ... D6 5.0 um)
 RGB_CHANNELS = {"blue": ("D1", "D2"), "green": ("D3", "D4"), "red": ("D5", "D6")}
 NUMBER = r"([+-]?(?:\d+\.?\d*|\.\d+))"
@@ -545,7 +546,9 @@ def build(q, name, coord, center, pm, fov, per_group, det):
         frames.append({"label": epoch_label([im["mjd"] for im in used]), "mjd_mean": round(mjd, 4),
                        "date": Time(mjd, format="mjd").strftime("%Y-%m-%d"), "n_images": len(used), "ring": ring,
                        "detectors": names, "wavelength_um": wavelength_range(used),
-                       "centroid": mean_centroid([it["centroid"] for it in dets.values()])})
+                       "centroid": (c := mean_centroid([it["centroid"] for it in dets.values()])),
+                       # typed RA/Dec: a mover is not where it was typed, so an empty fit says nothing about it
+                       "notes": [] if pm or c else [NO_PM_NOTE]})
     if not frames:
         raise HTTPException(502, "Could not read any SPHEREx image for this position. Try again in a minute.")
 

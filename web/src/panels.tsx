@@ -266,7 +266,14 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
   const pts = r.frames.map((f, i) => ({ i, ring: f.ring, c: f.centroid ?? null }))
   const xs = pts.flatMap((p) => [...(p.ring ? [p.ring.x] : []), ...(p.c ? [p.c.x - p.c.ex, p.c.x + p.c.ex] : [])])
   const ys = pts.flatMap((p) => [...(p.ring ? [p.ring.y] : []), ...(p.c ? [p.c.y - p.c.ey, p.c.y + p.c.ey] : [])])
-  if (!xs.length) return <Empty>No source stands out at the target in any frame (all peaks below 5σ).</Empty>
+  if (!xs.length)
+    return (
+      <Empty>
+        {r.pm
+          ? 'No source stands out at the target in any frame (all peaks below 5σ).'
+          : 'No proper motion is known for a typed position, so there is no predicted position to measure. Search by name to get the motion.'}
+      </Empty>
+    )
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2
   const h = Math.max(1, (Math.max(...xs) - Math.min(...xs)) / 2, (Math.max(...ys) - Math.min(...ys)) / 2) * 1.25
@@ -375,7 +382,11 @@ export function MotionPanel({ r, index, onPick }: { r: Result; index: number; on
                 <td>{i + 1}</td>
                 <td>{ring ? `${ring.x.toFixed(2)}, ${ring.y.toFixed(2)}` : '–'}</td>
                 <td>
-                  {c ? `${c.x.toFixed(2)} ± ${c.ex.toFixed(2)}, ${c.y.toFixed(2)} ± ${c.ey.toFixed(2)}` : 'no source above 5σ'}
+                  {c
+                    ? `${c.x.toFixed(2)} ± ${c.ex.toFixed(2)}, ${c.y.toFixed(2)} ± ${c.ey.toFixed(2)}`
+                    : r.pm
+                      ? 'no source above 5σ'
+                      : 'no predicted position (no proper motion known)'}
                   {c?.saturated ? ' (wings)' : ''}
                 </td>
                 <td>{c && ring ? (Math.hypot(c.x - ring.x, c.y - ring.y) * s).toFixed(2) : '–'}</td>
