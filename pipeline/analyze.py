@@ -187,9 +187,9 @@ def centroid(img, x0, y0, r=3.5):
     return float((v * xx).sum() / v.sum()), float((v * yy).sum() / v.sum())
 
 
-def saturated_core(img, x0, y0, r):
-    """Centre of the blank (NaN) saturated core touching the predicted position, or None.
-    Archives blank pixels that saturated; for very bright stars that hole is the star."""
+def blank_core(img, x0, y0, r):
+    """The largest blank (NaN) region touching the predicted position: (x, y of its centre, pixels, touches the
+    image border), or None. Archives blank pixels that saturated; for very bright stars that hole is the star."""
     bad = ~np.isfinite(np.asarray(img, float))
     if not bad.any():
         return None
@@ -201,9 +201,29 @@ def saturated_core(img, x0, y0, r):
         return None
     k = max(near, key=lambda i: (lab == i).sum())
     m = lab == k
-    if m.sum() < 3 or m.sum() > 400:       # a lone dead pixel or an image edge, not a star
+    border = bool(m[0].any() or m[-1].any() or m[:, 0].any() or m[:, -1].any())
+    return float(xx[m].mean()), float(yy[m].mean()), int(m.sum()), border
+
+
+def saturated_core(img, x0, y0, r):
+    """Centre of the blank (NaN) saturated core touching the predicted position, or None."""
+    b = blank_core(img, x0, y0, r)
+    if b is None or b[2] < 3 or b[2] > 400:   # a lone dead pixel or an image edge, not a star
         return None
-    return float(xx[m].mean()), float(yy[m].mean())
+    return b[0], b[1]
+
+
+def core_has_pixels(img, x0, y0, r):
+    """Is any pixel within r of (x0, y0) not blank? (detection_snr reports 0.0 when none is.)"""
+    yy, xx = np.indices(np.shape(img))
+    return bool(np.isfinite(np.asarray(img, float)[np.hypot(xx - x0, yy - y0) <= r]).any())
+
+
+def saturated_beyond_measure(img, x0, y0, r):
+    """A blank core too big (over 400 pixels) to take its centre as the position, but clearly a star: away from
+    the image border. Such a frame shows the object (saturated), it just gives no position."""
+    b = blank_core(img, x0, y0, r)
+    return b is not None and b[2] > 400 and not b[3]
 
 
 def stretch(a):
@@ -449,9 +469,14 @@ def analyze(tid):
         f["detected"] = snr >= 5            # only measure a position where the object is clearly there
         f["snr"] = round(snr, 1)
         c = centroid(f["img"], float(px), float(py), r=rad) if f["detected"] else None
-        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if f["mission"] in ("WISE", "NEOWISE") else None
+        wise = f["mission"] in ("WISE", "NEOWISE")
+        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if wise else None
         if hole is not None:                # very bright star: the archive blanks its saturated core,
             c, f["detected"], f["saturated_core"] = hole, True, True   # so the hole's centre is its position
+        elif wise and saturated_beyond_measure(f["img"], float(px), float(py), rad + 2):
+            f["detected"], f["saturated_core"] = True, True   # seen (saturated); the hole is too big for a position
+        if f.get("saturated_core") and not core_has_pixels(f["img"], float(px), float(py), rad):
+            f["snr"] = None                 # no unsaturated pixel at the target: a signal-to-noise cannot be measured
         if c is None:
             continue
         meas = gw.pixel_to_world(*c)

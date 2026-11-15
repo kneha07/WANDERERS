@@ -96,6 +96,35 @@ class TestDataQuality(unittest.TestCase):
         result = self.analyze.stretch(np.full((4, 4), np.nan))
         np.testing.assert_array_equal(result, np.zeros((4, 4)))
 
+    def test_big_saturated_core_counts_as_seen_but_gives_no_position(self):
+        # NEOWISE blanks the saturated core of a very bright star (R Draconis, 61 Cygni: 400-700 pixels on the grid)
+        A = self.analyze
+        img = np.random.default_rng(0).normal(0, 1, (150, 150))
+        yy, xx = np.indices(img.shape)
+        img[np.hypot(xx - 75, yy - 75) <= 13] = np.nan                  # ~530 blank pixels around the star
+        self.assertIsNone(A.saturated_core(img, 76, 75, 5))             # too big to take its centre as the position
+        self.assertTrue(A.saturated_beyond_measure(img, 76, 75, 5))      # but the star is there: seen, saturated
+        self.assertFalse(A.core_has_pixels(img, 76, 75, 3))
+        self.assertFalse(A.saturated_beyond_measure(img, 120, 120, 5))   # nothing blank at another position
+        small = np.zeros((150, 150)); small[np.hypot(xx - 75, yy - 75) <= 5] = np.nan
+        self.assertAlmostEqual(A.saturated_core(small, 76, 75, 5)[0], 75.0)   # a small core still gives the position
+        self.assertFalse(A.saturated_beyond_measure(small, 76, 75, 5))
+        edge = np.zeros((150, 150)); edge[:, :30] = np.nan                    # a strip with no data at the border
+        self.assertFalse(A.saturated_beyond_measure(edge, 31, 75, 5))
+        self.assertTrue(A.core_has_pixels(edge, 35, 75, 3))
+
+    def test_shipped_saturated_frames_are_not_called_undetected(self):
+        # R Draconis / 61 Cygni: NEOWISE frames over a huge blank (saturated) core were "not detected" with a 0.0 signal
+        import json
+        for f in sorted((ROOT / 'app' / 'data').glob('*/target.json')):
+            t = json.loads(f.read_text(encoding='utf-8'))
+            for ch, frames in t['frames'].items():
+                for fr in frames:
+                    if fr['mission'] in ('WISE', 'NEOWISE'):
+                        self.assertFalse(fr.get('detected') is False and fr.get('snr') == 0.0, f'{f.parent.name} {fr["png"]}')
+                        if fr.get('saturated_core'):
+                            self.assertTrue(fr['detected'], f'{f.parent.name} {fr["png"]}')
+
     def test_brightness_change_never_compares_a_visit_with_itself(self):
         last = self.analyze.last_visit
         self.assertEqual(last([[0] * 40, [0] * 10]), 1)               # only the first visit is big: still compare with the later one
