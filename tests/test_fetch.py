@@ -47,6 +47,35 @@ class StarDatabaseTests(unittest.TestCase):
         self.assertIsNone(extra["pmra"])
         self.assertIsNone(extra["dist_pc"])
 
+    def test_negative_parallax_gives_no_distance(self):
+        import json
+        import tempfile
+        import stardb
+        import targets
+        import link_paths
+        ref = {"source": "Gaia DR3", "epoch": 2016.0, "source_id": 1, "ra": 10.0, "dec": 20.0,
+               "pmra": 5.0, "pmdec": -3.0, "parallax": -0.8}         # a noisy faint source: parallax below zero
+        old_root, old_data = stardb.ROOT, link_paths.DATA
+        with tempfile.TemporaryDirectory() as d:
+            data = Path(d) / "app" / "data"
+            (data / "neg").mkdir(parents=True)
+            (data / "stars" / "pred").mkdir(parents=True)
+            (data / "neg" / "target.json").write_text(json.dumps({"reference": ref}))
+            (data / "index.json").write_text(json.dumps([{"id": "neg", "name": "Faint thing", "ra": 10.0, "dec": 20.0}]))
+            (data / "stars.json").write_text("[]")
+            (data / "stars" / "index.json").write_text(json.dumps({"stars": []}))
+            targets.TARGETS["neg"] = {"name": "Faint thing"}
+            try:
+                stardb.ROOT, link_paths.DATA = Path(d), data
+                db = stardb.wanderers_targets([{"key": "hip1", "ra": 200.0, "dec": -40.0, "aliases": []}])
+                link_paths.main()
+                paths = json.loads((data / "paths.json").read_text())
+            finally:
+                stardb.ROOT, link_paths.DATA = old_root, old_data
+                del targets.TARGETS["neg"]
+        self.assertIsNone(next(s for s in db if s["key"] == "wanderers_neg")["dist_pc"])
+        self.assertIsNone(paths["neg"]["state"]["plx"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,6 +58,7 @@ def main():
                 s = next((x for x in db if str(x.get("gaia_dr3") or "") == str(ref["source_id"])), None)
             key = s["key"] if s else None
         plx = ref.get("parallax")
+        plx = plx if plx and plx > 0 else None          # a zero or negative (noisy Gaia) parallax gives no distance
         if not plx and key:
             s = next((x for x in db if x["key"] == key), None)
             plx = 1000 / s["dist_pc"] if s and s.get("dist_pc") else None
