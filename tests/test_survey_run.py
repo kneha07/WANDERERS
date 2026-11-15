@@ -365,11 +365,103 @@ def test_leaderboard_orders_across_tiles_with_global_ranks(env):
 def test_leaderboard_top_cap_keeps_best(env):
     write_tiles(env.out, [3, 7, 11, 15])                            # 3 movers each
     do_publish(env, top=4)
-    full = sorted((fakes.score_of({**m, "gaia": fakes.gaia_for(m["id"])}), m["id"])
-                  for k in (3, 7, 11, 15) for m in R.compact_tile(fakes.fake_tile(k), k)["movers"])
+    full = [(fakes.score_of({**m, "gaia": fakes.gaia_for(m["id"])}), m["pm_snr"], m["id"])
+            for k in (3, 7, 11, 15) for m in R.compact_tile(fakes.fake_tile(k), k)["movers"]]
     lb = strict_load(env.out / "leaderboard.json")
-    assert lb["n_candidates"] == 4
-    assert [x["id"] for x in lb["candidates"]] == [i for _, i in sorted(full, key=lambda t: (-t[0], t[1]))[:4]]
+    assert len(lb["candidates"]) == 4 and lb["n_candidates"] == 12   # n_candidates counts every ranked mover
+    best = sorted(full, key=lambda t: (-t[0], -t[1], t[2]))[:4]
+    assert [x["id"] for x in lb["candidates"]] == [i for _, _, i in best]
+
+
+def test_n_candidates_is_all_ranked_movers_not_the_top(env):
+    write_tiles(env.out, [1, 2, 3, 4, 5, 6, 7])                     # 1+2+3+0+1+2+3 movers
+    do_publish(env, top=2)
+    lb = strict_load(env.out / "leaderboard.json")
+    assert lb["n_candidates"] == 12 and len(lb["candidates"]) == 2
+    assert [x["rank"] for x in lb["candidates"]] == [1, 2]
+
+
+def test_equal_scores_ordered_by_pm_snr_then_id(env):
+    write_tiles(env.out, [3, 7])
+
+    def flat_rank(movers, top=1000):
+        return [dict(m, score=1.0, reasons=[], **{"class": "not checked"}) for m in movers]
+    do_publish(env, rank_fn=flat_rank, use_gaia=False)
+    c = strict_load(env.out / "leaderboard.json")["candidates"]
+    keys = [(-x["pm_snr"], x["id"]) for x in c]
+    assert keys == sorted(keys) and len(c) == 6
+
+
+def test_summary_extra_fields_for_the_web_page(env):
+    write_tiles(env.out, [1, 2, 3])
+    runs = [{"wall_seconds": 60, "tiles": 3, "detections": 3e6, "planned": 40, "min_pm": 175.0}]
+    s = do_publish(env, use_gaia=False, runs=runs)
+    assert s["status"] == "done" and s["tiles_planned"] == 40 and s["min_pm"] == 175.0
+    assert s["unique_sources"] == s["tracks"] == 3 * 4000 + 6
+    assert "at least 175 mas per year" in s["method"] and any("slower than 175 mas" in t for t in s["limits"])
+    s = do_publish(env, use_gaia=False, runs=runs, status="running", tiles_planned=2, min_pm=150.0)
+    assert s["status"] == "running" and s["tiles_planned"] == 3    # never below tiles_done
+    assert "at least 150 mas per year" in s["method"]
+
+
+def test_summary_status_running_while_a_live_run_holds_the_lock(env):
+    write_tiles(env.out, [1])
+    holder = subprocess.Popen(["sleep", "30"])
+    try:
+        (env.out / ".run.lock").write_text(f"{holder.pid} 2026-01-01T00:00:00Z\n")
+        assert do_publish(env, use_gaia=False)["status"] == "running"
+    finally:
+        holder.kill()
+        holder.wait()
+    assert do_publish(env, use_gaia=False)["status"] == "done"     # lock of a dead process
+
+
+def test_min_pm_comes_from_the_core_signature(env, monkeypatch):
+    assert R.core_min_pm(fakes.process_tile) == 150.0
+    assert R.core_min_pm(fakes.process_tile_strict) == 200.0
+    assert R.core_min_pm("survey.no_such_core:process_tile") == R.DEFAULT_MIN_PM == 150.0
+    monkeypatch.setitem(sys.modules, "survey.link", None)
+    write_tiles(env.out, [1])
+    assert do_publish(env, use_gaia=False, runs=[])["min_pm"] == 150.0
+
+
+def test_mark_not_running_flips_only_a_running_summary(env):
+    write_tiles(env.out, [1])
+    s = do_publish(env, use_gaia=False, status="running")
+    R.mark_not_running(env.out)
+    after = strict_load(env.out / "summary.json")
+    assert after["status"] == "done" and {k: v for k, v in after.items() if k != "status"} == \
+        {k: v for k, v in s.items() if k != "status"}
+    R.mark_not_running(env.tmp / "nowhere")                          # no summary yet: nothing to do
+    assert R.STATUSES == ("running", "done")                         # the two values the web page knows
+    assert do_publish(env, use_gaia=False, status="bogus")["status"] == "done"
+
+
+# ------------------------------------------------------------------------------------------------ real survey.rank
+def test_publish_with_the_real_rank_module(env):
+    rank_mod = pytest.importorskip("survey.rank")
+    write_tiles(env.out, [1, 2, 3, 5, 6, 7])
+    s = do_publish(env, use_gaia=False, rank_fn=rank_mod.rank)
+    lb = strict_load(env.out / "leaderboard.json")
+    assert lb["n_candidates"] == s["movers"] == 12 and len(lb["candidates"]) == 12
+    for m in lb["candidates"]:
+        check_mover(m, ranked=True, extra_ok=True)
+        assert m["class"] in ("not checked", "likely artefact") and m["reasons"]
+    keys = [(-x["score"], -x["pm_snr"], x["id"]) for x in lb["candidates"]]
+    assert keys == sorted(keys)                                      # same order rule as survey.rank.rank
+
+
+def test_real_crossmatch_offline_marks_not_checked_and_caches_nothing(env, monkeypatch):
+    rank_mod = pytest.importorskip("survey.rank")
+    import functools
+    monkeypatch.setattr(rank_mod, "RETRY_SLEEP_S", 0.0)
+    xmatch = functools.partial(rank_mod.crossmatch_gaia, tap_url="http://127.0.0.1:9/tap", timeout=2)
+    write_tiles(env.out, [3])
+    s = do_publish(env, xmatch_fn=xmatch, rank_fn=rank_mod.rank)
+    lb = strict_load(env.out / "leaderboard.json")
+    assert all(m["gaia"]["checked"] is False for m in lb["candidates"])
+    assert s["unexplained"] == 0 and any("pending" in t for t in s["limits"])
+    assert not list((env.cache / "run_tiles").glob("*.json")) if (env.cache / "run_tiles").exists() else True
 
 
 def test_unexplained_counts_per_tile_and_total(env):
@@ -497,9 +589,17 @@ TILE_TYPES = {"k5": int, "n_detections": int, "n_good": int, "n_visits": int, "n
 MOVER_NUM = ["ra", "dec", "epoch", "pmra", "pmdec", "pm", "pm_err", "pm_snr", "chi2r", "span_yr", "w1", "w2", "w1w2"]
 
 
-def check_mover(m, ranked=False):
+def check_mover(m, ranked=False, extra_ok=False):
+    """Contract keys in contract order; extra_ok allows scalar extras after them (e.g. the real Gaia check adds an
+    'error' text to unchecked movers)."""
     want = R.MOVER_KEYS + (R.RANK_KEYS if ranked else [])
-    assert list(m) == want
+    if extra_ok:
+        assert list(m)[:len(want)] == want and all(R._is_scalar(m[k]) for k in list(m)[len(want):])
+        if ranked:
+            assert list(m["gaia"])[:len(R.GAIA_KEYS)] == R.GAIA_KEYS
+            m = dict(m, gaia={k: m["gaia"][k] for k in R.GAIA_KEYS})
+    else:
+        assert list(m) == want
     assert isinstance(m["id"], str) and type(m["k5"]) is int and type(m["n_visits"]) is int
     for k in MOVER_NUM:
         assert is_num(m[k]), k
@@ -549,7 +649,10 @@ def test_summary_schema_matches_contract(env):
     R.atomic_write_json(env.out / "validation.json", {"summary": {"recovered": 9}})
     do_publish(env, runs=[{"wall_seconds": 60, "tiles": 2, "detections": 2_000_000}])
     s = strict_load(env.out / "summary.json")
-    assert list(s) == R.SUMMARY_KEYS
+    assert list(s) == R.SUMMARY_KEYS + R.SUMMARY_EXTRA_KEYS            # contract keys, then the page's additions
+    assert R.SUMMARY_EXTRA_KEYS == ["status", "tiles_planned", "min_pm", "unique_sources"]
+    assert s["status"] in ("running", "done") and type(s["tiles_planned"]) is int
+    assert type(s["min_pm"]) is float and type(s["unique_sources"]) is int and s["tiles_planned"] >= s["tiles_done"]
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", s["generated"])
     for k in ("tiles_done", "tiles_total", "detections", "good_detections", "visit_sources", "tracks", "movers",
               "unexplained", "detections_per_second"):
@@ -721,6 +824,7 @@ def test_rank_only_rebuilds_from_tile_files(env):
     assert code == 0
     s = strict_load(env.out / "summary.json")
     assert s["tiles_done"] == 3 and s["movers"] == 6 and s["unexplained"] == 2 and s["tiles_per_hour"] == 18.0
+    assert s["status"] == "done" and s["tiles_planned"] == 3 and isinstance(s["min_pm"], float)
     assert strict_load(env.out / "leaderboard.json")["n_candidates"] == 6
     assert strict_load(env.out / "manifest.json")["runs"] == manifest["runs"]   # untouched
     assert (env.out / "tiles" / "1.json").read_bytes() == before

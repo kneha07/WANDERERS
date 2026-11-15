@@ -109,6 +109,11 @@ def process_tile(k5, reader=None, years=YEARS, min_visits=6, min_pm=150.0, min_p
     return result
 
 
+def process_tile_strict(k5, reader=None, years=YEARS, min_visits=6, min_pm=200.0, min_pm_snr=5.0):
+    """A core whose motion threshold is 200 mas/yr (the summary must report it)."""
+    return process_tile(k5, reader=reader)
+
+
 def process_tile_always_fails(k5, reader=None, **kw):
     raise RuntimeError("core is broken")
 

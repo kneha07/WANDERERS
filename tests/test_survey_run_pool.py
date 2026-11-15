@@ -86,7 +86,35 @@ def test_run_processes_all_tiles_and_publishes(env):
     assert all(d["bytes"] == (env.out / "tiles" / f"{k}.json").stat().st_size for k, d in m["done"].items())
     s = json.loads((env.out / "summary.json").read_text())
     assert s["tiles_done"] == 6 and s["movers"] == 9 and s["tiles_per_hour"] > 0
+    assert s["status"] == "done" and s["tiles_planned"] == 6 and s["min_pm"] == 150.0
+    assert s["unique_sources"] == s["tracks"]
+    assert run1["planned"] == 6 and run1["min_pm"] == 150.0
     assert not (env.out / ".run.lock").exists()
+
+
+def test_tiles_planned_is_the_progress_target(env):
+    run(env, tiles="list:1-6", max_tiles=4, workers=1)
+    s = json.loads((env.out / "summary.json").read_text())
+    assert (s["tiles_done"], s["tiles_planned"]) == (4, 4)
+    run(env, tiles="list:1-6")
+    s = json.loads((env.out / "summary.json").read_text())
+    assert (s["tiles_done"], s["tiles_planned"]) == (6, 6)
+    run(env, tiles="list:7-8")                                        # a new selection adds to what is done
+    s = json.loads((env.out / "summary.json").read_text())
+    assert (s["tiles_done"], s["tiles_planned"]) == (8, 8)
+
+
+def test_failed_tiles_keep_progress_below_plan(env):
+    env.set_spec(fail=[2])
+    run(env, tiles="list:1-4")
+    s = json.loads((env.out / "summary.json").read_text())
+    assert (s["tiles_done"], s["tiles_planned"], s["status"]) == (3, 4, "done")
+
+
+def test_summary_reports_the_core_threshold(env):
+    run(env, tiles="list:1-2", process_fn=fakes.process_tile_strict)
+    s = json.loads((env.out / "summary.json").read_text())
+    assert s["min_pm"] == 200.0 and "at least 200 mas per year" in s["method"]
     assert not list((env.out / "tiles").glob(".*tmp*"))
 
 
@@ -265,7 +293,8 @@ def test_max_hours_stops_scheduling_and_finishes_cleanly(env):
     assert 1 <= len(r.processed) < 30 and len(tile_files(env)) == len(r.processed)
     started, ended = env.starts(), [c["k5"] for c in fakes.calls(env.log, "end")]
     assert sorted(started) == sorted(ended)                          # running tiles were finished, not killed
-    assert json.loads((env.out / "summary.json").read_text())["tiles_done"] == len(r.processed)
+    s = json.loads((env.out / "summary.json").read_text())
+    assert s["tiles_done"] == len(r.processed) and s["status"] == "done" and s["tiles_planned"] == 30
 
 
 def test_disk_guard_refuses_to_start(env):
@@ -313,7 +342,22 @@ def test_periodic_publishing_during_run(env):
     env.set_spec(default_sleep=0.25)
     r = run(env, tiles="list:1-8", workers=1, publish_every=0.4 / 60)
     assert r.n_publishes >= 3 and r.publish_errors == 0           # at least 2 mid-run + the final one
-    assert json.loads((env.out / "summary.json").read_text())["tiles_done"] == 8
+    assert r.statuses[0] == "running" and r.statuses[-1] == "done" and r.statuses.count("done") == 1
+    s = json.loads((env.out / "summary.json").read_text())
+    assert s["tiles_done"] == 8 and s["status"] == "done"
+
+
+def test_first_publish_happens_at_start_with_status_running(env, monkeypatch):
+    env.set_spec(default_sleep=0.5)
+    seen = []
+    real = R.publish
+
+    def spy(*a, **k):
+        seen.append((k.get("status"), len(list((env.out / "tiles").glob("*.json")))))
+        return real(*a, **k)
+    monkeypatch.setattr(R, "publish", spy)
+    run(env, tiles="list:1-3", workers=1, publish_every=60)          # 60 min: only the start and the end
+    assert seen[0] == ("running", 0) and seen[-1] == ("done", 3) and len(seen) == 2
 
 
 def test_heartbeat_logs_worker_memory(env):
@@ -416,10 +460,13 @@ def test_orphaned_workers_finish_their_tile_and_exit(env):
 
 def test_sigterm_writes_manifest_and_stops_workers(env):
     env.set_spec(default_sleep=5.0)
-    p = popen(env, cli(env, tiles="list:0-5"))
-    assert wait_for(lambda: len(env.starts()) >= 2)
+    p = popen(env, cli(env, "--publish-every", "60", tiles="list:0-5"))
+    summary = env.out / "summary.json"
+    assert wait_for(lambda: len(env.starts()) >= 2 and summary.exists())
+    assert json.loads(summary.read_text())["status"] == "running"
     p.send_signal(signal.SIGTERM)                                     # main process only
     assert p.wait(timeout=30) == R.EXIT_SIGTERM
+    assert json.loads(summary.read_text())["status"] == "done"        # the page won't show a dead run as live
     m = manifest(env)
     assert m["runs"][-1]["stopped"] == "signal" and m["runs"][-1]["ended"]
     assert all_dead({c["pid"] for c in fakes.calls(env.log, "start")})
@@ -436,4 +483,5 @@ def test_ctrl_c_finishes_running_tiles_then_publishes(env):
     assert sorted(started) == sorted(ended) and len(started) < 10    # workers ignored Ctrl-C and finished
     assert tile_files(env) == sorted(started)
     assert manifest(env)["runs"][-1]["stopped"] == "interrupted"
-    assert json.loads((env.out / "summary.json").read_text())["tiles_done"] == len(started)
+    s = json.loads((env.out / "summary.json").read_text())
+    assert s["tiles_done"] == len(started) and s["status"] == "done"   # a clean stop

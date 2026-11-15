@@ -24,6 +24,12 @@ End-to-end smoke test without network (fake core and ranking from the test suite
         --process-fn test_survey_run_fakes:process_tile --rank-fn test_survey_run_fakes:rank
     $PY -m json.tool /tmp/survey-smoke/summary.json | head -30
 
+Beyond the contract, summary.json also carries (for the web page) `status` ("running" while a run is processing
+tiles, published at the start and every --publish-every minutes; "done" once no run is live), `tiles_planned`
+(tiles that will be done when the run completes: progress = tiles_done / tiles_planned), `min_pm` (the core's
+motion threshold, mas/yr) and `unique_sources` (linked tracks); leaderboard.json's `n_candidates` counts every
+ranked mover, while `candidates` holds the top --top (1000).
+
 Robustness rules: tile files are the source of truth for "done" (the manifest is rebuilt from them if needed);
 every file is written to a temp file and renamed (never a partial JSON); each tile runs in a worker process that
 is replaced after `--maxtasksperchild` tiles (memory goes back to the OS), killed on `--tile-timeout` or when
@@ -42,6 +48,7 @@ import errno
 import hashlib
 import heapq
 import importlib
+import inspect
 import json
 import logging
 import math
@@ -119,7 +126,11 @@ GAIA_KEYS = ["checked", "match", "source_id", "sep_arcsec", "pm", "g"]
 SUMMARY_KEYS = ["generated", "tiles_done", "tiles_total", "sky_fraction", "sky_deg2", "detections",
                 "good_detections", "visit_sources", "tracks", "movers", "unexplained", "runtime_hours",
                 "tiles_per_hour", "detections_per_second", "tiles", "validation", "method", "limits"]
-LEADERBOARD_KEYS = ["generated", "n_candidates", "candidates"]
+# Added for the web page on top of the contract: run state, progress target, motion threshold, linked sources.
+SUMMARY_EXTRA_KEYS = ["status", "tiles_planned", "min_pm", "unique_sources"]
+STATUSES = ("running", "done")                # running: a run is processing tiles; done: no run is live any more
+LEADERBOARD_KEYS = ["generated", "n_candidates", "candidates"]   # n_candidates = all ranked movers, not the top
+DEFAULT_MIN_PM = 150.0                        # mas/yr; process_tile's default per the contract
 
 # Decimal places per field: positions 6 (0.004"), epochs 4 (~1 h), proper motions 1 mas/yr, magnitudes 3.
 ROUND = {"ra": 6, "dec": 6, "epoch": 4, "pmra": 1, "pmdec": 1, "pm": 1, "pm_err": 2, "pm_snr": 1, "chi2r": 2,
@@ -132,7 +143,7 @@ METHOD = (
     "WISE scanned each part of the sky about every six months, so the detections of one source in one scan are "
     "averaged into a single position per visit. Those positions are linked across the ten years into tracks, "
     "including fast movers of up to 12 arcseconds per year, and a straight-line fit gives each track's proper "
-    "motion and its uncertainty. Tracks seen in at least 6 visits that move at least 150 mas per year with at "
+    "motion and its uncertainty. Tracks seen in at least 6 visits that move at least {min_pm} mas per year with at "
     "least 5 sigma are kept as movers. Each mover is compared with Gaia DR3 stars moved to the same date with "
     "their own motion, then ranked: movers that Gaia does not explain, that are red in WISE (a sign of a cold "
     "brown dwarf) and that have long, clean tracks come first. The top of the list is for people to investigate."
@@ -140,7 +151,7 @@ METHOD = (
 
 BASE_LIMITS = [
     "Only the tiles listed here have been searched; the rest of the sky has not been processed yet.",
-    "Motions slower than 150 mas per year or faster than 12 arcseconds per year are not searched.",
+    "Motions slower than {min_pm} mas per year or faster than 12 arcseconds per year are not searched.",
     "A source must be detected in at least 6 of the roughly 20 WISE visits, so very faint or very red objects "
     "near the detection limit can be missed.",
     "'Unexplained' means no Gaia DR3 star with a matching motion lies within 3 arcseconds. That is expected for "
@@ -1201,11 +1212,40 @@ def run_totals(runs: list[dict]) -> tuple[float, int, int]:
     return secs, tiles, det
 
 
+def core_min_pm(process_fn: Any = DEFAULT_PROCESS) -> float:
+    """The motion threshold the core uses: process_tile's `min_pm` default (the runner never overrides it)."""
+    try:
+        p = inspect.signature(load_callable(process_fn)).parameters.get("min_pm")
+        if p is not None and _num(p.default) is not None:
+            return float(p.default)
+    except Exception:  # noqa: BLE001 - core not importable: the contract value
+        pass
+    return DEFAULT_MIN_PM
+
+
+def run_in_progress(out: Path) -> bool:
+    """True when another live process holds the output folder's run lock."""
+    try:
+        pid = int((Path(out) / ".run.lock").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        return False
+    return pid != os.getpid() and _pid_alive(pid)
+
+
 def build_summary(totals: dict, rows: list[list[int]], runs: list[dict], validation: dict | None,
-                  extra_limits: list[str], generated: str) -> dict:
+                  extra_limits: list[str], generated: str, status: str = "done", tiles_planned: int | None = None,
+                  min_pm: float = DEFAULT_MIN_PM) -> dict:
+    """summary.json: the contract keys in contract order, then SUMMARY_EXTRA_KEYS.
+    tiles_planned = tiles that will be done when the current (or last) run completes: the tiles already done plus
+    the run's selection, so tiles_done / tiles_planned is a progress fraction that ends at 1 (or below, if some
+    tiles failed)."""
     tiles_done = len(rows)
     secs, run_tiles, run_det = run_totals(runs)
     hours = secs / 3600.0
+    if tiles_planned is None:
+        last = runs[-1] if runs and isinstance(runs[-1], dict) else {}
+        tiles_planned = _int(last.get("planned"), 0)
+    pm_text = f"{min_pm:g}"
     return {
         "generated": generated,
         "tiles_done": tiles_done,
@@ -1223,8 +1263,12 @@ def build_summary(totals: dict, rows: list[list[int]], runs: list[dict], validat
         "detections_per_second": int(round(run_det / secs)) if secs > 0 else 0,
         "tiles": sorted(rows),
         "validation": validation,
-        "method": METHOD,
-        "limits": BASE_LIMITS + list(extra_limits),
+        "method": METHOD.format(min_pm=pm_text),
+        "limits": [t.format(min_pm=pm_text) for t in BASE_LIMITS] + list(extra_limits),
+        "status": status if status in STATUSES else "done",
+        "tiles_planned": max(int(tiles_planned), tiles_done),
+        "min_pm": float(min_pm),
+        "unique_sources": int(totals.get("n_tracks", 0)),      # every linked track is one distinct source
     }
 
 
@@ -1236,29 +1280,40 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
             xmatch_fn: Callable | str | None = None, rank_fn: Callable | str | None = None,
             top: int = TOP_CANDIDATES, gaia_budget_s: float | None = None, runs: list[dict] | None = None,
             should_abort: Callable[[], bool] | None = None, clock: Callable[[], float] = time.monotonic,
-            gaia_fail_limit: int = 3) -> dict:
+            gaia_fail_limit: int = 3, status: str | None = None, tiles_planned: int | None = None,
+            min_pm: float | None = None) -> dict:
     """Rebuild leaderboard.json and summary.json from every tiles/<k5>.json in `out`.
 
     Streams the tile files (memory stays bounded by `top`), checks movers against Gaia per tile (answers cached
     under cache_dir/run_tiles; network time limited by gaia_budget_s; after `gaia_fail_limit` failing tiles in a
-    row the service is left alone until the next publish), ranks per tile and keeps the global top `top`.
-    Returns the summary dict."""
+    row the service is left alone until the next publish), ranks per tile and keeps the global top `top`
+    (leaderboard order: score, then pm_snr, then id, like survey.rank.rank). `n_candidates` is the number of
+    ranked movers over all tiles. status / tiles_planned / min_pm default to: "running" if a live run holds the
+    lock else "done"; the last run's plan; the last run's threshold (else the core's default). Returns the summary."""
     out = Path(out)
+    if status is None:
+        status = "running" if run_in_progress(out) else "done"
     cache = Path(cache_dir) if cache_dir is not None else None
     rank_callable = _resolve_optional(rank_fn or DEFAULT_RANK, "ranking (survey.rank.rank)") or fallback_rank
     xmatch = _resolve_optional(xmatch_fn or DEFAULT_XMATCH, "Gaia check (survey.rank.crossmatch_gaia)") \
         if use_gaia else None
     if runs is None:
         runs = load_manifest(out, readonly=True).get("runs", [])
+    if min_pm is None:
+        last = runs[-1] if runs and isinstance(runs[-1], dict) else {}
+        min_pm = _num(last.get("min_pm"))
+        if min_pm is None:
+            min_pm = core_min_pm()
     deadline = None if gaia_budget_s is None else clock() + max(0.0, gaia_budget_s)
     totals = {k: 0 for k in TILE_COUNT_KEYS + ["movers", "unexplained"]}
     rows: list[list[int]] = []
-    pool: list[tuple[float, str, int, dict]] = []
+    pool: list[tuple[float, float, str, int, dict]] = []      # (-score, -pm_snr, id, k5, mover): ascending = best
+    n_ranked = 0
     seq = 0
     stats = {"tiles_with_movers": 0, "unchecked_tiles": 0, "queries": 0, "fail_streak": 0, "rank_errors": 0}
 
     def trim(n: int) -> None:
-        pool.sort(key=lambda e: (-e[0], e[1]))
+        pool.sort(key=lambda e: e[:3])
         del pool[n:]
 
     for k5, path in sorted(scan_tiles(out / "tiles").items()):
@@ -1309,16 +1364,18 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
                     continue
                 if m.get("class") == "unexplained":
                     n_unexplained += 1
-                score = _num(m.get("score"))
+                score, snr = _num(m.get("score")), _num(m.get("pm_snr"))
                 seq += 1
-                pool.append((score if score is not None else -math.inf, str(m.get("id", seq)), k5, m))
+                n_ranked += 1
+                pool.append((-score if score is not None else math.inf, -snr if snr is not None else math.inf,
+                             str(m.get("id", seq)), k5, m))
             if len(pool) > 2 * top + 256:
                 trim(top)
         totals["unexplained"] += n_unexplained
         rows.append([k5, n_movers, n_unexplained])
     trim(top)
     candidates = []
-    for i, (_, _, k5, m) in enumerate(pool):
+    for i, (_, _, _, k5, m) in enumerate(pool):
         row = compact_mover(m, k5)
         row.setdefault("gaia", dict(GAIA_UNCHECKED))
         row.setdefault("score", None)
@@ -1334,14 +1391,33 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         extra.append(f"The Gaia check is still pending for {stats['unchecked_tiles']} of "
                      f"{stats['tiles_with_movers']} tiles with movers (service busy or offline); their movers are "
                      "'not checked'.")
-    summary = build_summary(totals, rows, runs, load_validation(out), extra, generated)
-    leaderboard = {"generated": generated, "n_candidates": len(candidates), "candidates": candidates}
+    summary = build_summary(totals, rows, runs, load_validation(out), extra, generated, status=status,
+                            tiles_planned=tiles_planned, min_pm=min_pm)
+    leaderboard = {"generated": generated, "n_candidates": n_ranked, "candidates": candidates}
     atomic_write_json(out / "leaderboard.json", leaderboard)
     atomic_write_json(out / "summary.json", summary)
-    log.info("published %d tiles, %s movers, %d unexplained, %d candidates (Gaia queries %d, unchecked tiles %d)",
-             len(rows), f"{totals['movers']:,}", totals["unexplained"], len(candidates), stats["queries"],
+    log.info("published (%s) %d of %d planned tiles, %s movers, %d unexplained, top %d of %d ranked "
+             "(Gaia queries %d, unchecked tiles %d)", summary["status"], len(rows), summary["tiles_planned"],
+             f"{totals['movers']:,}", totals["unexplained"], len(candidates), n_ranked, stats["queries"],
              stats["unchecked_tiles"])
     return summary
+
+
+def mark_not_running(out: Path) -> None:
+    """After an abort (SIGTERM, second Ctrl-C, unexpected error) there is no final publish: flip the last
+    summary's status from "running" to "done" so the page shows a partial survey, not a run that is gone as live
+    (the manifest's run log keeps why it stopped). Only a kill -9 can leave "running" behind; --rank-only fixes it."""
+    p = Path(out) / "summary.json"
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if isinstance(data, dict) and data.get("status") == "running":
+        data["status"] = "done"
+        try:
+            atomic_write_json(p, data)
+        except OSError as e:
+            log.warning("could not update the status in summary.json: %s", e)
 
 
 # ---------------------------------------------------------------------------------------------- the runner
@@ -1407,6 +1483,9 @@ class Runner:
         self.retried: list[int] = []
         self.fail_streak = 0
         self.n_publishes = 0
+        self.statuses: list[str] = []           # status of each successful publish, in order (for tests/logs)
+        self.planned: int | None = None
+        self.min_pm: float | None = None
         self.publish_errors = 0
         self.pub_thread: threading.Thread | None = None
         self._pub_cancel = threading.Event()
@@ -1467,6 +1546,8 @@ class Runner:
         todo = [k for k in ordered if k not in done]
         if cfg.max_tiles:
             todo = todo[:cfg.max_tiles]
+        self.planned = len(done | set(todo))           # done when this run completes (progress target)
+        self.min_pm = core_min_pm(cfg.process_fn)
         retrying = sum(1 for k in todo if str(k) in self.manifest["failed"])
         log.info("selected %d tiles (%s, order %s, seed %d): %d already done, %d to process (%d failed before, "
                  "retrying); %d workers, timeout %.0f s, out %s", len(ordered), cfg.tiles, cfg.order, cfg.seed,
@@ -1477,11 +1558,12 @@ class Runner:
         for key in self._last:
             if key != "memwait":
                 self._last[key] = self.t_start
+        self._last["publish"] = self.t_start - cfg.publish_every * 60   # first publish right away: "running"
         runs = self.manifest["runs"]
         self.run_entry = {"run": len(runs) + 1, "started": utc_iso(), "updated": utc_iso(), "ended": None,
                           "stopped": None, "wall_seconds": 0.0, "tiles": 0, "failed": 0, "detections": 0,
                           "workers": cfg.workers, "selection": cfg.tiles, "order": cfg.order, "seed": cfg.seed,
-                          "pid": os.getpid()}
+                          "planned": self.planned, "min_pm": self.min_pm, "pid": os.getpid()}
         runs.append(self.run_entry)
         self._write_manifest()
         self.pending = deque((k, 1) for k in todo)
@@ -1501,9 +1583,11 @@ class Runner:
             self.run_entry["ended"] = utc_iso()
             self.run_entry["stopped"] = self.stop_reason or "complete"
             self._write_manifest()
-            self._pub_cancel.set()
+            self._pub_cancel.set()                         # periodic publish: stop querying Gaia, finish up
             if self.pub_thread is not None:
                 self.pub_thread.join(timeout=120 if not aborted else 5)
+            if aborted:
+                mark_not_running(self.out)                 # no final publish: don't leave "running" behind
         elapsed = self.clock() - self.t_start
         log.info("run %d %s after %.2f h: %d tiles done, %d failed this run, %d still to do",
                  self.run_entry["run"], self.run_entry["stopped"], elapsed / 3600, len(self.processed),
@@ -1735,14 +1819,20 @@ class Runner:
         self._last["manifest"] = self.clock()
 
     def _publish(self, final: bool, runs: list[dict] | None, cancel: threading.Event | None = None) -> None:
+        """final=False: mid-run, status "running", Gaia time capped. final=True after a run: status "done".
+        In --rank-only mode (runs=None) status and plan come from the lock and the manifest."""
         cfg = self.cfg
         budget = None if final else cfg.gaia_budget * 60
         cancel = cancel or threading.Event()
+        in_run = runs is not None
         try:
             publish(self.out, cache_dir=cfg.cache, use_gaia=not cfg.no_gaia, xmatch_fn=cfg.xmatch_fn,
                     rank_fn=cfg.rank_fn, top=cfg.top, gaia_budget_s=budget, runs=runs,
-                    should_abort=lambda: self.abort or cancel.is_set(), clock=self.clock)
+                    should_abort=lambda: self.abort or cancel.is_set(), clock=self.clock,
+                    status=("done" if final else "running") if in_run else None,
+                    tiles_planned=self.planned if in_run else None, min_pm=self.min_pm if in_run else None)
             self.n_publishes += 1
+            self.statuses.append(("done" if final else "running") if in_run else "rank-only")
         except PublishAborted:
             log.info("publish skipped (stopping)")
         except Exception as e:  # noqa: BLE001 - publishing must never kill the run
