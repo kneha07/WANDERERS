@@ -38,6 +38,7 @@ input[type=checkbox] { accent-color: var(--accent); }
 .ws-inner { max-width: 1680px; margin: 0 auto; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ws-title { margin: 4px 0 0; font: 700 1.05rem/1.3 var(--f-display); }
 .ws-meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 480px) { .ws-meta .tag-chip { white-space: normal; line-height: 1.35; } }   /* the long data chip wraps on a phone instead of widening the page */
 .ws-link { font: 500 .86rem var(--f-ui); text-decoration: none; }
 .ws-link:hover { text-decoration: underline; }
 

@@ -88,9 +88,26 @@
     if (x < -20 || x > w + 20 || y < -20 || y > h + 20) return null;
     return { x, y };
   }
+  /** Same idea with the Sky Compass orientation engine (orient.js): `pt` is Fusion.pointing(), the camera's forward,
+   *  up and right vectors in the east-north-up frame, so roll is included. `screenAngle` is screen.orientation.angle
+   *  (90 = phone turned anticlockwise into landscape): the picture's "up" is then the phone's right-hand side.
+   *  `nudge` (deg) turns the labels by hand, like the old slider. null when off screen or behind the camera. */
+  function projectPointing(obj, pt, hfov, w, h, screenAngle, nudge) {
+    if (!pt || !pt.forward) return null;
+    const az = (obj.az - (nudge || 0)) * D2R, alt = obj.alt * D2R;
+    const v = [Math.sin(az) * Math.cos(alt), Math.cos(az) * Math.cos(alt), Math.sin(alt)];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const a = (screenAngle || 0) * D2R, c = Math.cos(a), s = Math.sin(a);
+    const up = pt.up.map((x, i) => c * x + s * pt.right[i]), right = pt.right.map((x, i) => c * x - s * pt.up[i]);
+    const z = dot(v, pt.forward);
+    if (z < 0.02) return null;
+    const fx = (w / 2) / Math.tan((hfov / 2) * D2R), x = w / 2 + fx * dot(v, right) / z, y = h / 2 - fx * dot(v, up) / z;
+    if (x < -20 || x > w + 20 || y < -20 || y > h + 20) return null;
+    return { x, y };
+  }
   const estimateNote = (accuracyDeg) =>
     `Estimated positions from your phone’s compass, tilt, clock and location (Sky Compass maths). Not identified from the photo; phone compasses can be off by ${accuracyDeg || "10–30"}° or more.`;
 
-  const api = { gnomonic, constellationFigure, coverFit, wrapText, dayStamp, TEMPLATES, W, H, pose, skyToScreen, estimateNote, wrap180 };
+  const api = { gnomonic, constellationFigure, coverFit, wrapText, dayStamp, TEMPLATES, W, H, pose, skyToScreen, projectPointing, estimateNote, wrap180 };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.StoryRender = api;
 })(typeof window !== "undefined" ? window : globalThis);

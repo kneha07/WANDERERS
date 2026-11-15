@@ -1,4 +1,5 @@
-/* WANDERERS Sky Compass service worker: keeps sky pictures on the phone. Registered by realsky.js (the Sky Compass page) only.
+/* WANDERERS Sky Compass service worker: keeps sky pictures on the phone. Registered by realsky.js (the Sky Compass page)
+ * and by stories.js (Space Camera), so both pages work with no signal.
  *
  * It answers three kinds of request and lets everything else go straight to the network, so a new
  * deploy of the app is never served stale:
@@ -6,9 +7,10 @@
  *      Pictures fetched from the network are kept as "recent": at most 40 MB or 1,200 files, oldest
  *      dropped first, and all of them dropped 7 days after the first one was stored.
  *   2. The pinned Aladin Lite and three.js scripts (they never change): cache first, so Deep and the page work with no signal.
- *   3. The compass page itself (SHELL below): fetched and stored when the worker installs, then network first with
- *      the stored copy when there is no answer in 4 seconds. So the page opens with no signal after one visit,
- *      and a new deploy still shows at once when there is one.
+ *   3. The compass page and the Space Camera / Story Studio page (SHELL below): fetched and stored when the worker
+ *      installs, then network first with the stored copy when there is no answer in 4 seconds. So each page opens
+ *      with no signal after one visit, and a new deploy still shows at once when there is one. For Story Studio's
+ *      NASA facts, every target's target.json (listed in data/index.json) is stored too; the NASA pictures are not.
  *   4. A survey's `properties` file, which carries its issue date (hips_release_date): answered like a tile, and at
  *      most once a day the archive is asked for the current one. The surveys are archives of old photographs, so
  *      this is the only way they change. When the date is newer, the recent pictures of that survey are dropped
@@ -27,13 +29,24 @@ const META = TILES + "__wanderers_meta__";            // a made-up URL inside th
 const SHELL_CACHE = CFG.caches.shell;
 const SHELL = ["compass.html", "compass.css", "compass.js", "brand.css", "theme.js", "favicon.svg", "sky.js", "search.js", "starcore.js",
   "pathview.js", "telescope.js", "orient.js", "intro.js", "skyview.js", "hips.js", "realsky.js", "manifest.webmanifest", "icon-192.png", "icon-512.png",
-  "data/skystars.json", "data/stars.json", "data/constellations.json", "data/index.json", "data/declination.json", "data/earth/cities.json", "data/paths.json"].map((f) => new URL(f, self.registration.scope).href);
+  "data/skystars.json", "data/stars.json", "data/constellations.json", "data/index.json", "data/declination.json", "data/earth/cities.json", "data/paths.json",
+  // Space Camera and Story Studio (stories.html); sky.js, orient.js, theme.js and the data above are shared
+  "stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js",
+].map((f) => new URL(f, self.registration.scope).href);
 const IS_SHELL = new Set(SHELL);
+// Story Studio's "real NASA fact" list reads every target.json named in data/index.json.
+const isTargetJson = (url) => { const u = new URL(url); return u.origin === self.location.origin && u.pathname.startsWith(new URL("data/", self.registration.scope).pathname) && /^[\w-]+\/target\.json$/.test(u.pathname.slice(new URL("data/", self.registration.scope).pathname.length)); };
+async function storeTargets(c) {
+  const idx = await c.match(new URL("data/index.json", self.registration.scope).href);
+  const list = idx ? await idx.clone().json().catch(() => []) : [];
+  await Promise.all(list.map((e) => { const u = new URL(`data/${e.id}/target.json`, self.registration.scope).href;
+    return fetch(new Request(u, { cache: "reload" })).then((r) => (r.ok ? c.put(u, r) : null)).catch(() => null); }));
+}
 const bare = (url) => { const u = new URL(url); u.search = ""; u.hash = ""; return u.href; };   // compass.html?target=... is compass.html
 
 // One by one, not addAll: with addAll a single missing file left the page with nothing stored at all.
 self.addEventListener("install", (e) => e.waitUntil(caches.open(SHELL_CACHE).then((c) => Promise.all(SHELL.map((u) =>
-  fetch(new Request(u, { cache: "reload" })).then((r) => (r.ok ? c.put(u, r) : null)).catch(() => null)))).then(() => self.skipWaiting())));
+  fetch(new Request(u, { cache: "reload" })).then((r) => (r.ok ? c.put(u, r) : null)).catch(() => null))).then(() => storeTargets(c))).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(Promise.all([self.clients.claim(), expire()])));
 
 self.addEventListener("fetch", (e) => {
@@ -41,7 +54,7 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   if (url.startsWith(TILES) || url.startsWith(TILES2)) e.respondWith(url.endsWith("/properties") ? properties(url, e) : tile(url, e));
   else if (url.startsWith(ALADIN) || url.startsWith(THREE_JS)) e.respondWith(pinned(url));
-  else if (IS_SHELL.has(bare(url))) e.respondWith(fresh(e.request));
+  else if (IS_SHELL.has(bare(url)) || isTargetJson(url)) e.respondWith(fresh(e.request));
 });
 
 async function tile(url, e) {

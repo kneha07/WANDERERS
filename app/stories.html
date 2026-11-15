@@ -18,8 +18,8 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="explorer.css?v=20261117c">
-<link rel="stylesheet" href="stories.css?v=20261117a">
+<link rel="stylesheet" href="explorer.css?v=20261118a">
+<link rel="stylesheet" href="stories.css?v=20261118a">
 </head>
 <body class="stories">
 <a class="skip" href="#main">Skip to content</a>
@@ -72,6 +72,7 @@
         <video id="cam" playsinline muted autoplay></video>
         <canvas id="camOverlay" aria-hidden="true"></canvas>
         <p class="sc-est" id="estBanner" hidden></p>
+        <div class="sc-aim" id="aimMark" hidden aria-hidden="true"></div>
       </div>
       <div class="sc-cam-bar">
         <button type="button" class="sc-shutter" id="snap" aria-label="Take photo"></button>
@@ -79,6 +80,16 @@
         <button type="button" class="btn btn-ghost tiny" id="closeCam">Close camera</button>
       </div>
       <label class="sc-nudge" id="nudgeBox" hidden>Labels look off? Turn them <input type="range" id="nudge" min="-30" max="30" step="1" value="0" aria-label="Correct the label direction, degrees"> <span id="nudgeVal" class="mono">0°</span></label>
+      <div class="sc-fix" id="fixBox" hidden>
+        <button type="button" class="btn btn-ghost tiny" id="fixBtn" aria-expanded="false" aria-controls="fixList">Line up on the Moon or a star</button>
+        <button type="button" class="btn btn-ghost tiny" id="fixReset">Clear line-up</button>
+        <div class="sc-fix-list" id="fixList" hidden></div>
+        <div class="sc-aim-bar" id="aimBar" hidden>
+          <p class="small" id="aimText" role="status" aria-live="polite"></p>
+          <button type="button" class="btn btn-primary tiny" id="aimGo">Set</button>
+          <button type="button" class="btn btn-ghost tiny" id="aimCancel">Cancel</button>
+        </div>
+      </div>
       <p class="sc-msg small" id="camMsg" role="status" aria-live="polite"></p>
     </div>
   </section>
@@ -124,11 +135,12 @@
 <footer class="site-foot"><div class="inner"><p class="legal">Images: NASA WISE and SPHEREx via WANDERERS. Constellation figures: d3-celestial (BSD). Star positions: HYG Database v4.1 (CC BY-SA 4.0). Sky labels use the Sky Compass maths and your phone’s sensors and are estimates.</p></div></footer>
 <script src="theme.js"></script>
 <script src="sky.js"></script>
+<script src="orient.js"></script>
 <script src="share.js?v=20261117a"></script>
-<script src="story-render.js?v=20261117a"></script>
+<script src="story-render.js?v=20261118a"></script>
 <script src="explorer.js?v=20261117a"></script>
 <script src="discoveries.js?v=20261117a"></script>
 <script src="explorer-home.js?v=20261117b"></script>
-<script src="stories.js?v=20261117d"></script>
+<script src="stories.js?v=20261118a"></script>
 </body>
 </html>
