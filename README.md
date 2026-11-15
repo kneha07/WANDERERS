@@ -6,20 +6,41 @@
 
 **Live:** https://rajryadav4.github.io/wanderers/ · **Sky Compass (phone):** https://rajryadav4.github.io/wanderers/compass.html
 
+<p align="center">
+  <img alt="NASA Space Apps 2026" src="https://img.shields.io/badge/NASA%20Space%20Apps-2026-0B3D91?style=for-the-badge&logo=nasa&logoColor=white">
+  <img alt="Challenge: Planet X and SPHEREx" src="https://img.shields.io/badge/Challenge-Planet%20X%20%26%20SPHEREx-5B21B6?style=for-the-badge">
+  <img alt="Candidate, never discovery" src="https://img.shields.io/badge/Rule-candidate%2C%20never%20discovery-C2410C?style=for-the-badge">
+</p>
+<p align="center">
+  <img alt="Data: SPHEREx" src="https://img.shields.io/badge/data-SPHEREx%20DR1-1D4ED8">
+  <img alt="Data: WISE" src="https://img.shields.io/badge/data-WISE%20%2F%20AllWISE-1D4ED8">
+  <img alt="Data: Gaia DR3" src="https://img.shields.io/badge/data-Gaia%20DR3-1D4ED8">
+  <img alt="Data: JWST via MAST" src="https://img.shields.io/badge/data-JWST%20%28MAST%29-1D4ED8">
+  <img alt="Frontend: plain JS" src="https://img.shields.io/badge/site-plain%20JS%20%2B%20canvas-F59E0B">
+  <img alt="Pipeline: Python" src="https://img.shields.io/badge/pipeline-Python-3776AB?logo=python&logoColor=white">
+  <img alt="Server: Node" src="https://img.shields.io/badge/server-Node.js-339933?logo=nodedotjs&logoColor=white">
+  <img alt="Live explorer: React and FastAPI" src="https://img.shields.io/badge/explorer-React%20%2B%20FastAPI-0F766E">
+  <img alt="Themes: Day and Night" src="https://img.shields.io/badge/theme-Day%20%2F%20Night-111827">
+  <img alt="Explanations by Claude" src="https://img.shields.io/badge/explanations-Claude-D97757">
+  <img alt="Tests: Node and Python" src="https://img.shields.io/badge/tests-Node%20%2B%20Python-16A34A">
+  <img alt="Data are real" src="https://img.shields.io/badge/data-real%2C%20not%20simulated-16A34A">
+</p>
+
 Pluto was found by flipping between two photos of the sky and spotting the dot that moved. WANDERERS does
 that with real infrared data spanning 2010 to 2026, then goes one step further: it uses SPHEREx's
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
 evidence on screen. Unmatched objects are called **candidates, never discoveries**.
 
-<p align="center">
-  <img src="docs/img/home-night.jpg" alt="WANDERERS home page, Night theme" width="49%">
-  <img src="docs/img/home-day.jpg" alt="WANDERERS home page, Day theme" width="49%">
-</p>
-<p align="center">
-  <img src="docs/img/obs-night.jpg" alt="Observatory: evidence, what else moved, learnt star path, Claude's explanation (Night)" width="49%">
-  <img src="docs/img/obs-day.jpg" alt="Observatory in the Day theme" width="49%">
-</p>
-<sub>Real screenshots of `main`: the home page and the observatory, in the Night and Day themes. The data in them is real (WISE, SPHEREx, Gaia).</sub>
+### Sixteen years in one picture
+
+```mermaid
+timeline
+  title The same patch of sky, seen at three moments
+  2010 : WISE (AllWISE atlas, epoch 2010.5) : 3.4 and 4.6 µm images
+  2016 : Gaia DR3 reference epoch : positions and motions of every field star
+  2025 : SPHEREx first all-sky survey : 102 colours, 0.75 to 5 µm
+  2026 : SPHEREx next survey : compared wavelength by wavelength
+```
 
 ## Quick start
 
@@ -58,6 +79,33 @@ Dashed line: needs `server.js`. A plain static host shows everything that only r
 
 ## What it does
 
+```mermaid
+mindmap
+  root((WANDERERS))
+    See it move
+      Flipbook 2010 to 2026
+      Gaia ghosts
+      Measured path
+      Add or subtract frames
+    Read what it is
+      Infrared spectrum
+      Brightness change
+      Evidence card
+      Insights and limits
+      What else moved
+    Check it
+      Gaia DR3 facts
+      SIMBAD
+      Explanations by Claude
+    Explore
+      Any coordinates
+      Live sky map
+      Star database
+      Starquakes
+      Through Webb
+      Sky Compass
+```
+
 1. **Flipbook across 16 years.** WISE (2010) and SPHEREx (2025, 2026) images of the same patch, matched by
    wavelength (4.6 µm and 3.4 µm channels), so you compare like with like.
 2. **Gaia "ghosts".** Circles show where every star Gaia knows about *should* be in each frame. Anything that
@@ -69,6 +117,30 @@ Dashed line: needs `server.js`. A plain static host shows everything that only r
 5. **Brightness change.** The two SPHEREx sky surveys are compared wavelength by wavelength.
 6. **Evidence card.** Simple, stated rules turn the measurements into a classification and a confidence
    ("3 of 3 checks support it"). No black-box score.
+
+How the card decides (`pipeline/evidence.py`, most specific rule first). The same rules, every time:
+
+```mermaid
+flowchart TD
+  start(["Measurements for one target"]) --> a{"Cold and red AND moved?"}
+  a -->|yes| c1["Cold brown dwarf"]
+  a -->|no| b{"Brightness varies?"}
+  b -->|yes| c2["Variable star"]
+  b -->|no| c{"Moved AND in Gaia?"}
+  c -->|yes| c3["Nearby star, fast proper motion"]
+  c -->|no| d{"Moved AND matches a published motion?"}
+  d -->|yes| c4["Nearby object, published motion"]
+  d -->|no| e{"Moved?"}
+  e -->|yes| c5["Unexplained mover"]
+  e -->|no| f{"Listed as variable?"}
+  f -->|yes| c6["Known variable, quiet in these snapshots"]
+  f -->|no| c7["Steady star"]
+  c1 & c2 & c3 & c4 & c5 & c6 & c7 --> conf["Confidence = how many checks agree<br/>3 or more: high, 2: medium, 0 or 1: low<br/>one step down if most SPHEREx data is saturated"]
+  conf --> st{"In Gaia, or in a published catalogue?"}
+  st -->|yes| known["status: known"]
+  st -->|no| cand["status: candidate, never a discovery"]
+```
+
 7. **Explanations by Claude.** Written from the measurements only, with rules against over-claiming.
 8. **Independent checks from Gaia DR3.** Distance (parallax), temperature estimate and Gaia's own
    variable-star classification from ~3 years of its photometry (e.g. Gaia also calls R Draconis a
@@ -179,6 +251,29 @@ With `server.js` running, typing coordinates that are not cached starts `fetch.p
 several minutes). One field is prepared at a time, up to four can wait, and errors never show server paths.
 It uses `.venv/bin/python` if present, or set `WANDERERS_PYTHON`. The static site does not have this; it
 still shows the message that a teammate can add the field.
+
+```mermaid
+sequenceDiagram
+  actor U as You
+  participant B as Browser (app/)
+  participant S as server.js
+  participant F as fields.js
+  participant P as pipeline/ (Python)
+  participant I as NASA IRSA and ESA Gaia
+  U->>B: type RA/Dec and a field size
+  B->>S: POST /api/field
+  S->>F: validate, queue (one job at a time, four may wait)
+  S-->>B: job id
+  F->>P: fetch.py, analyze.py, evidence.py
+  P->>I: SPHEREx cutouts, AllWISE, Gaia
+  I-->>P: pixels and catalogue rows
+  P-->>F: app/data/pos_.../target.json and frames
+  loop every few seconds
+    B->>S: GET /api/job?id=
+    S-->>B: stage and progress
+  end
+  B-->>U: opens the finished patch as a flipbook
+```
 
 **Field of view.** The coordinate box has a size choice: 2′ (close-up), 5′ (standard, what the five test targets
 use) or 10′ (wide). Larger fields can follow faster-moving objects but need more data and take longer. The size
