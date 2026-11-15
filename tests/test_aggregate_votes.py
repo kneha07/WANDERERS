@@ -293,6 +293,7 @@ def test_input_is_not_modified():
 
 # ---------- known ids and the command line ----------
 def test_known_ids_come_from_the_real_target_list_and_leaderboard():
+    known = av.load_known()
     index = json.loads((ROOT / 'app' / 'data' / 'index.json').read_text())
     board = json.loads((ROOT / 'app' / 'data' / 'survey' / 'leaderboard.json').read_text())
     assert all(known[t['id']] == 'target' for t in index)
