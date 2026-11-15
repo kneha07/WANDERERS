@@ -84,6 +84,7 @@ test("describe: the exact row text of the design for every case (A14)", () => {
   assert.equal(C.describe({ status: "bad_file" }), "This file is not a photo. Choose a .heic or .jpg file.");
   assert.equal(C.describe({ status: "too_large" }), "This file is too large (30 MB limit). Use the original photo.");
   assert.equal(C.describe({ status: "error" }), "Could not read this photo.");   // the row has a "Try again" button
+  assert.equal(C.describe({ status: "setup" }), "Star Fix is not set up on this computer. Start the app with start.cmd.");   // server said the solver is missing (#73)
   assert.equal(C.describe({ status: "waiting" }), "waiting");
   assert.equal(C.describe({ status: "reading" }), "reading");
 });
@@ -151,7 +152,7 @@ const clean = (s) => !FORBIDDEN.test(String(s).replace(/Star Fix/g, ""));
 test("no sentence from starfixcore holds a technical word (A14)", () => {
   const texts = [];
   for (const r of [fix(), fix({ warnings: ["zone_mismatch", "untested_lens", "small_photo"] }), skyOnly(["gravity"]), skyOnly(["time"]), skyOnly(["rear_camera"]),
-    { status: "no_solve" }, { status: "bad_file" }, { status: "too_large" }, { status: "error" }, { status: "waiting" }, { status: "reading" }])
+    { status: "no_solve" }, { status: "bad_file" }, { status: "too_large" }, { status: "error" }, { status: "setup" }, { status: "waiting" }, { status: "reading" }])
     texts.push(C.describe(r, false), C.describe(r, true));
   const c = C.combine(SAMPLE), city = C.nearestCity(c.lat, c.lon, CITIES);
   for (const [gps, n, ex] of [[SAMPLE[0].gps, 4, true], [{ lat: 0, lon: 0 }, 1, false], [null, 2, false]]) texts.push(...Object.values(C.headline(c, city, gps, n, ex)));

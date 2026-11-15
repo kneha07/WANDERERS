@@ -59,14 +59,14 @@ test("random bytes come back as 200 bad_file", { skip: !hasPackages && "the Pyth
 
 test("without Python the answer is 500 with the fixed message and no path", async () => {
   const r = await answer(await post(broken, Buffer.from("bytes")));
-  assert.deepEqual([r.status, r.json], [500, { error: DOWN }]);
+  assert.deepEqual([r.status, r.json], [500, { error: DOWN, status: "setup" }]);
 });
 
 test("a crash after the start is 500 'Could not read this photo.'; a missing package is the start message", async () => {
   const r = await answer(await post(crashing, Buffer.from("bytes")));
   assert.deepEqual([r.status, r.json], [500, { error: CRASH }]);
   const m = await answer(await post(noPackage, Buffer.from("bytes")));
-  assert.deepEqual([m.status, m.json], [500, { error: DOWN }]);
+  assert.deepEqual([m.status, m.json], [500, { error: DOWN, status: "setup" }]);
 });
 
 test("a second photo while one is being read is 409 'busy'", async () => {
@@ -117,9 +117,9 @@ test("solvePhoto: the last JSON line of a clean exit is the answer; a crash and 
     const crash = await run("crash.js", `process.stderr.write("Traceback: ValueError"); process.exit(1);`);
     assert.deepEqual([crash.code, crash.body], [500, { error: CRASH }]);
     const missing = await run("missing.js", `process.stderr.write("ModuleNotFoundError: No module named 'tetra3'"); process.exit(1);`);
-    assert.deepEqual([missing.code, missing.body], [500, { error: DOWN }]);
+    assert.deepEqual([missing.code, missing.body], [500, { error: DOWN, status: "setup" }]);
     const none = await solvePhoto(Buffer.from("photo"), { python: path.join(dir, "no-such-python.exe"), cwd: dir });
-    assert.deepEqual([none.code, none.body], [500, { error: DOWN }]);
+    assert.deepEqual([none.code, none.body], [500, { error: DOWN, status: "setup" }]);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

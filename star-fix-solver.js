@@ -24,12 +24,12 @@ function solvePhoto(buf, { python, script = "pipeline/star_fix.py", cwd = __dirn
     p.stdout.on("data", (d) => (out += d));
     p.stderr.on("data", (d) => { if (err.length < 1e5) err += d; });   // the solver logs here; read only to tell the 500s apart
     p.stdin.on("error", () => {});   // Python may exit before it has read everything
-    p.on("error", () => { ended(); reply(500, { error: DOWN }); });   // no Python
+    p.on("error", () => { ended(); reply(500, { error: DOWN, status: "setup" }); });   // no Python
     p.on("close", (code) => {
       ended();
       const line = out.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{")).pop();
       try { if (code === 0 && JSON.parse(line).status) return reply(200, line); } catch { /* no JSON line */ }
-      reply(500, { error: /No module named/.test(err) ? DOWN : CRASH });   // setup missing, or this photo
+      reply(500, /No module named/.test(err) ? { error: DOWN, status: "setup" } : { error: CRASH });   // setup missing, or this photo
     });
     p.stdin.end(buf);
   });
