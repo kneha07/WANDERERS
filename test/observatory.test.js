@@ -104,6 +104,42 @@ test("Space and the arrow keys blink the time-lapse, but leave buttons, selects 
   p.key(p.document.body, " "); assert.equal(playing(), false);
 });
 
+// ---------- sky map ----------
+// Aladin Lite stand-in: overlays and catalogues remember what is drawn on them.
+function fakeAladin() {
+  const layer = () => ({ items: [], add(x) { this.items.push(x); }, addSources(xs) { this.items.push(...xs); }, removeAll() { this.items = []; } });
+  const made = [];
+  const A = {
+    init: Promise.resolve(),
+    aladin: () => ({ gotoRaDec() {}, setFoV() {}, setBaseImageLayer() {}, addOverlay() {}, addCatalog() {} }),
+    imageHiPS: () => ({ setSliceNumber() {} }),
+    graphicOverlay: (o) => { const l = layer(); l.opts = o; made.push(l); return l; },
+    catalog: (o) => { const l = layer(); l.opts = o; made.push(l); return l; },
+    polyline: (pts) => ({ pts }), source: (ra, dec, o) => ({ ra, dec, o }),
+  };
+  return { A, made };
+}
+
+test("sky map: a slow path for the previous target is not drawn over the next one", async (t) => {
+  const p = open("?target=barnard", { delays: { "pred/wanderers_r_dra.json": 250 } });
+  t.after(p.close);
+  const { A, made } = fakeAladin();
+  p.window.A = A;
+  await p.settle(200);
+  p.$("tabMap").onclick();
+  await p.settle(100);
+  p.window.WANDERERS.openTarget("r_dra");          // its path file is slow
+  await p.settle(60);
+  p.window.WANDERERS.openTarget("barnard");
+  p.$("tabMap").onclick();
+  await p.settle(500);
+  const lines = made.filter((l) => l.opts && l.opts.lineWidth === 2.5).flatMap((l) => l.items);   // path taken / path ahead
+  assert.ok(lines.length, "Barnard's path is drawn");
+  for (const ln of lines) for (const [ra] of ln.pts) assert.ok(Math.abs(ra - 269.45) < 0.1, `a point at RA ${ra} is not Barnard's Star`);
+  const year = made.find((l) => l.opts && l.opts.name === "year").items;
+  assert.equal(year.length, 1); assert.ok(Math.abs(year[0].ra - 269.45) < 0.1, "the year marker follows Barnard's Star");
+});
+
 // ---------- Star database tab ----------
 test("Star database: a slow learnt path for the previous star is not drawn under the star picked after it", async (t) => {
   const p = open("?target=barnard", { delays: { "stars/pred/hip87937.json": 200 } });
