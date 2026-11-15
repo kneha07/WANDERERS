@@ -658,6 +658,7 @@ app/        index.html (home) · observatory.html (console) · compass.html (pho
             data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
 server.js   local demo server (live answers, any coordinates, learning a star, Star Fix, /explore/)
 fields.js   the any-coordinates job service used by server.js
+star-fix-solver.js   the Star Fix solver process (time limit, kill tree, answers) used by server.js
 start.js    one-click start for everything (also start.cmd, start.command)
 backend/    FastAPI live explorer API (port 8001)     web/   React live explorer, served at /explore/
 test/ tests/   Node and Python tests              artifacts/   review records, merge records, screenshots

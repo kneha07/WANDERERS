@@ -7,6 +7,7 @@ const http = require("http"), fs = require("fs"), path = require("path"), { exec
 const { pipeline } = require("stream");
 const ROOT = path.join(__dirname, "app"), PORT = process.env.PORT || 8000;
 const { createFieldService, pickPython } = require("./fields");
+const { solvePhoto } = require("./star-fix-solver");
 const fields = createFieldService();
 // "Explore any patch" live mode: the React app (web/, built to web/dist) and its FastAPI server (backend/, port 8001).
 const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = process.env.WANDERERS_LIVE || "http://127.0.0.1:8001";
@@ -97,33 +98,11 @@ function bodyBytes(req, limit) {
   });
 }
 
-// ---- Star Fix: one photo (raw bytes) -> pipeline/star_fix.py on stdin -> its one JSON line. One at a time, 60 s. ----
+// ---- Star Fix: one photo (raw bytes) in, one JSON result out. This route is the HTTP adapter (size limit, one photo
+// at a time, status codes); the process rules (60 s, kill tree, the two 500s) are in star-fix-solver.js. ----
 // The photo is never written to disk or logged. Errors never show paths or stack traces.
-const STAR_FIX_MAX = 30 * 1024 * 1024, STAR_FIX_DOWN = "Star Fix could not run. Start the app with start.cmd.";
-const STAR_FIX_CRASH = "Could not read this photo.";   // Python started, then failed on this photo
+const STAR_FIX_MAX = 30 * 1024 * 1024;
 let starFixBusy = false;
-function starFix(buf, reply) {
-  const p = spawn(PY, ["pipeline/star_fix.py"], { cwd: __dirname });
-  let out = "", err = "";
-  const free = () => { clearTimeout(timer); starFixBusy = false; };
-  const timer = setTimeout(() => {
-    // /T: the venv python.exe on Windows is a launcher with a child interpreter; kill the whole tree (as start.js does).
-    if (process.platform === "win32") spawn("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }).on("error", () => {});
-    else p.kill();
-    reply(504, { error: "timed out" });
-  }, 60000);
-  p.stdout.on("data", (d) => (out += d));
-  p.stderr.on("data", (d) => { if (err.length < 1e5) err += d; });   // the solver logs here; read only to tell the two 500s apart
-  p.stdin.on("error", () => {});   // Python may exit before it has read everything
-  p.on("error", () => { free(); reply(500, { error: STAR_FIX_DOWN }); });   // no Python
-  p.on("close", (code) => {
-    free();
-    const line = out.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{")).pop();
-    try { if (code === 0 && JSON.parse(line).status) return reply(200, line); } catch { /* no JSON line */ }
-    reply(500, { error: /No module named/.test(err) ? STAR_FIX_DOWN : STAR_FIX_CRASH });   // setup missing, or this photo
-  });
-  p.stdin.end(buf);
-}
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -142,7 +121,10 @@ http.createServer(async (req, res) => {
       starFixBusy = false;
       return buf ? reply(400, { error: "no photo" }) : reply(413, { error: "photo too large" }, { connection: "close" });
     }
-    return starFix(buf, reply);
+    const r = await solvePhoto(buf, { python: PY });
+    reply(r.code, r.body);
+    r.gone.then(() => { starFixBusy = false; });   // free the slot when Python has ended (after a 504 too)
+    return;
   }
   if (req.method === "POST" && url.pathname === "/api/lookup") {
     res.setHeader("content-type", "application/json");

@@ -82,6 +82,7 @@ The photo never touches the disk and never leaves the machine. Nothing is stored
 | `pipeline/star_fix.py` | New. Section 7. |
 | `pipeline/requirements.txt` | Add `pillow==13.0.0` and `pillow-heif==1.8.1`. Do **not** add `cedar-solve` here (section 9). |
 | `server.js` | New route (section 6). Replace the old `PY` lookup by `process.env.WANDERERS_PY \|\| pickPython(__dirname)` from `./fields`. |
+| `star-fix-solver.js` | New (architecture pass). `solvePhoto(buf, {python, script, cwd, timeoutMs})` -> `{code, body, gone}`: the process rules of section 6. |
 | `start.js` | Install and check the solver packages (section 9). |
 | `app/starfixcore.js` | New. Pure maths, no DOM, same export pattern as `app/starcore.js`. Section 8. |
 | `app/starfix.html`, `app/starfix.js`, `app/starfix.css` | New page. Section 10. Use `brand.css` and `theme.js` like `compass.html`. |
@@ -142,8 +143,9 @@ Server notes:
 - Add a `bodyBytes(req, limit)` helper next to `body()`. `body()` returns a string and has a 20 kB limit.
 - Spawn `PY` with `["pipeline/star_fix.py"]`, `cwd: __dirname`, no shell. Write the buffer with `p.stdin.end(buf)` and add an empty `error` handler on `p.stdin`.
 - Do not relay stderr (the solver logs there). Read it only to find "No module named", which separates the two 500 answers.
-- Timeout kill: on `win32` run `taskkill /pid <pid> /T /F`, as `start.js` does. The venv `python.exe` is a launcher with a child process, so `p.kill()` alone leaves the child alive.
-- Use one `starFixBusy` flag. Clear it on `close` and on `error`.
+- Timeout kill: on `win32` run `taskkill /pid <pid> /T /F`, as `start.js` does. The venv `python.exe` is a launcher with a child process, so `p.kill()` alone leaves the child alive. On POSIX the solver runs in its own process group, and the group is killed.
+- Use one `starFixBusy` flag. Clear it when the process has ended (on `close` and on `error`), also after a 504.
+- Architecture pass: the process rules (spawn, stdin, time limit, kill tree, last JSON line, the two 500 answers) are in `star-fix-solver.js` (`solvePhoto`); the route is the HTTP adapter (busy flag, size limit, replies). A test drives `solvePhoto` with a fake solver that sleeps past a 1.5 s limit and checks that its process tree is gone.
 
 ## 7. `pipeline/star_fix.py`
 
