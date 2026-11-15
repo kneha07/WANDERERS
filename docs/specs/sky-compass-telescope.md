@@ -1,6 +1,6 @@
 # Spec: telescope zoom in Sky Compass
 
-Status: **design only, nothing built** (2026-11-17). Branch `feature/compass-telescope`, worktree
+Status: **phase 1 built** on this branch (2026-11-15). Phases 2 and 3 are not started. Branch `feature/compass-telescope`, worktree
 `.worktrees/compass-telescope`, made from `feature/compass-pinch-zoom` at `d938fb5`. That branch is not merged yet,
 and this work needs it (it adds `S.zoom`, `setZoom`, the pinch and wheel gestures, and the daily survey check).
 
@@ -133,6 +133,22 @@ Each phase is one pull request and is useful alone.
 | 2. Observatory rung | Check CORS and credits. Pan-STARRS layer with cross-fade and coverage fallback. `sw.js` roots. Limit to 800. | Browser check: at 150× north of Dec −30° the Pan-STARRS layer is on and named; south of it DSS2 is named. Registration within 3 px at 150×. |
 | 3. Space telescope rung | Webb and Hubble layers above 300× inside a frame. Chip text. | Browser check on one known Webb field and one Hubble field: the layer shows, the note names it, and one frame away it is gone. |
 
+## Built beyond the spec (phase 1)
+
+- Sidereal tracking: at 8× or more the manual or held view turns with the sky, so a target stays in view at 300×.
+- A `1×` button and the Escape key return to 1× in one step.
+- "Loading telescope photographs…" shows while the photographs load. A load that takes more than 20 s counts as
+  failed. After a failure, the next try waits 30 s.
+- The snap glides to the target in 250 ms. With reduced motion it jumps.
+- One short buzz when hold mode starts.
+- The arrow-key step is divided by the zoom.
+- The photographs start loading at 2×, but at 3× on mobile data or Save-Data.
+- With the camera on, hold mode needs the photographs to cover the view. Otherwise the camera picture and the held
+  drawing would not agree.
+- The hold hint shows on the first hold of a visit only.
+- The white crosshair has a dark edge, so it shows on a saturated star.
+- Real-phone test: still to do, see issue #71.
+
 ## Out of scope
 
 - Native camera zoom (`applyConstraints({ zoom })`). The camera is faded out before it matters.
@@ -144,5 +160,11 @@ Each phase is one pull request and is useful alone.
 
 1. Pan-STARRS (78% of the sky, jpeg) or DESI Legacy (67%, png, sharper colours) for the Observatory rung? This
    spec assumes Pan-STARRS.
+   Builder default (the user can change it): the survey choice is deferred to phase 2, and Pan-STARRS stays the
+   assumption.
 2. Should entering hold mode be automatic at 8×, as written, or a button?
+   Builder default (the user can change it): hold mode starts automatically at 8×.
 3. Is an eyepiece look (a round dark vignette) wanted, or should the view stay full screen?
+   Builder default (the user can change it): no eyepiece vignette. The view stays full screen.
+4. The view levels its roll on entering hold mode.
+   Builder default (the user can change it): accepted for the first build.
