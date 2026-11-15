@@ -715,6 +715,7 @@ WEIGHTS = {
     "flag_each": -0.5,              # each flag from the core, down to -1.5
     "flags_min": -1.5,
     "red_flag": -2.0,               # once, if red_flags(mover) is not empty
+    "spherex_confirmed": 0.5,       # SPHEREx 2025-26 sees it where its motion predicts, gone from its 2014 spot
 }
 RED_FLAG_POINTS = WEIGHTS["red_flag"]
 
@@ -848,6 +849,27 @@ def score_terms(mover) -> list:
         add("flag", W["flag_each"] if i < max_charged else 0.0,
             f"Flagged by the detection step: {f.replace('_', ' ')}")
 
+    # SPHEREx 2025-26 (survey.spherex): a second instrument, years later, at the predicted spot
+    sx = mover.get("spherex") if isinstance(mover.get("spherex"), dict) else {}
+    if sx.get("checked"):
+        off, err = _num(sx.get("offset_arcsec")), _num(sx.get("offset_err"))
+        where = f" ({off:.0f}″ ± {err:.0f}″ from the predicted spot)" if off is not None and err is not None else ""
+        if sx.get("confirmed"):
+            add("spherex", W["spherex_confirmed"],
+                f"SPHEREx sees it in 2025–26 where its NEOWISE motion predicts{where}, and gone from its 2014 spot")
+        elif sx.get("at_predicted") is True:
+            add("spherex", 0.0, f"SPHEREx sees a source where predicted in 2025–26{where}; it moves too little "
+                                "for SPHEREx's 13″ pixels to see the motion")
+        elif sx.get("at_predicted") is False:
+            add("spherex", 0.0, "SPHEREx does not see it where its motion predicts in 2025–26 (a neighbour's "
+                                "light in the same pixels, or a wrong motion)")
+        elif sx.get("detected") is False:
+            add("spherex", 0.0, "Too faint for SPHEREx to see in 2025–26")
+        ix = sx.get("indices") if isinstance(sx.get("indices"), dict) else {}
+        if ix.get("methane"):
+            add("spherex_methane", 0.0, "SPHEREx spectrum: a dip at 3.3 µm like the methane of cold brown dwarfs "
+                                        "(a hint, not a classification)")
+
     # Red flags
     rf = red_flags(mover)
     if rf:
@@ -880,7 +902,15 @@ def score(mover):
     tile_edge     path over 2014-2024 could reach the tile edge  -0.5
     flag          each flag set by the core                      -0.5, down to -1.5 in all
     red_flags     any of red_flags(mover)                        -2.0 (once)
+    spherex       SPHEREx 2025-26 confirms the motion             +0.5 (at the predicted spot, motion seen,
+                  (spherex.confirmed)                                   gone from the 2014 spot)
+                  seen where predicted but too slow to confirm,    0.0 (reason only)
+                  not where predicted, or too faint
+    spherex_methane  SPHEREx 3.3 um methane hint                   0.0 (reason only)
     ============  =============================================  ==========================================
+
+    SPHEREx never costs points: with ~13" pixels a neighbour's light can hide or shift a faint mover, so "not
+    seen where predicted" is reported but not held against it.
 
     Monotonic by construction: more visits, a longer span, a redder colour and a higher pm_snr never lower the
     score; a Gaia match, a higher chi2r, more saturation and more flags never raise it. A faster motion never

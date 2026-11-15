@@ -170,15 +170,15 @@ const ROWS = [
 
 test("CSV: the agreed columns, one line per candidate, CRLF line ends", () => {
   const csv = T.toCSV(ROWS), lines = csv.split("\r\n");
-  assert.equal(lines[0], "rank,id,k5,ra,dec,epoch,pm,pmra,pmdec,pm_err,pm_snr,w1,w2,w1w2,n_visits,span_yr,class,gaia_checked,gaia_match,gaia_source_id,gaia_sep_arcsec,score,flags,duplicates");
-  assert.equal(lines[1], "1,10226-0001,10226,133.781801,-7.243522,2019.02,8149.9,-8121.8,676,20.4,399.5,,14,,19,10.5,unexplained,true,false,,,4.1,fast_search,10227-0004");
-  assert.equal(lines[2], "2,8545-0003,8545,77.95994,-45.04381,2016,8644,6491.2,-5708.6,4.1,,,,,21,,known (Gaia),true,true,4810594479418041856,0.4,0.9,saturated;tile_edge,");
+  assert.equal(lines[0], "rank,id,k5,ra,dec,epoch,pm,pmra,pmdec,pm_err,pm_snr,w1,w2,w1w2,n_visits,span_yr,class,gaia_checked,gaia_match,gaia_source_id,gaia_sep_arcsec,score,flags,duplicates,spherex_checked,spherex_detected,spherex_confirmed,spherex_at_predicted,spherex_snr,spherex_offset_arcsec,spherex_w1w2,spherex_peak_um,spherex_methane");
+  assert.equal(lines[1], "1,10226-0001,10226,133.781801,-7.243522,2019.02,8149.9,-8121.8,676,20.4,399.5,,14,,19,10.5,unexplained,true,false,,,4.1,fast_search,10227-0004,,,,,,,,,");
+  assert.equal(lines[2], "2,8545-0003,8545,77.95994,-45.04381,2016,8644,6491.2,-5708.6,4.1,,,,,21,,known (Gaia),true,true,4810594479418041856,0.4,0.9,saturated;tile_edge,,,,,,,,,,");
   assert.ok(csv.endsWith("\r\n")); assert.equal(lines.length, ROWS.length + 2);
 });
 
 test("CSV escaping: quotes doubled, commas and line breaks quoted, formulas defused, bad numbers empty", () => {
   const lines = T.toCSV(ROWS).split("\r\n");
-  assert.equal(lines[3], `,"'=HYPERLINK(""x""),1",,1,-2,,,,,,,,,,,,likely artefact,false,,,,,crowded,`);
+  assert.equal(lines[3], `,"'=HYPERLINK(""x""),1",,1,-2,,,,,,,,,,,,likely artefact,false,,,,,crowded,,,,,,,,,,`);
   assert.ok(T.toCSV([ROWS[3]]).includes(',"line\nbreak",,,,'), "a line break inside a field is quoted");
   assert.equal(T.csvCell("+1 555"), "'+1 555"); assert.equal(T.csvCell("@SUM(A1)"), "'@SUM(A1)"); assert.equal(T.csvCell(-7.5), "-7.5");
   assert.equal(T.csvCell('say "hi"'), '"say ""hi"""'); assert.equal(T.csvCell(null), ""); assert.equal(T.csvCell(NaN), "");
@@ -249,7 +249,7 @@ test("high-confidence preset: switches on, is recognised, switches off without t
 });
 
 test("URL round trip: every filter and the sort come back the same", () => {
-  const f = { cls: "unexplained", minPm: 0.5, red: true, q: "8545-", tile: 8545, minVisits: 12, minSnr: 7.5, hide: ["saturated", "edge"] };
+  const f = { cls: "unexplained", minPm: 0.5, red: true, q: "8545-", tile: 8545, minVisits: 12, minSnr: 7.5, hide: ["saturated", "edge"], spherex: true };
   const sorts = C.sortDefaults();
   for (const sort of [{ key: "snr", dir: -1 }, { key: "w1w2", dir: 1 }, { key: "rank", dir: -1 }, { key: "rank", dir: 1 }]) {
     const params = new URLSearchParams(T.toParams(f, sort, sorts));
@@ -258,7 +258,7 @@ test("URL round trip: every filter and the sort come back the same", () => {
     assert.deepEqual(back.sort, sort.key === "rank" && sort.dir === 1 ? null : sort, JSON.stringify(sort));
   }
   assert.equal(new URLSearchParams(T.toParams(f, { key: "snr", dir: -1 }, sorts)).toString(),
-    "class=unexplained&minpm=0.5&red=1&visits=12&snr=7.5&hide=edge%2Csaturated&q=8545-&tile=8545&sort=snr");
+    "class=unexplained&minpm=0.5&red=1&spherex=1&visits=12&snr=7.5&hide=edge%2Csaturated&q=8545-&tile=8545&sort=snr");
   assert.deepEqual(T.toParams({ ...T.FILTER_DEFAULTS }, { key: "rank", dir: 1 }, sorts), [], "defaults leave the address clean");
 });
 
@@ -272,4 +272,26 @@ test("URL parameters: nonsense is ignored, a preset link expands, explicit value
   assert.deepEqual(read("preset=high&hide=").f.hide, [], "an explicit empty hide list wins");
   assert.equal(read("preset=nope").f.minVisits, 0);
   assert.deepEqual(read("sort=pm").sort, { key: "pm", dir: -1 }); assert.deepEqual(read("sort=pm&dir=asc").sort, { key: "pm", dir: 1 });
+});
+
+
+// SPHEREx DR1 cube stage: its verdict and hints travel with the exported list.
+test("export rows carry the SPHEREx verdict, offset and spectral hints", () => {
+  const row = T.exportRow({ id: "10226-0001", spherex: { checked: true, detected: true, confirmed: true, at_predicted: true,
+    snr: 13.3, offset_arcsec: 3.8, indices: { w1w2: 2.3, peak_um: 4.79, methane: null } } });
+  assert.equal(row.spherex_checked, true); assert.equal(row.spherex_detected, true); assert.equal(row.spherex_confirmed, true);
+  assert.equal(row.spherex_at_predicted, true); assert.equal(row.spherex_snr, 13.3); assert.equal(row.spherex_offset_arcsec, 3.8);
+  assert.equal(row.spherex_w1w2, 2.3); assert.equal(row.spherex_peak_um, 4.79); assert.equal(row.spherex_methane, null);
+  for (const k of ["spherex_checked", "spherex_confirmed", "spherex_snr", "spherex_w1w2", "spherex_peak_um", "spherex_methane"])
+    assert.ok(T.EXPORT_COLUMNS.includes(k), k);
+});
+
+test("export rows without a SPHEREx check have empty SPHEREx fields, never errors", () => {
+  for (const sp of [undefined, null, "x", {}, { checked: false, indices: null }]) {
+    const row = T.exportRow({ id: "a", spherex: sp });
+    for (const k of T.EXPORT_COLUMNS.filter((c) => c.startsWith("spherex_"))) {
+      if (k === "spherex_checked" && sp && sp.checked === false) assert.equal(row[k], false);
+      else assert.equal(row[k], null, `${k} for ${JSON.stringify(sp)}`);
+    }
+  }
 });

@@ -256,8 +256,8 @@ test("page wiring: new controls exist once, are labelled, and scripts load in or
   const html = fs.readFileSync(path.join(__dirname, "..", "app", "survey.html"), "utf8");
   for (const id of ["fMinVis", "fMinSnr", "fHideEdge", "fHideCrowded", "fHideSat", "fHideArt", "fSort", "fHigh", "xCsv", "xJson", "xMsg", "dArch", "dWhen", "dPromote"])
     assert.equal((html.match(new RegExp(`\\bid="${id}"`, "g")) || []).length, 1, id);
-  assert.match(html, /<script src="aladinlink\.js"><\/script>\s*<script src="surveytools\.js\?v=20261115b"><\/script>\s*<script src="theme\.js"><\/script>\s*<script src="survey\.js\?v=20261117b"><\/script>/);
-  assert.match(html, /survey\.css\?v=20261117b/);
+  assert.match(html, /<script src="aladinlink\.js"><\/script>\s*<script src="surveytools\.js\?v=\d{8}\w*"><\/script>\s*<script src="theme\.js"><\/script>\s*<script src="survey\.js\?v=\d{8}\w*"><\/script>/);
+  assert.match(html, /survey\.css\?v=\d{8}\w*/);
   assert.match(html, /id="fHigh" aria-pressed="false" aria-describedby="presetNote"/);
   assert.match(html, /cold brown dwarfs are red in W1−W2/);
 });

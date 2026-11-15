@@ -4,7 +4,12 @@
 Pushes NEOWISE HEALPix order-5 tiles through the core stage (`survey.link.process_tile`), writes one
 `<out>/tiles/<k5>.json` per finished tile, keeps `<out>/manifest.json`, and every few minutes (and at the end)
 rebuilds `<out>/leaderboard.json` and `<out>/summary.json` from all tile files with the ranking stage
-(`survey.rank.crossmatch_gaia` + `survey.rank.rank`). Interface: docs/survey-contract.md.
+(`survey.rank.crossmatch_gaia` + `survey.spherex.check_tile` + `survey.rank.rank`). Interface: docs/survey-contract.md.
+
+The SPHEREx stage (survey/spherex.py) looks at every mover Gaia does not explain in SPHEREx's all-sky DR1 spectral
+cube (2025-26): is it there, where its NEOWISE motion predicts, and what is its 0.75-5 um spectrum? Answers are
+cached per tile under <cache>/spherex_tiles; each periodic publish spends at most --spherex-budget minutes on the
+network (the final one has no limit); --no-spherex switches it off.
 
 Run from the repo root (PY = the project's Python, e.g. ../wanderers/.venv/bin/python):
 
@@ -19,7 +24,7 @@ Overnight, whole sky, validation tiles first, then the rest in a seeded random o
 
 End-to-end smoke test without network (fake core and ranking from the test suite, a few seconds):
 
-    PYTHONPATH=tests $PY pipeline/survey/run.py --tiles list:1-6 --workers 2 --no-gaia --publish-every 0 \\
+    PYTHONPATH=tests $PY pipeline/survey/run.py --tiles list:1-6 --workers 2 --no-gaia --no-spherex --publish-every 0 \\
         --out /tmp/survey-smoke --cache /tmp/survey-smoke/cache --log-file /tmp/survey-smoke/run.log \\
         --process-fn test_survey_run_fakes:process_tile --rank-fn test_survey_run_fakes:rank
     $PY -m json.tool /tmp/survey-smoke/summary.json | head -30
@@ -27,7 +32,9 @@ End-to-end smoke test without network (fake core and ranking from the test suite
 Beyond the contract, summary.json also carries (for the web page) `status` ("running" while a run is processing
 tiles, published at the start and every --publish-every minutes; "done" once no run is live), `tiles_planned`
 (tiles that will be done when the run completes: progress = tiles_done / tiles_planned), `min_pm` (the core's
-motion threshold, mas/yr) and `unique_sources` (linked tracks); leaderboard.json's `n_candidates` counts every
+motion threshold, mas/yr), `unique_sources` (linked tracks), `gaia_unchecked`, and `spherex_checked` /
+`spherex_confirmed` (movers measured in the SPHEREx cube / seen there where their motion predicts, far enough
+from their 2014 position for SPHEREx to see the move); leaderboard rows carry a `spherex` dict; leaderboard.json's `n_candidates` counts every
 ranked mover, while `candidates` holds the top --top (1000).
 
 Robustness rules: tile files are the source of truth for "done" (the manifest is rebuilt from them if needed);
@@ -97,6 +104,7 @@ DEFAULT_LOG = ROOT / "data" / "cache" / "survey_run.log"
 DEFAULT_PROCESS = "survey.link:process_tile"
 DEFAULT_XMATCH = "survey.rank:crossmatch_gaia"
 DEFAULT_RANK = "survey.rank:rank"
+DEFAULT_SPHEREX = "survey.spherex:check_tile"
 
 # Targets with known motion (contract): their tiles are the validation set.
 KNOWN_MOVERS = [
@@ -127,7 +135,8 @@ SUMMARY_KEYS = ["generated", "tiles_done", "tiles_total", "sky_fraction", "sky_d
                 "good_detections", "visit_sources", "tracks", "movers", "unexplained", "runtime_hours",
                 "tiles_per_hour", "detections_per_second", "tiles", "validation", "method", "limits"]
 # Added for the web page on top of the contract: run state, progress target, motion threshold, linked sources.
-SUMMARY_EXTRA_KEYS = ["status", "tiles_planned", "min_pm", "unique_sources", "gaia_unchecked"]
+SUMMARY_EXTRA_KEYS = ["status", "tiles_planned", "min_pm", "unique_sources", "gaia_unchecked", "spherex_checked",
+                      "spherex_confirmed"]
 STATUSES = ("running", "done")                # running: a run is processing tiles; done: no run is live any more
 LEADERBOARD_KEYS = ["generated", "n_candidates", "candidates"]   # n_candidates = all ranked movers, not the top
 DEFAULT_MIN_PM = 150.0                        # mas/yr; process_tile's default per the contract
@@ -145,8 +154,12 @@ METHOD = (
     "including fast movers of up to 12 arcseconds per year, and a straight-line fit gives each track's proper "
     "motion and its uncertainty. Tracks seen in at least 6 visits that move at least {min_pm} mas per year with at "
     "least 5 sigma are kept as movers. Each mover is compared with Gaia DR3 stars moved to the same date with "
-    "their own motion, then ranked: movers that Gaia does not explain, that are red in WISE (a sign of a cold "
-    "brown dwarf) and that have long, clean tracks come first. The top of the list is for people to investigate."
+    "their own motion. Every mover Gaia does not explain is then looked up in SPHEREx's all-sky spectral cube "
+    "(data release 1, observed 2025-26): is a source there, where its NEOWISE motion says it should be by then, and "
+    "gone from where it was in 2014? SPHEREx also gives its 0.75-5 micron spectrum, from which a methane dip at "
+    "3.3 microns and a red 3-5 micron colour (signs of a cold brown dwarf) are read as hints. Movers are then "
+    "ranked: those Gaia does not explain, that are red, that SPHEREx sees where predicted and that have long, "
+    "clean tracks come first. The top of the list is for people to investigate."
 )
 
 BASE_LIMITS = [
@@ -162,6 +175,10 @@ BASE_LIMITS = [
     "own is lost.",
     "Motions come from a straight-line fit; parallax is fitted only where a value is given, so very nearby "
     "objects can have slightly biased motions.",
+    "SPHEREx has no public source catalogue yet; its check measures the all-sky DR1 spectral cube directly at "
+    "each predicted position. Its pixels are about 13 arcseconds across, so it can only see motions of more than "
+    "a few pixels over 2014-2026 (roughly 1 arcsecond per year and faster); slower movers can only be shown to "
+    "be there. Two sources less than a pixel apart are blended, so a spectrum can include a neighbour's light.",
     "A candidate is not a discovery: each one needs a human check of the images and other catalogues first.",
 ]
 
@@ -1159,6 +1176,99 @@ def crossmatch_tile(xmatch_fn: Callable, movers: list[dict], cache_dir: Path) ->
     return gaia, all(g["checked"] for g in gaia)
 
 
+# ---- SPHEREx (survey.spherex): same shape for every mover, cached per tile like the Gaia answers
+SPHEREX_KEYS = ["checked", "detected", "confirmed", "snr", "offset_arcsec", "offset_err", "expected_offset",
+                "at_predicted", "gone_from_2014", "old_snr", "w2_ratio", "epoch", "tile", "spectrum", "indices",
+                "notes", "error"]
+SPHEREX_SKIP_NOTE = "Not looked up in SPHEREx: Gaia DR3 already explains it"
+SPHEREX_VERSION = 1          # bump with survey.spherex.STAGE_VERSION to drop cached answers
+SPHEREX_BUDGET_ERROR = "time budget"
+
+
+def spherex_unchecked(error: str | None = None, note: str | None = None) -> dict:
+    out = {k: None for k in SPHEREX_KEYS}
+    out.update({"checked": False, "confirmed": False, "notes": [note] if note else [], "error": error})
+    return out
+
+
+def compact_spherex(d: Any) -> dict:
+    """A SPHEREx dict with exactly SPHEREX_KEYS (survey.spherex.compact when importable, else a plain copy)."""
+    try:
+        from survey.spherex import compact
+    except ImportError:
+        d = d if isinstance(d, dict) else {}
+        out = spherex_unchecked()
+        out.update({k: clean_json(d.get(k)) for k in SPHEREX_KEYS if k in d})
+        return out
+    return compact(d)
+
+
+def spherex_wanted(m: dict, check_all: bool = False) -> bool:
+    """Movers Gaia does not explain (no match, or not checked) are looked up; with check_all every mover is."""
+    g = m.get("gaia") if isinstance(m.get("gaia"), dict) else {}
+    return check_all or not (g.get("checked") and g.get("match"))
+
+
+def _spherex_key(movers: list[dict], wanted: list[bool]) -> str:
+    rows = [[m.get("id"), m.get("ra"), m.get("dec"), m.get("epoch"), m.get("pmra"), m.get("pmdec"), m.get("pm_err"),
+             m.get("w1"), m.get("w2"), (m.get("track") or [[None]])[0][:1], w] for m, w in zip(movers, wanted)]
+    return hashlib.sha1(json.dumps([SPHEREX_VERSION, rows], sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _spherex_cache_path(cache_dir: Path, k5: int) -> Path:
+    return Path(cache_dir) / "spherex_tiles" / f"{int(k5)}.json"
+
+
+def spherex_cache_get(cache_dir: Path | None, k5: int, movers: list[dict], wanted: list[bool]) -> list[dict] | None:
+    if cache_dir is None:
+        return None
+    try:
+        data = json.loads(_spherex_cache_path(cache_dir, k5).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("key") != _spherex_key(movers, wanted) \
+            or len(data.get("spherex", [])) != len(movers):
+        return None
+    return data["spherex"]
+
+
+def spherex_cache_put(cache_dir: Path | None, k5: int, movers: list[dict], wanted: list[bool], res: list[dict]) -> None:
+    if cache_dir is None:
+        return
+    try:
+        atomic_write_json(_spherex_cache_path(cache_dir, k5), {"key": _spherex_key(movers, wanted), "spherex": res},
+                          fsync=False)
+    except OSError as e:
+        log.warning("could not cache the SPHEREx check of tile %s: %s", k5, e)
+
+
+def spherex_retryable(d: dict) -> bool:
+    """Not checked because of the network, the time budget or a stage failure: try again at the next publish."""
+    e = str(d.get("error") or "")
+    return not d.get("checked") and (e.startswith("network: ") or e == SPHEREX_BUDGET_ERROR
+                                     or e.startswith("stage failed"))
+
+
+def spherex_tile(fn: Callable, k5: int, movers: list[dict], wanted: list[bool], deadline: float | None
+                 ) -> tuple[list[dict], bool]:
+    """SPHEREx dicts for every mover of a tile (in order; skipped ones carry a note) and whether the answer is
+    complete (cacheable: no network failure, nothing cut by the time budget)."""
+    idx = [i for i, w in enumerate(wanted) if w]
+    out = [spherex_unchecked(note=SPHEREX_SKIP_NOTE) for _ in movers]
+    if idx:
+        try:
+            res = fn(int(k5), [dict(movers[i]) for i in idx], deadline=deadline)
+            if not isinstance(res, list) or len(res) != len(idx):
+                raise TypeError("SPHEREx stage returned the wrong number of answers")
+        except Exception as e:  # noqa: BLE001 - the stage should not raise; be safe anyway
+            log.warning("SPHEREx check failed on tile %s (%s: %s)", k5, type(e).__name__, str(e)[:200])
+            res = [spherex_unchecked(f"stage failed: {type(e).__name__}") for _ in idx]
+        for i, d in zip(idx, res):
+            out[i] = d
+    out = [compact_spherex(d) for d in out]
+    return out, not any(spherex_retryable(out[i]) for i in idx)
+
+
 def fallback_rank(movers: list[dict], top: int = TOP_CANDIDATES) -> list[dict]:
     """Used only when survey.rank is missing or fails: orders by motion signal-to-noise."""
     out = []
@@ -1272,6 +1382,8 @@ def build_summary(totals: dict, rows: list[list[int]], runs: list[dict], validat
         "min_pm": float(min_pm),
         "unique_sources": int(totals.get("n_tracks", 0)),      # every linked track is one distinct source
         "gaia_unchecked": int(totals.get("gaia_unchecked", 0)),  # movers not (yet) compared with Gaia DR3
+        "spherex_checked": int(totals.get("spherex_checked", 0)),  # movers measured in the SPHEREx DR1 cube
+        "spherex_confirmed": int(totals.get("spherex_confirmed", 0)),  # ... seen there where predicted, motion seen
     }
 
 
@@ -1314,7 +1426,9 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
             top: int = TOP_CANDIDATES, gaia_budget_s: float | None = None, runs: list[dict] | None = None,
             should_abort: Callable[[], bool] | None = None, clock: Callable[[], float] = time.monotonic,
             gaia_fail_limit: int = 3, status: str | None = None, tiles_planned: int | None = None,
-            min_pm: float | None = None, dedupe: bool = True) -> dict:
+            min_pm: float | None = None, dedupe: bool = True, use_spherex: bool = False,
+            spherex_fn: Callable | str | None = None, spherex_budget_s: float | None = None,
+            spherex_all: bool = False, spherex_fail_limit: int = 3) -> dict:
     """Rebuild leaderboard.json and summary.json from every tiles/<k5>.json in `out`.
 
     Streams the tile files (memory stays bounded by `top`), checks movers against Gaia per tile (answers cached
@@ -1327,6 +1441,12 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
     With `dedupe` (default), a first pass over the tile files finds movers seen twice in neighbouring tiles
     (survey.dedupe): only the better track is ranked and counted, and its leaderboard row lists the other ids under
     "duplicates". Gaia is still asked about every mover of a tile, so the per-tile Gaia cache stays valid.
+    With `use_spherex` (the CLI's default; off here so library calls and tests stay offline), every mover Gaia
+    does not explain (all with `spherex_all`) is looked up in the SPHEREx DR1 cube (survey.spherex.check_tile,
+    or `spherex_fn(k5, movers, deadline=...)`) before ranking; answers are cached per tile under
+    cache_dir/spherex_tiles, network time is limited by spherex_budget_s, and after `spherex_fail_limit` tiles in
+    a row with network failures the stage is left alone until the next publish. Rows get a `spherex` dict and
+    the summary counts `spherex_checked` and `spherex_confirmed`.
     Returns the summary."""
     out = Path(out)
     if status is None:
@@ -1343,7 +1463,12 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         if min_pm is None:
             min_pm = core_min_pm()
     deadline = None if gaia_budget_s is None else clock() + max(0.0, gaia_budget_s)
-    totals = {k: 0 for k in TILE_COUNT_KEYS + ["movers", "unexplained", "gaia_unchecked"]}
+    sx = _resolve_optional(spherex_fn or DEFAULT_SPHEREX, "SPHEREx check (survey.spherex.check_tile)") \
+        if use_spherex else None
+    sx_deadline = None if spherex_budget_s is None else clock() + max(0.0, spherex_budget_s)
+    sx_stats = {"tiles": 0, "fail_streak": 0, "pending_movers": 0}
+    totals = {k: 0 for k in TILE_COUNT_KEYS + ["movers", "unexplained", "gaia_unchecked", "spherex_checked",
+                                                "spherex_confirmed"]}
     rows: list[list[int]] = []
     pool: list[tuple[float, float, str, int, dict]] = []      # (-score, -pm_snr, id, k5, mover): ascending = best
     n_ranked = 0
@@ -1394,8 +1519,31 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
                 stats["unchecked_tiles"] += 1
             for i, m in enumerate(movers):
                 m["gaia"] = dict(gaia[i]) if gaia is not None else dict(GAIA_UNCHECKED)
+            if sx is not None:
+                wanted = [spherex_wanted(m, spherex_all) for m in movers]
+                sxr = spherex_cache_get(cache, k5, movers, wanted)
+                if sxr is None and any(wanted) and sx_stats["fail_streak"] < spherex_fail_limit \
+                        and (sx_deadline is None or clock() < sx_deadline) and not (should_abort and should_abort()):
+                    sx_stats["tiles"] += 1
+                    sxr, complete = spherex_tile(sx, k5, movers, wanted, sx_deadline)
+                    network = any(str(d.get("error") or "").startswith("network: ") for d in sxr)
+                    sx_stats["fail_streak"] = sx_stats["fail_streak"] + 1 if network else 0
+                    if sx_stats["fail_streak"] == spherex_fail_limit:
+                        log.warning("SPHEREx archive failing on %d tiles in a row; skipping it until the next publish",
+                                    spherex_fail_limit)
+                    if complete:
+                        spherex_cache_put(cache, k5, movers, wanted, sxr)
+                if sxr is None:
+                    sxr = [spherex_unchecked(SPHEREX_BUDGET_ERROR) if w else spherex_unchecked(note=SPHEREX_SKIP_NOTE)
+                           for w in wanted]
+                for i, m in enumerate(movers):
+                    m["spherex"] = compact_spherex(sxr[i])
             movers = [m for m, d in zip(movers, is_dup) if not d]
             totals["gaia_unchecked"] += sum(1 for m in movers if not m["gaia"].get("checked"))
+            if sx is not None:
+                totals["spherex_checked"] += sum(1 for m in movers if m["spherex"].get("checked"))
+                totals["spherex_confirmed"] += sum(1 for m in movers if m["spherex"].get("confirmed"))
+                sx_stats["pending_movers"] += sum(1 for m in movers if spherex_retryable(m["spherex"]))
         if movers:
             try:
                 ranked = rank_callable([dict(m) for m in movers], top=max(len(movers), 1))
@@ -1428,6 +1576,8 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         row.setdefault("score", None)
         row.setdefault("reasons", [])
         row.setdefault("class", "not checked")
+        if "spherex" in m:
+            row["spherex"] = compact_spherex(m["spherex"])
         row["rank"] = i + 1
         if groups.get(row["id"]):
             row["duplicates"] = list(groups[row["id"]])        # ids of the same source in neighbouring tiles
@@ -1440,6 +1590,14 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         extra.append(f"The Gaia check is still pending for {stats['unchecked_tiles']} of "
                      f"{stats['tiles_with_movers']} tiles with movers (service busy or offline); their movers are "
                      "'not checked'.")
+    if not use_spherex:
+        extra.append("The SPHEREx check was switched off for this build: no mover was looked up in the SPHEREx cube.")
+    elif sx is None:
+        extra.append("The SPHEREx check could not be loaded for this build.")
+    elif sx_stats["pending_movers"]:
+        n = sx_stats["pending_movers"]
+        extra.append(f"The SPHEREx check is still pending for {n} mover{'s' if n != 1 else ''} (time budget or "
+                     "archive busy); it continues at the next update.")
     if drop:
         n = len(drop)
         extra.append(f"{n} mover{'s were' if n != 1 else ' was'} also found in a neighbouring tile (same position "
@@ -1484,6 +1642,10 @@ class Config:
     max_hours: float | None = None
     cache: Path = DEFAULT_CACHE
     no_gaia: bool = False
+    no_spherex: bool = False
+    spherex_budget: float = 5.0          # minutes of SPHEREx network time per periodic publish
+    spherex_all: bool = False            # also look up movers Gaia already explains
+    spherex_fn: Any = DEFAULT_SPHEREX
     rank_only: bool = False
     order: str = "given"
     publish_every: float = 10.0          # minutes; 0 = only at the end
@@ -1877,6 +2039,7 @@ class Runner:
         In --rank-only mode (runs=None) status and plan come from the lock and the manifest."""
         cfg = self.cfg
         budget = None if final else cfg.gaia_budget * 60
+        sx_budget = None if final else cfg.spherex_budget * 60
         cancel = cancel or threading.Event()
         in_run = runs is not None
         try:
@@ -1884,7 +2047,9 @@ class Runner:
                     rank_fn=cfg.rank_fn, top=cfg.top, gaia_budget_s=budget, runs=runs,
                     should_abort=lambda: self.abort or cancel.is_set(), clock=self.clock,
                     status=("done" if final else "running") if in_run else None,
-                    tiles_planned=self.planned if in_run else None, min_pm=self.min_pm if in_run else None)
+                    tiles_planned=self.planned if in_run else None, min_pm=self.min_pm if in_run else None,
+                    use_spherex=not cfg.no_spherex, spherex_fn=cfg.spherex_fn, spherex_budget_s=sx_budget,
+                    spherex_all=cfg.spherex_all)
             self.n_publishes += 1
             self.statuses.append(("done" if final else "running") if in_run else "rank-only")
         except PublishAborted:
@@ -2007,6 +2172,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="stop scheduling new tiles after this many hours, then finish cleanly")
     p.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="Gaia answer cache directory")
     p.add_argument("--no-gaia", action="store_true", help="skip the Gaia check (movers are 'not checked')")
+    p.add_argument("--no-spherex", action="store_true",
+                   help="skip the SPHEREx check (no mover is looked up in the SPHEREx DR1 cube)")
+    p.add_argument("--spherex-budget", type=_nonneg_float, default=5.0,
+                   help="minutes of SPHEREx reads per periodic rebuild (the final rebuild has no limit)")
+    p.add_argument("--spherex-all", action="store_true",
+                   help="look up every mover in SPHEREx, also those Gaia already explains")
+    p.add_argument("--spherex-fn", default=DEFAULT_SPHEREX, help="SPHEREx stage as module:function (advanced/testing)")
     p.add_argument("--rank-only", action="store_true",
                    help="only rebuild leaderboard.json and summary.json from the existing tile files")
     p.add_argument("--order", choices=ORDERS, default="given",
@@ -2042,7 +2214,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def config_from_args(ns: argparse.Namespace, argv: list[str] | None = None) -> Config:
     return Config(tiles=ns.tiles, workers=ns.workers, out=Path(ns.out), seed=ns.seed, max_hours=ns.max_hours,
-                  cache=Path(ns.cache), no_gaia=ns.no_gaia, rank_only=ns.rank_only, order=ns.order,
+                  cache=Path(ns.cache), no_gaia=ns.no_gaia, no_spherex=ns.no_spherex,
+                  spherex_budget=ns.spherex_budget, spherex_all=ns.spherex_all, spherex_fn=ns.spherex_fn,
+                  rank_only=ns.rank_only, order=ns.order,
                   publish_every=ns.publish_every, gaia_budget=ns.gaia_budget, tile_timeout=ns.tile_timeout,
                   retries=ns.retries, backoff=ns.backoff, maxtasksperchild=ns.maxtasksperchild,
                   max_tiles=ns.max_tiles, min_free_disk_gb=ns.min_free_disk_gb, max_worker_gb=ns.max_worker_gb,

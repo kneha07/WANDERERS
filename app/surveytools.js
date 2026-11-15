@@ -111,10 +111,15 @@
 
   // ---------- export ----------
   const EXPORT_COLUMNS = ["rank", "id", "k5", "ra", "dec", "epoch", "pm", "pmra", "pmdec", "pm_err", "pm_snr", "w1", "w2", "w1w2",
-    "n_visits", "span_yr", "class", "gaia_checked", "gaia_match", "gaia_source_id", "gaia_sep_arcsec", "score", "flags", "duplicates"];
+    "n_visits", "span_yr", "class", "gaia_checked", "gaia_match", "gaia_source_id", "gaia_sep_arcsec", "score", "flags", "duplicates",
+    "spherex_checked", "spherex_detected", "spherex_confirmed", "spherex_at_predicted", "spherex_snr", "spherex_offset_arcsec",
+    "spherex_w1w2", "spherex_peak_um", "spherex_methane"];
   const numOrNull = (v) => (fin(v) ? num(v) : null);
   function exportRow(m) {
     const g = m && m.gaia && typeof m.gaia === "object" ? m.gaia : {};
+    const x = m && m.spherex && typeof m.spherex === "object" ? m.spherex : {};       // SPHEREx DR1 cube stage
+    const xi = x.indices && typeof x.indices === "object" ? x.indices : {};
+    const tri = (v) => (v === undefined || v === null ? null : !!v);
     const list = (v) => (Array.isArray(v) ? v.map(String) : v === null || v === undefined || v === "" ? [] : [String(v)]);
     return {
       rank: numOrNull(m.rank), id: String(m.id ?? ""), k5: numOrNull(m.k5), ra: numOrNull(m.ra), dec: numOrNull(m.dec), epoch: numOrNull(m.epoch),
@@ -125,6 +130,9 @@
       gaia_match: g.match === undefined || g.match === null ? null : !!g.match,
       gaia_source_id: g.source_id === undefined || g.source_id === null || g.source_id === "" ? null : String(g.source_id),
       gaia_sep_arcsec: numOrNull(g.sep_arcsec), score: numOrNull(m.score), flags: list(m.flags), duplicates: list(m.duplicates),
+      spherex_checked: tri(x.checked), spherex_detected: tri(x.detected), spherex_confirmed: tri(x.confirmed),
+      spherex_at_predicted: tri(x.at_predicted), spherex_snr: numOrNull(x.snr), spherex_offset_arcsec: numOrNull(x.offset_arcsec),
+      spherex_w1w2: numOrNull(xi.w1w2), spherex_peak_um: numOrNull(xi.peak_um), spherex_methane: tri(xi.methane),
     };
   }
   // One CSV field (RFC 4180): quoted when it holds a comma, quote or line break; text that a spreadsheet would run
@@ -166,7 +174,7 @@
     if (key === "artefact") return (m && m.class) === "likely artefact";
     return flags.includes(key);
   }
-  const FILTER_DEFAULTS = { cls: "all", minPm: 0, red: false, q: "", tile: null, minVisits: 0, minSnr: 0, hide: [] };
+  const FILTER_DEFAULTS = { cls: "all", minPm: 0, red: false, q: "", tile: null, minVisits: 0, minSnr: 0, hide: [], spherex: false };
   const PRESETS = { high: { minVisits: 12, minSnr: 10, hide: HIDE_KEYS.slice() } };
   function isPreset(f, name) {
     const p = PRESETS[name];
@@ -184,6 +192,7 @@
     if (f.cls && f.cls !== "all") out.push(["class", f.cls]);
     if (num(f.minPm) > 0) out.push(["minpm", String(num(f.minPm))]);
     if (f.red) out.push(["red", "1"]);
+    if (f.spherex) out.push(["spherex", "1"]);
     if (num(f.minVisits) > 0) out.push(["visits", String(num(f.minVisits))]);
     if (num(f.minSnr) > 0) out.push(["snr", String(num(f.minSnr))]);
     const hide = HIDE_KEYS.filter((h) => (f.hide || []).includes(h));
@@ -207,6 +216,7 @@
     const pos = (k) => { const v = num(get(k)); return Number.isFinite(v) && v > 0 ? v : null; };
     if (pos("minpm") !== null) f.minPm = pos("minpm");
     if (get("red") === "1") f.red = true;
+    if (get("spherex") === "1") f.spherex = true;
     if (pos("visits") !== null) f.minVisits = Math.round(pos("visits"));
     if (pos("snr") !== null) f.minSnr = pos("snr");
     if (get("hide") !== null) f.hide = HIDE_KEYS.filter((h) => String(get("hide")).split(",").map((s) => s.trim()).includes(h));
