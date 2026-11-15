@@ -228,13 +228,18 @@ def find_sources(img, nsig=4.5):
     return out
 
 
-def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=()):
+def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=(), paths=()):
     """Sources present in one epoch but not the other, paired into movers.
 
     Static sources sit at the same place in both images and are ignored. A source that is only in
     the old image, paired with one that is only in the new image a plausible distance away, is a
     mover. Each mover is then checked against Gaia DR3: if a Gaia star's own motion carries it from
-    the old to the new position, Gaia explains it; otherwise it is unexplained (a candidate)."""
+    the old to the new position, Gaia explains it; otherwise it is unexplained (a candidate).
+
+    paths: known (x0, y0, x1, y1) paths on the grid, e.g. the target's reference motion. These and
+    the Gaia paths are tried first, matched by position only: brightness ratios between WISE and
+    SPHEREx peaks are unreliable for saturated stars, and a mover can sit on a background star in
+    one epoch, so the free pairing below would lose it."""
     A, B = find_sources(img_old), find_sources(img_new)
     if not A or not B:
         return []
@@ -255,31 +260,43 @@ def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=()):
         p0 = gw.world_to_pixel(c.apply_space_motion(new_obstime=Time(y_old, format="jyear")))
         p1 = gw.world_to_pixel(c.apply_space_motion(new_obstime=Time(y_new, format="jyear")))
         gaia_paths.append((st["source_id"], float(p0[0]), float(p0[1]), float(p1[0]), float(p1[1])))
-    pairs = []
-    for i, a in enumerate(a_only):
-        for j, b in enumerate(b_only):
-            d = np.hypot(b[0] - a[0], b[1] - a[1])
-            if 4 <= d <= 95:                    # 8" to 190": 0.5 to ~12 arcsec/yr over 16 years
-                pairs.append((abs(np.log(b[2] / a[2])), d, i, j))
-    pairs.sort()                                 # most similar brightness first
-    used_a, used_b, movers = set(), set(), []
-    for score, d, i, j in pairs:
-        if i in used_a or j in used_b or score > np.log(4):
-            continue
-        a, b = a_only[i], b_only[j]
+    def linked(a, b):
         # Linking test used in asteroid searches: a real mover must also be at the interpolated
         # position in every intermediate epoch we have. Chance pairings fail this.
-        ok = True
         for img_mid, y_mid in middles:
             f = (y_mid - y_old) / (y_new - y_old)
             px, py = a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])
             if not (0 <= px < npix and 0 <= py < npix) or not np.isfinite(img_mid[int(py), int(px)]):
                 continue
             if detection_snr(img_mid, px, py, 2.5) < 4:
-                ok = False; break
-        if not ok:
+                return False
+        return True
+
+    in_range = lambda a, b: 4 <= np.hypot(b[0] - a[0], b[1] - a[1]) <= 95   # 8" to 190": 0.5 to ~12 arcsec/yr over 16 years
+    chosen = []                                  # (a, b) source pairs, in the order found
+    # 1. Known paths first (target, then Gaia), by position alone. The ends may come from all
+    #    detections, but at least one end must be absent from the other epoch, so a static star
+    #    under both predicted spots cannot pass as the mover.
+    a_all, b_all = [p for p in A if p[2] >= 6], [p for p in B if p[2] >= 6]
+    for x0, y0, x1, y1 in list(paths) + [g[1:] for g in gaia_paths]:
+        a = min((p for p in a_all if not any(p is q for q, _ in chosen)), key=lambda p: np.hypot(p[0] - x0, p[1] - y0), default=None)
+        b = min((p for p in b_all if not any(p is q for _, q in chosen)), key=lambda p: np.hypot(p[0] - x1, p[1] - y1), default=None)
+        if (a and b and np.hypot(a[0] - x0, a[1] - y0) < 4 and np.hypot(b[0] - x1, b[1] - y1) < 4 and in_range(a, b)
+                and (a in a_only or b in b_only) and linked(a, b)):
+            chosen.append((a, b))
+    # 2. Free pairs among the leftovers, most similar brightness first.
+    pairs = []
+    for a in a_only:
+        for b in b_only:
+            if in_range(a, b):
+                pairs.append((abs(np.log(b[2] / a[2])), a, b))
+    pairs.sort(key=lambda p: p[0])
+    for score, a, b in pairs:
+        if score > np.log(4) or any(a is p or b is q for p, q in chosen) or not linked(a, b):
             continue
-        used_a.add(i); used_b.add(j)
+        chosen.append((a, b))
+    movers = []
+    for a, b in chosen:
         ca, cb = gw.pixel_to_world(a[0], a[1]), gw.pixel_to_world(b[0], b[1])
         gid = next((g for g, x0, y0, x1, y1 in gaia_paths
                     if np.hypot(x0 - a[0], y0 - a[1]) < 4 and np.hypot(x1 - b[0], y1 - b[1]) < 4), None)
@@ -404,7 +421,9 @@ def analyze(tid):
     if old is not None and news:
         new = max(news, key=lambda f: (f.get("n_images", 0), f["year"]))
         mids = [(f["img"], f["year"]) for f in news if f is not new and f.get("n_images", 0) >= 3]
-        movers = find_movers(old["img"], new["img"], old["year"], new["year"], gw, stars, npix, mids)
+        p0, p1 = gw.world_to_pixel(predict(ref, old["year"])), gw.world_to_pixel(predict(ref, new["year"]))
+        target_path = (float(p0[0]), float(p0[1]), float(p1[0]), float(p1[1]))
+        movers = find_movers(old["img"], new["img"], old["year"], new["year"], gw, stars, npix, mids, [target_path])
     # For a typed-in position, an unexplained mover whose path passes within 10" of the spot is
     # almost certainly what the user meant (fast, cold objects are often missing from Gaia).
     # Experimental: chance pairings still slip through on noisy fields, so re-centring on an

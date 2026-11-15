@@ -1,0 +1,22 @@
+== Epsilon Indi B
+   movers found: 1 (0 not explained by Gaia)
+   flipbook frames: [('w2', 11), ('w1', 9)]  spectrum bins: 49 (points 149, flagged 59)
+   motion: measured 4.72"/yr vs expected 4.68"/yr over 15.8 yr
+   brightness change: -0.009 ± 0.075 mag
+   methane test 4.0/3.3 um: 2.4186525499610565
+predicted target path px [90.24244367642532, 84.25088686003481] -> [60.68344682431737, 65.94201182596402] years 2010.5 2025.34574106194 n mids 2
+track w2 [('WISE', 2010.5, 90.2, 84.2), ('SPHEREx', 2025.35, 60.5, 65.8), ('SPHEREx', 2025.77, 59.7, 65.1), ('SPHEREx', 2026.33, 58.5, 64.5)]
+  A(2010) source near target end: (90.0,84.0) z=844.1
+  B(new) source near target end: (60.1,65.9) z=317.9
+len A,B 21 13 a_only 8 b_only 3
+  a_only source near target end: (90.0,84.0) z=844.1
+  b_only source near target end: (60.1,65.9) z=317.9
+  a end (90.0,84.0) z=844.1: other-epoch sources within 4 px []; other img finite=True
+  b end (60.1,65.9) z=317.9: other-epoch sources within 4 px []; other img finite=True
+target a idx [4] [(89.99837712644148, 84.01178538018738, 844.0853113119151)] target b idx [0] [(60.079775712964214, 65.88695152694301, 317.9129738655529)]
+  rank 0: score 0.976 (ratio 2.66) d=35.0 a=(90.0, 84.0, 844.1) b=(60.1, 65.9, 317.9)
+  rank 1: score 3.518 (ratio 33.71) d=66.3 a=(108.1, 20.1, 9.4) b=(60.1, 65.9, 317.9)
+  rank 2: score 3.788 (ratio 44.18) d=35.0 a=(64.1, 31.1, 7.2) b=(60.1, 65.9, 317.9)
+  rank 3: score 3.919 (ratio 50.33) d=62.2 a=(101.0, 19.0, 6.3) b=(60.1, 65.9, 317.9)
+  rank 4: score 3.959 (ratio 52.41) d=82.6 a=(140.9, 49.1, 6.1) b=(60.1, 65.9, 317.9)
+movers [(90.0, 84.0, 60.1, 65.9, 317.9)]
