@@ -53,10 +53,30 @@ def test_zero_issues_give_an_empty_but_valid_snapshot():
     assert s['repo'] == 'kneha07/WANDERERS' and s['label'] == 'classification'
 
 
-def test_the_shipped_file_is_the_aggregator_output_for_zero_issues():
+def test_the_shipped_file_is_consistent_aggregator_output():
+    # The workflow rewrites this file from real issues (#79), so it may hold votes. Check that every number in it
+    # follows from its own votes, the settings match the aggregator, the kinds are valid, and the bytes are canonical.
     shipped = (ROOT / 'app' / 'data' / 'classifications.json').read_text(encoding='utf-8')
-    assert shipped == av.dumps(av.aggregate([], {})), 'regenerate with: echo [] | python pipeline/aggregate_votes.py -'
-    assert json.loads(shipped)['objects'] == {}, 'never ship invented votes'
+    s = json.loads(shipped)
+    assert shipped == av.dumps(s), 'regenerate with pipeline/aggregate_votes.py; never edit by hand'
+    empty = av.aggregate([], {})
+    for k in ('about', 'schema', 'repo', 'label', 'template', 'classes', 'min_voters', 'min_agreement'):
+        assert s[k] == empty[k], k
+    assert set(s['ignored']) == set(av.REASONS)
+    votes = [v for o in s['objects'].values() for v in o['votes']]
+    numbers = [v['issue'] for v in votes]
+    assert len(numbers) == len(set(numbers)), 'one vote per issue'
+    assert s['votes_counted'] == len(votes)
+    assert s['last_issue'] >= max(numbers, default=0)
+    assert s['issues_read'] >= len(votes) + sum(s['ignored'].values())
+    assert s['last_vote'] == max((v['at'] for v in votes), default=None)
+    for oid, o in s['objects'].items():
+        assert o['kind'] in ('target', 'candidate'), oid   # ids are checked when the workflow counts them
+        assert o['votes'] and len({v['user'] for v in o['votes']}) == o['voters'] == len(o['votes'])
+        assert o['counts'] == {c: sum(v['class'] == c for v in o['votes']) for c in av.CLASSES}
+        assert [o['consensus'], o['agreement']] == list(av.consensus(o['counts'], o['voters']))
+        assert o['last_vote'] == max(v['at'] for v in o['votes'])
+        assert all(v['issue'] > 0 and v['user'] and v['class'] in av.CLASSES for v in o['votes'])
 
 
 def test_the_shared_fixture_gives_the_expected_snapshot():
@@ -273,7 +293,6 @@ def test_input_is_not_modified():
 
 # ---------- known ids and the command line ----------
 def test_known_ids_come_from_the_real_target_list_and_leaderboard():
-    known = av.load_known()
     index = json.loads((ROOT / 'app' / 'data' / 'index.json').read_text())
     board = json.loads((ROOT / 'app' / 'data' / 'survey' / 'leaderboard.json').read_text())
     assert all(known[t['id']] == 'target' for t in index)
