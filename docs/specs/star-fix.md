@@ -107,7 +107,7 @@ Joint fit (`artifacts/star-fix/fix.py`): for each candidate place on a 1-deg gri
 | "Up = image top" | 35 S, 131 E (68 %: 15-47 S, 122-142 E) | 27 S, 141 E (inside the 68 % region) |
 
 The stars and the time zone disagree by about 1-1.5 h of sidereal time (15-25 deg of longitude).
-`artifacts/star-fix/clock.py` shows that photos 2 + 3 match 145-151 E if the photos were taken at **17:45-18:10**, not 19:00.
+`artifacts/star-fix/clock.py` shows that photos 2 + 3 match 145-151 E if the photos were taken at 17:45-18:10, not 19:00. **Wrong, see 2d:** the time was right and the glow "up" was wrong.
 The sun is then 7-12 deg below the horizon (nautical twilight). This fits the blue sky in photos 2 and 3.
 
 Best combined estimate: **south-eastern Australia, latitude about 35 S (+-8 deg)**. The time zone sets the longitude. The stars set the hemisphere and the latitude.
@@ -118,6 +118,61 @@ Lessons for the app:
 2. Sky-glow "up" is the weakest input: about +-10 deg of latitude and up to 25 deg of sidereal-time bias. A compass heading and a tilt reading at the shutter would fix this.
 3. Use the time zone as a check. If the star longitude falls outside the zone, show "the photo time may be wrong" and solve for the time instead.
 4. Two photos that point the same way (photos 1 and 4) give almost parallel lines. Ask for photos in two different directions.
+
+## 2d. Truth check: Phillip Island (owner input, 38.5 S, 145.2 E)
+
+| Estimate | Error |
+|---|---|
+| Stars + glow (53 S, 124 E) | 2290 km |
+| Stars, "up = image top" (35 S, 131 E) | 1320 km |
+| Glow, limited to GMT+10 (42 S, 141 E) | 530 km |
+| Combined answer (35 S, 141 E) | 540 km |
+
+Which input was wrong (`artifacts/star-fix/truth.py`)? At 19:00 on Phillip Island, the true "up" in each photo is:
+
+| Photo | True "up" | Glow "up" | Image top | Photo centre altitude |
+|---|---|---|---|---|
+| 1 | -23 deg | -14 | 0 | 55 deg |
+| 2 | -9 deg | -26 | 0 | 42 deg (bottom edge 7 deg, which fits the trees there) |
+| 3 | -19 deg | +24 (wrong sign) | 0 | 61 deg |
+| 4 | -17 deg | +13 (wrong sign) | 0 | 50 deg |
+
+- The 7 pm time was right. The idea in 2c that the photos were taken near 18:00 is wrong.
+- The glow direction is 9-43 deg wrong. Local lights and lit clouds, not the horizon, set the glow.
+- The person held the phone turned 9-23 deg the same way in all four photos. So "image top" is also not "up".
+- Conclusion: "up" is the input that limits the fix. Sky glow is not good enough.
+
+## 8. What accuracy needs: the budget down to metres
+
+Rule of thumb: 1 arcsec of error in the zenith = 31 m. 1 s of clock error = 15 arcsec x cos(latitude) = 360 m at Phillip Island.
+
+| Error source | For 1 m you need | Phone today | Best known method |
+|---|---|---|---|
+| "Up" (vertical) | 0.03 arcsec | 0.5-1 deg (accelerometer) = 50-100 km | Geodetic tiltmeter, camera turned 180 deg to cancel bias: about 0.1 arcsec |
+| Clock | 3 ms | EXIF seconds, about 1 s = 360 m | GPS-disciplined clock |
+| Earth rotation data (UT1-UTC, up to 0.9 s; polar motion, about 0.3 arcsec) | IERS bulletin values | not used = up to 330 m | Use IERS data (astropy downloads it) |
+| Star centroids and lens | 0.03 arcsec total | 144 arcsec per pixel, uncalibrated distortion | Zenith camera, about 1 arcsec per pixel, hundreds of stars |
+| Air refraction | temperature and pressure | not modelled | Model plus many nights; about 0.1 arcsec stays |
+| Deflection of the vertical (plumb line vs. GPS ellipsoid) | a model good to 0.03 arcsec | 5-30 arcsec = 150-900 m | AUSGeoid2020 / EGM2008 grids, about 1 arcsec = 30 m |
+
+Accuracy ladder:
+
+| Level | Setup | Position error |
+|---|---|---|
+| Sample photos | Phone, sky-glow "up", "about 7 pm" | 540 km (measured) |
+| 1 | Original file: exact time from EXIF, plus gravity vector or sea horizon in the photo | 30-100 km |
+| 2 | Phone on a tripod, level calibrated by a 180 deg turn, lens calibrated, 10+ photos averaged | 5-10 km |
+| 3 | Camera + long lens, precision electronic level, GPS time, refraction model | 150-300 m |
+| 4 | Professional zenith camera (geodesy) | 3-6 m from the plumb line, but 30 m or more from GPS because of the deflection of the vertical |
+
+Metre accuracy from stars is not possible, even for geodesists. Earth's uneven gravity tilts the plumb line by 5-30 arcsec, and the best models of that tilt leave about 30 m.
+Geodesists use zenith cameras plus GPS to measure that tilt, not to find their position.
+
+For the app (upload only), the realistic target is level 1, 30-100 km. That is the accuracy of a good navigator before GPS. Inputs that get there:
+
+1. The original photo file, not a copy from a chat app, so EXIF keeps `DateTimeOriginal` and `OffsetTimeOriginal`.
+2. A good "up". Best first: the gravity vector in the file (iPhone Apple MakerNote `AccelerationVector`; check this on a real file), then a sea horizon in the frame (correct for eye-height dip), then the compass heading plus two photos in different directions. Sky glow is the last fallback.
+3. A one-time lens calibration per phone model (SIP distortion), so that stars at the frame edge are usable.
 
 ## 3. Options
 
