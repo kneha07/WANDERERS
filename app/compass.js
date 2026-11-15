@@ -498,9 +498,11 @@ function draw() {
     g.font = "700 13px 'Space Grotesk', sans-serif"; g.textAlign = "center"; g.fillStyle = "#ffb547";
     g.fillText(S.aim.dir ? `camera → ${S.aim.dir}` : `put ${S.aim.label} here`, cx, cy - 82);
   }
-  g.strokeStyle = "rgba(255,255,255,.9)"; g.lineWidth = 1.5;
-  g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.stroke();
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.beginPath(); g.moveTo(cx + dx * 28, cy + dy * 28); g.lineTo(cx + dx * 40, cy + dy * 40); g.stroke(); }
+  for (const [style, w] of [["rgba(0,0,0,.6)", 3.5], ["rgba(255,255,255,.9)", 1.5]]) {   // a dark edge under the white: seen on a bright star
+    g.strokeStyle = style; g.lineWidth = w;
+    g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.stroke();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.beginPath(); g.moveTo(cx + dx * 28, cy + dy * 28); g.lineTo(cx + dx * 40, cy + dy * 40); g.stroke(); }
+  }
 
   drawTape(W, P, T);
   drawPitch(W, H, P, T);
