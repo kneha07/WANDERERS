@@ -110,6 +110,14 @@ test("coordinates: impossible positions are refused instead of searched", async 
   p.close();
 });
 
+test("example buttons round to the next minute instead of showing 60 seconds", async () => {
+  const ra = 15 * (10 + 59 / 60 + 59.999 / 3600), dec = -(4 + 59 / 60 + 59.97 / 3600);
+  const p = open("?target=barnard", { files: { "data/index.json": [{ id: "barnard", name: "Round me", teaser: "", ra, dec, fov: 300 }] } });
+  await p.settle(150);
+  assert.match(p.$("examples").innerHTML, /Round me<span>11h00m00\.00s -05d00m00\.0s<\/span>/);
+  p.close();
+});
+
 test("coordinates: a target just across RA 0h is still matched", async () => {
   const files = { "data/index.json": [{ id: "barnard", name: "Near zero", teaser: "", ra: 359.998, dec: 10, fov: 300 }] };
   const p = open("?target=barnard", { files });
