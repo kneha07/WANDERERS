@@ -31,6 +31,8 @@ export type GaiaStar = {
   pmdec: number | null
   gmag: number | null
   xy: [number, number][]
+  parallax?: number | null // mas
+  parallax_over_error?: number | null
 }
 export type Gaia = { release: string; epoch_mjd: number; stars: GaiaStar[] }
 export type Rgb = { method?: string; wavelength_um?: Partial<Record<'blue' | 'green' | 'red', Range>> } & Record<string, unknown>

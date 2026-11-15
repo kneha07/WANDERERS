@@ -1,9 +1,12 @@
 // Instrument panels. Every value comes from the API answer (docs/blink/api.md); nothing is hard-coded.
-import { Component, useState } from 'react'
+import { Component, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSentence, nearestGaia, scatteredLight, yearOf } from './data'
 import type { Frame, Phot, Result } from './data'
-import { decText, raText } from './sky'
+import { decText, raText, skyToPixel } from './sky'
+import type { RaDec } from './sky'
+import { aboutUrl, gaiaSentence, historyLine, MARK_SENTENCE, measuredSentence, onTarget } from './about'
+import type { About } from './about'
 
 // ---------- shared pieces ----------
 
@@ -83,6 +86,108 @@ function ticks(lo: number, hi: number, count = 4) {
   const out: number[] = []
   for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10))
   return out
+}
+
+// ---------- about this star ----------
+
+const aboutAnswers = new Map<string, Promise<About>>() // url -> answer: a tab switch or a second open is instant
+
+function fetchAbout(url: string) {
+  let p = aboutAnswers.get(url)
+  if (!p) {
+    p = fetch(url).then(async (res) => {
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body) throw new Error(body?.detail ?? `HTTP ${res.status}`)
+      return body as About
+    })
+    p.catch(() => aboutAnswers.delete(url)) // a failure is asked again next time
+    aboutAnswers.set(url, p)
+  }
+  return p
+}
+
+/** Three short sentences about the target, or about a marked candidate: (1) catalog facts, (2) our SPHEREx
+ * measurement, (3) one history sentence from Wikipedia or the SIMBAD paper count. Sources are linked below. */
+export function AboutCard({ r, mark }: { r: Result; mark?: RaDec }) {
+  const at = mark ? skyToPixel(r, mark) : (r.frames.find((f) => f.ring)?.ring ?? { x: r.size_px / 2, y: r.size_px / 2 })
+  const self = !mark || onTarget(r, at)
+  const url = self ? (r.name ? aboutUrl({ q: r.query }) : aboutUrl(r.center)) : aboutUrl(mark!)
+  const [got, setGot] = useState<{ url: string; data?: About; error?: string }>({ url: '' })
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let live = true
+    fetchAbout(url).then(
+      (data) => live && setGot({ url, data }),
+      (e) => live && setGot({ url, error: String(e?.message ?? e) }),
+    )
+    return () => {
+      live = false
+    }
+  }, [url, attempt])
+  const a = got.url === url ? got.data : undefined
+  const error = got.url === url ? got.error : undefined
+  const loading = !a && !error
+  const byName = self && !!r.name
+  const failed = a?.notes.some((n) => n.includes('did not answer'))
+  const first = a?.facts_sentence
+    ? a.facts_sentence
+    : error
+      ? 'The catalog facts did not load.'
+      : !byName && r.gaia
+        ? gaiaSentence(nearestGaia(r, r.gaia, at), r.gaia.release)
+        : failed
+          ? 'The catalogs did not answer, so its facts are missing for now.'
+          : byName
+            ? 'The catalogs list no facts about it.'
+            : 'No catalog object is known at this position.'
+  const history = historyLine(a ?? null)
+  const bar = (w: number) => <span className="skeleton" style={{ display: 'block', height: 14, width: `${w}%`, borderRadius: 4, margin: '4px 0' }} />
+  return (
+    <div className="about" aria-busy={loading}>
+      <ol className="about-lines">
+        <li>{loading ? <>{bar(95)}{bar(70)}</> : first}</li>
+        <li>{self ? measuredSentence(r) : MARK_SENTENCE}</li>
+        <li>
+          {loading ? (
+            <>
+              {bar(90)}
+              {bar(55)}
+            </>
+          ) : (
+            <>
+              {history.text}
+              {history.credit && (
+                <>
+                  {' '}
+                  <a href={history.url} target="_blank" rel="noreferrer">
+                    {history.credit}
+                  </a>
+                </>
+              )}
+            </>
+          )}
+        </li>
+      </ol>
+      <p className="hint about-sources">
+        Sources:{' '}
+        {(a?.sources ?? []).map((s) => (
+          <span key={s.url}>
+            <a href={s.url} target="_blank" rel="noreferrer">
+              {s.label}
+            </a>
+            {' · '}
+          </span>
+        ))}
+        {!byName && !a?.facts_sentence && r.gaia ? `${r.gaia.release} (this answer) · ` : ''}
+        SPHEREx measurements (this tool)
+        {error && (
+          <button type="button" className="about-retry" onClick={() => setAttempt((n) => n + 1)}>
+            Retry
+          </button>
+        )}
+      </p>
+    </div>
+  )
 }
 
 // ---------- target ----------

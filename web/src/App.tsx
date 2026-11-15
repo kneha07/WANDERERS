@@ -10,7 +10,7 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { brightGhosts, marksFromParam, marksToParam, titleOf } from './data'
 import type { Result } from './data'
-import { AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard } from './panels'
+import { AboutCard, AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard } from './panels'
 import { COLOUR_LINE, EXAMPLES, FieldGuide, TaskTab, Thumbs, Tutorial, reportText } from './rail'
 import SkyContext from './SkyContext'
 import SkyNow, { CITIES } from './SkyNow'
@@ -805,6 +805,8 @@ export default function App() {
                     {tab === 'data' &&
                       (r && !loading ? (
                         <>
+                          <h3 className="panel-title">About this star</h3>
+                          <AboutCard key={key} r={r} />
                           <h3 className="panel-title">Target</h3>
                           <TargetCard r={r} />
                           <h3 className="panel-title">Data quality</h3>

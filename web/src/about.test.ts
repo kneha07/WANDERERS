@@ -1,0 +1,79 @@
+import { describe, expect, it } from 'vitest'
+import { gaiaSentence, historyLine, measuredSentence, onTarget } from './about'
+import type { About } from './about'
+
+// Barnard's Star, cached answer of 2026-11-14: frames 1 and 6 are 391.9 days apart.
+const barnard = {
+  pixel_arcsec: 6.15,
+  pm: { pmra: -801.6, pmdec: 10362.4 },
+  detectors: {},
+  frames: [
+    { mjd_mean: 60913.55, ring: { x: 24.45, y: 25.09 }, centroid: { x: 24.24, y: 24.993, ex: 0.123, ey: 0.124 }, saturated: true, photometry: null },
+    { mjd_mean: 61305.5, ring: { x: 24.59, y: 23.28 }, centroid: { x: 24.575, y: 23.471, ex: 0.234, ey: 0.213 }, saturated: true, photometry: null },
+  ],
+}
+const still = (f: (typeof barnard.frames)[number]) => ({ ...f, centroid: { x: 24.5, y: 24.5, ex: 0.3, ey: 0.3 } })
+
+describe('sentence 2: what our SPHEREx frames measure', () => {
+  it('gives the motion per year and its direction', () => {
+    // 1.558 px = 9.58″ in 1.073 years = 8.9″ per year, position angle 348°
+    expect(measuredSentence(barnard)).toBe('In our SPHEREx frames it moves about 8.9″ per year toward the north-northwest.')
+  })
+  it('gives the brightness change when it does not move measurably', () => {
+    const phot = [{ flux: 10, err: 0.1 }, { flux: 13, err: 0.1 }]
+    const r = { ...barnard, detectors: { D5: [] }, frames: barnard.frames.map((f, i) => ({ ...still(f), saturated: false, photometry: phot[i] })) }
+    expect(measuredSentence(r)).toBe('In our SPHEREx frames its brightness changes 1.3× between surveys (21.2σ).')
+  })
+  it('says when the brightness change is inside the noise', () => {
+    const phot = [{ flux: 10, err: 0.5 }, { flux: 10.5, err: 0.5 }]
+    const r = { ...barnard, frames: barnard.frames.map((f, i) => ({ ...still(f), saturated: false, photometry: phot[i] })) }
+    expect(measuredSentence(r)).toBe('In our SPHEREx frames it does not move measurably, and its brightness stays within the noise.')
+  })
+  it('says when the star is too bright to measure', () => {
+    const r = { ...barnard, frames: barnard.frames.map(still) }
+    expect(measuredSentence(r)).toBe('It is too bright for SPHEREx to measure here.')
+  })
+})
+
+describe('sentence 1 for a position without a SIMBAD answer: the nearest Gaia star', () => {
+  const star = { source_id: '1', ra: 0, dec: 0, pmra: 0, pmdec: 0, gmag: 12.34, xy: [], parallax: 2.5, parallax_over_error: 40 }
+  it('gives magnitude and distance from a good parallax', () => {
+    expect(gaiaSentence({ star, sep: 0.42, frame: 0 }, 'Gaia DR3')).toBe(
+      'The nearest Gaia DR3 star, 0.4″ away, has G = 12.3 and lies about 1,300 light-years away (parallax 2.50 mas).',
+    )
+  })
+  it('leaves out a distance from a poor parallax', () => {
+    expect(gaiaSentence({ star: { ...star, parallax_over_error: 3 }, sep: 1.1, frame: 0 }, 'Gaia DR3')).toBe(
+      'The nearest Gaia DR3 star, 1.1″ away, has G = 12.3.',
+    )
+  })
+  it('says when no Gaia star is close', () => {
+    expect(gaiaSentence({ star, sep: 7.24, frame: 0 }, 'Gaia DR3')).toBe('No Gaia DR3 star is within 3″; the nearest is 7.2″ away.')
+    expect(gaiaSentence(null, 'Gaia DR3')).toBe('No Gaia DR3 star is in this view.')
+  })
+})
+
+describe('sentence 3: history', () => {
+  const a = { history_sentence: null, history_source: null, papers: null } as unknown as About
+  it('quotes the Wikipedia sentence with its licence', () => {
+    const line = historyLine({ ...a, history_sentence: 'RW Aurigae B was discovered in 1944.', history_source: { title: 'RW Aurigae', url: 'u', license: 'CC BY-SA 4.0' } })
+    expect(line).toEqual({ text: '“RW Aurigae B was discovered in 1944.”', credit: '— Wikipedia, CC BY-SA 4.0', url: 'u' })
+  })
+  it('else counts the SIMBAD papers', () => {
+    expect(historyLine({ ...a, papers: 924 }).text).toBe('SIMBAD lists 924 papers about it.')
+  })
+  it('else says the history is unknown', () => {
+    expect(historyLine({ ...a }).text).toBe('Its history is unknown here.')
+    expect(historyLine(null).text).toBe('Its history is unknown here.')
+  })
+})
+
+describe('a mark on the target', () => {
+  const r = { ...barnard, size_px: 49, center: { ra: 0, dec: 0 } } as unknown as Parameters<typeof onTarget>[0]
+  it('is on the target near a predicted or measured position', () => {
+    expect(onTarget(r, { x: 24.6, y: 23.4 })).toBe(true)
+  })
+  it('is not on the target 10 pixels away', () => {
+    expect(onTarget(r, { x: 14.5, y: 24.5 })).toBe(false)
+  })
+})

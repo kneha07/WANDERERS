@@ -4,7 +4,7 @@ import { KNOWN_ARCSEC, nearestGaia } from './data'
 import type { Result } from './data'
 import { decText, raText, skyToPixel } from './sky'
 import type { RaDec } from './sky'
-import { Empty } from './panels'
+import { AboutCard, Empty } from './panels'
 
 const EX = `${import.meta.env.BASE_URL}examples/`
 export const CREDIT = 'Example images: NASA/JPL-Caltech/IPAC SPHEREx (IRSA), DR1 and QR3, through this tool.'
@@ -189,6 +189,17 @@ export function reportText(r: Result, marks: RaDec[], url: string, local = local
   ].join('\n')
 }
 
+/** "About" on a candidate: asks the catalogs only when opened. */
+function CandAbout({ r, m }: { r: Result; m: RaDec }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <details className="cand-about" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>About</summary>
+      {open && <AboutCard r={r} mark={m} />}
+    </details>
+  )
+}
+
 type TaskProps = {
   r: Result | null
   marks: RaDec[]
@@ -251,6 +262,7 @@ export function TaskTab({ r, marks, onRemove, onCopyLink, onTalk }: TaskProps) {
                     </>
                   )}
                 </p>
+                <CandAbout r={r} m={m} />
                 <div className="actions">
                   <a href={links.simbad} target="_blank" rel="noreferrer">
                     Check SIMBAD ↗

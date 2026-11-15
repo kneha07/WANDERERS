@@ -102,6 +102,15 @@ check('a click near the end of the timeline jumps to the last frame', now === (a
 await page.locator('#frames th button', { hasText: 'Images' }).click()
 check('the frames table sorts by a column', (await page.locator('#frames th[aria-sort=ascending]').count()) === 1)
 
+// About this star: three sentences at the top of the Data tab (catalog facts, our measurement, history).
+await page.locator("[data-target=\"Barnard's Star\"]").click()
+await page.locator('.viewer[data-status=result]').waitFor({ timeout: 120000 })
+await page.locator('#tab-data').click()
+await page.locator('.about[aria-busy=false]').waitFor({ timeout: 60000 })
+const lines = await page.locator('.about-lines li').allInnerTexts()
+check('About this star has three sentences', lines.length === 3 && /red dwarf/.test(lines[0]) && /per year/.test(lines[1]), lines.join(' | '))
+await page.locator('#tab-task').click()
+
 // Loading target B over target A: no data panel shows A under B's heading (user_advocate H1, issue #26).
 await page.locator("[data-target=\"Barnard's Star\"]").click()
 await page.locator('.viewer[data-status=result]').waitFor({ timeout: 120000 })

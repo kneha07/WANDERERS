@@ -1358,3 +1358,48 @@ td .sub {
     font-size: 0.87rem;
   }
 }
+
+/* ---------- About this star ---------- */
+.about-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each sentence keeps two lines while it loads, so the answer does not push the panels below. */
+.about-lines li {
+  min-height: 3em;
+}
+
+.about-lines li + li {
+  margin-top: 4px;
+}
+
+.about-sources a {
+  overflow-wrap: anywhere;
+}
+
+.about-retry {
+  margin-left: 8px;
+}
+
+.cand-about summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--data);
+}
+
+.cand-about .about {
+  padding-bottom: 8px;
+}
+
+.cand-about summary::after {
+  content: '▸';
+  margin-left: 6px;
+}
+
+.cand-about[open] summary::after {
+  content: '▾';
+}
