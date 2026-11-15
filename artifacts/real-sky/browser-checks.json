@@ -1,5 +1,5 @@
 {
- "when": "2026-11-15T03:37:43.008Z",
+ "when": "2026-11-15T05:54:30.697Z",
  "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
@@ -86,18 +86,34 @@
    "pxPerDeg": 12.8
   }
  ],
+ "saves": [
+  {
+   "label": "Basic, 48° N",
+   "lat": 47.6,
+   "order": 1,
+   "seconds": 4,
+   "plan": "Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
+   "msg": "Saved for latitude 48° N. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
+   "tiles": 60
+  },
+  {
+   "label": "Standard, 34° S",
+   "lat": -33.9,
+   "order": 2,
+   "seconds": 7,
+   "plan": "Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
+   "msg": "Saved for latitude 34° S. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
+   "tiles": 248
+  }
+ ],
  "save": {
-  "msg": "Saved for latitude 48° N. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
-  "saved": 64,
   "tiles": 60,
-  "both": 0,
+  "files": 65,
   "places": [
    {
     "lat": 47.6,
     "order": 1,
-    "survey": "visible",
-    "tiles": 60,
-    "savedAt": "2026-11-15T03:38:36.732Z"
+    "n": 64
    }
   ]
  },
@@ -212,14 +228,14 @@
    "detail": ""
   },
   {
-   "name": "save finished",
+   "name": "save Basic, 48° N: finished",
    "ok": true,
-   "detail": "Saved for latitude 48° N. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit."
+   "detail": "Saved for latitude 48° N. On an iPhone, add this page to the (4 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)"
   },
   {
-   "name": "saved cache holds the 60 Basic tiles, the survey files and the Aladin script",
+   "name": "saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest",
    "ok": true,
-   "detail": "60 tiles, 64 files"
+   "detail": "60 tiles, 65 files"
   },
   {
    "name": "no saved picture is also kept as a recent one",
@@ -227,9 +243,29 @@
    "detail": "0 duplicates"
   },
   {
-   "name": "the place is recorded",
+   "name": "the place is listed from its manifest",
    "ok": true,
-   "detail": ""
+   "detail": "[\"Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove\"]"
+  },
+  {
+   "name": "save Standard, 34° S: finished",
+   "ok": true,
+   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (7 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
+  },
+  {
+   "name": "Standard, 34° S: about 190 tiles of its own on top",
+   "ok": true,
+   "detail": "248 tiles in all; Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove | Latitude 34° S, Standard, 248 pictures, saved Nov 14 Remove"
+  },
+  {
+   "name": "remove one place: the other place keeps every picture",
+   "ok": true,
+   "detail": "0 Seattle files lost"
+  },
+  {
+   "name": "remove one place: its own pictures are gone",
+   "ok": true,
+   "detail": "0 Sydney-only files left, 60 tiles"
   },
   {
    "name": "no signal at all: the page opens and Eye has its stars and lines",
@@ -249,7 +285,7 @@
   {
    "name": "offline with nothing saved: falls back to Eye and says so",
    "ok": true,
-   "detail": "1.5 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
+   "detail": "0.7 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
   }
  ]
 }

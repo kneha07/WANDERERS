@@ -19,11 +19,15 @@ PASS  tap a star: the star sheet opens on it  — Vega → Vega
 PASS  drag the sky: the grabbed point follows the finger  — moved 60.0, 40.0 px for a drag of 60, 40
 PASS  drag the sky: Done keeps it as the sight check  — direction -7.44°, tilt 5.31°
 PASS  no script errors on the page (online)
-PASS  save finished  — Saved for latitude 48° N. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.
-PASS  saved cache holds the 60 Basic tiles, the survey files and the Aladin script  — 60 tiles, 64 files
+PASS  save Basic, 48° N: finished  — Saved for latitude 48° N. On an iPhone, add this page to the (4 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)
+PASS  saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest  — 60 tiles, 65 files
 PASS  no saved picture is also kept as a recent one  — 0 duplicates
-PASS  the place is recorded
+PASS  the place is listed from its manifest  — ["Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove"]
+PASS  save Standard, 34° S: finished  — Saved for latitude 34° S. On an iPhone, add this page to the (7 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )
+PASS  Standard, 34° S: about 190 tiles of its own on top  — 248 tiles in all; Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove | Latitude 34° S, Standard, 248 pictures, saved Nov 14 Remove
+PASS  remove one place: the other place keeps every picture  — 0 Seattle files lost
+PASS  remove one place: its own pictures are gone  — 0 Sydney-only files left, 60 tiles
 PASS  no signal at all: the page opens and Eye has its stars and lines
 PASS  offline with a saved place: Deep starts
 PASS  registration offline, az 90 alt 25  — 19 objects, worst 1.5 px (1° = 12.8 px), roll 0°
-PASS  offline with nothing saved: falls back to Eye and says so  — 1.5 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim
+PASS  offline with nothing saved: falls back to Eye and says so  — 0.7 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim

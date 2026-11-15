@@ -48,7 +48,8 @@ const server = http.createServer((req, res) => {
 
 // ---- a minimal DevTools-protocol client for one page ----
 async function launch(extra = [], profile = PROFILE) {
-  const proc = spawn(BROWSER, ["--headless=new", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--no-first-run",
+  // CI runners (Ubuntu 24.04) block the sandbox's user namespaces, so Chrome must run without it there.
+  const proc = spawn(BROWSER, [...(process.env.CI ? ["--no-sandbox"] : []), "--headless=new", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--no-first-run",
     // Keep the test browser apart from the user: Edge can sign a new profile in with the Windows account and
     // sync its extensions into it (seen 2026-11-14: wallet and sign-up pages opened in the test profile).
     "--disable-sync", "--disable-extensions", "--no-default-browser-check",
@@ -217,24 +218,62 @@ async function main() {
     `direction ${fine.az.toFixed(2)}°, tilt ${fine.alt.toFixed(2)}°`);
   check("no script errors on the page (online)", page.errors.length === 0, page.errors.slice(0, 2).join(" | "));
 
-  // ---- 2. save the sky for this latitude (Basic), through the info sheet ----
+  // ---- 2. save the sky for places, through the info sheet; then remove one place ----
+  // Basic for Seattle's latitude stays for part 3. Standard for Sydney's is saved, then removed again: that must
+  // leave every Seattle picture in place. SHARP=1 also saves and removes Sharp for Seattle (about 690 pictures).
   await page.goto("sky=deep");
   await page.until(deepReady, 60000, "the photographs to load");
-  await page.eval(`(document.getElementById("infoBtn").click(), document.querySelector('#saveSeg [data-order="1"]').click(), true)`);
-  await sleep(500);
-  await page.eval(`(document.getElementById("saveGo").click(), true)`);
-  await page.until(`/^(Saved for|.*could not|The archive)/.test(document.getElementById("saveMsg").textContent)`, 180000, "the save to end");
-  const saved = await page.eval(`(async () => {
+  await page.eval(`(document.getElementById("infoBtn").click(), true)`); await sleep(500);
+  const cacheState = `(async () => {
     const urls = async (n) => (await caches.has(n)) ? (await (await caches.open(n)).keys()).map((k) => k.url) : [];
     const s = await urls("wanderers-sky-saved-v1"), a = await urls("wanderers-sky-v1");
-    return { msg: document.getElementById("saveMsg").textContent, saved: s.length, tiles: s.filter((u) => /Npix/.test(u)).length,
-      both: s.filter((u) => a.includes(u)).length, places: JSON.parse(localStorage.getItem("wanderers.skySaved") || "[]") };
-  })()`);
-  report.save = saved;
-  check("save finished", /^Saved for latitude 48° N/.test(saved.msg), saved.msg);
-  check("saved cache holds the 60 Basic tiles, the survey files and the Aladin script", saved.tiles === 60 && saved.saved === 64, `${saved.tiles} tiles, ${saved.saved} files`);
-  check("no saved picture is also kept as a recent one", saved.both === 0, `${saved.both} duplicates`);
-  check("the place is recorded", saved.places.length === 1 && saved.places[0].order === 1 && Math.round(saved.places[0].lat) === 48);
+    const man = [];
+    if (await caches.has("wanderers-sky-saved-v1")) { const c = await caches.open("wanderers-sky-saved-v1");
+      for (const u of s.filter((u) => Hips.isManifest(u))) man.push(await (await c.match(u)).json()); }
+    return { msg: document.getElementById("saveMsg").textContent, saved: s, tiles: s.filter((u) => /Npix/.test(u)).length,
+      both: s.filter((u) => a.includes(u)).length, places: man.map((m) => ({ lat: m.lat, order: m.order, n: m.urls.length, urls: m.urls })),
+      list: [...document.querySelectorAll("#savedList li")].map((li) => li.textContent) };
+  })()`;
+  const saveFor = async (lat, order, label) => {
+    const t = Date.now();
+    await page.eval(`(document.getElementById("savePlace").value = "${lat}, 0", document.getElementById("savePlace").dispatchEvent(new Event("input")),
+      document.querySelector('#saveSeg [data-order="${order}"]').click(), true)`);
+    await sleep(800);
+    const plan = await page.eval(`document.getElementById("savePlan").textContent`);
+    await page.eval(`(document.getElementById("saveMsg").textContent = "", document.getElementById("saveGo").click(), true)`);   // not the last save's message
+    await page.until(`/^(Saved for|.*could not|The archive)/.test(document.getElementById("saveMsg").textContent)`, 600000, `the ${label} save to end`);
+    // the list is redrawn from the manifests after the save: wait until it has caught up
+    await page.until(`(async () => { const c = await caches.open("wanderers-sky-saved-v1"); return (await c.keys()).filter((k) => Hips.isManifest(k.url)).length === document.querySelectorAll("#savedList li").length; })()`, 20000, "the saved list");
+    const st = await page.eval(cacheState);
+    report.saves.push({ label, lat, order, seconds: Math.round((Date.now() - t) / 1000), plan, msg: st.msg, tiles: st.tiles });
+    check(`save ${label}: finished`, /^Saved for latitude/.test(st.msg), `${st.msg.slice(0, 60)} (${Math.round((Date.now() - t) / 1000)} s; ${plan.slice(0, 70)})`);
+    return st;
+  };
+  report.saves = [];
+  let st = await saveFor(47.6, 1, "Basic, 48° N");
+  report.save = { tiles: st.tiles, files: st.saved.length, places: st.places.map((p) => ({ lat: p.lat, order: p.order, n: p.n })) };
+  check("saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest", st.tiles === 60 && st.saved.length === 65, `${st.tiles} tiles, ${st.saved.length} files`);
+  check("no saved picture is also kept as a recent one", st.both === 0, `${st.both} duplicates`);
+  check("the place is listed from its manifest", st.places.length === 1 && st.places[0].order === 1 && Math.round(st.places[0].lat) === 48 && st.list.length === 1, JSON.stringify(st.list));
+  const seattle = st.places[0].urls;
+  st = await saveFor(-33.9, 2, "Standard, 34° S");
+  check("Standard, 34° S: about 190 tiles of its own on top", st.places.length === 2 && st.tiles > 200 && st.list.length === 2, `${st.tiles} tiles in all; ${st.list.join(" | ")}`);
+  const sydney = st.places.find((p) => p.lat < 0);
+  // remove the Sydney place with its own button
+  await page.eval(`([...document.querySelectorAll("#savedList li")].find((li) => /34° S/.test(li.textContent)).querySelector("button").click(), true)`);
+  await page.until(`document.querySelectorAll("#savedList li").length === 1`, 20000, "the list to show one place");
+  st = await page.eval(cacheState);
+  const lost = seattle.filter((u) => !st.saved.includes(u)), stay = sydney.urls.filter((u) => st.saved.includes(u) && !seattle.includes(u));
+  check("remove one place: the other place keeps every picture", lost.length === 0 && st.places.length === 1 && Math.round(st.places[0].lat) === 48, `${lost.length} Seattle files lost`);
+  check("remove one place: its own pictures are gone", stay.length === 0 && st.tiles === 60, `${stay.length} Sydney-only files left, ${st.tiles} tiles`);
+  if (process.env.SHARP) {
+    st = await saveFor(47.6, 3, "Sharp, 48° N");
+    check("Sharp, 48° N: 924 tiles (orders 0 to 3)", st.tiles > 880 && st.places.length === 2, `${st.tiles} tiles`);
+    await page.eval(`([...document.querySelectorAll("#savedList li")].find((li) => /Sharp/.test(li.textContent)).querySelector("button").click(), true)`);
+    await page.until(`document.querySelectorAll("#savedList li").length === 1`, 60000, "the Sharp place to go");
+    st = await page.eval(cacheState);
+    check("remove Sharp: the Basic place for the same latitude is untouched", st.tiles === 60 && seattle.every((u) => st.saved.includes(u)), `${st.tiles} tiles`);
+  }
   await page.close();
 
   // ---- 3. same profile; the archive, the CDNs and our own server are all unreachable (a cold open with no signal) ----
