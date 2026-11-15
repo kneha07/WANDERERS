@@ -40,6 +40,24 @@ test("separate cards do not cancel each other", async () => {
   assert.match(a.innerHTML, /hip87937/); assert.match(b.innerHTML, /wanderers_wise0855/);
 });
 
+test("Moon-width time agrees with the evidence card's insight (same 1,800″, same rounding)", async () => {
+  for (const id of ["barnard", "pos_77p9125_s45p0184", "wise0855"]) {
+    const el = { innerHTML: "" };
+    await PV.render(el, { target: id });
+    const card = /a Moon-width every ([\d,]+) years/.exec(el.innerHTML)[1];
+    const t = JSON.parse(fs.readFileSync(path.join(APP, "data", id, "target.json"), "utf8"));
+    const ins = /full Moon in about ([\d,]+) years/.exec(t.insights.facts.map((f) => f.headline).join(" "))[1];
+    assert.equal(card, ins, id);
+  }
+});
+
+test("the 'now' dot is drawn under the year labels, so it cannot hide 2050", async () => {
+  const el = { innerHTML: "" };
+  await PV.render(el, { target: "barnard" });
+  const svg = el.innerHTML.split("</svg>")[0];
+  assert.ok(svg.indexOf('class="pv-now"') < svg.indexOf('class="pv-yr"'));
+});
+
 test("a star without known motion gets the plain message, not an error", async () => {
   const el = { innerHTML: "" };
   const m = await PV.render(el, { star: { name: "No motion", ra: 10, dec: 20, pmra: null, pmdec: null } });
