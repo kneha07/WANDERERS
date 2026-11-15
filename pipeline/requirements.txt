@@ -8,3 +8,9 @@ requests==2.34.2
 scipy==1.18.1
 pygeomag==1.1.0
 scikit-learn==1.6.1
+pillow==13.0.0
+pillow-heif==1.8.1
+pyarrow==26.0.1
+astropy-healpix==2.0.1
+certifi==2026.10.23
+pytest==9.2.0

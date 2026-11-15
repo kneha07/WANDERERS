@@ -38,6 +38,19 @@ that with real infrared data spanning 2010 to 2026, then goes one step further: 
 102-colour spectrum to show *what* the moving or changing object is likely to be, with every piece of
 evidence on screen. Unmatched objects are called **candidates, never discoveries**.
 
+## The challenge requirements, one by one
+
+Each row says what WANDERERS does, where to see it on the live site, and where the code and tests are.
+
+| # | Requirement | What WANDERERS does | See it live | Code |
+|---|---|---|---|---|
+| 1 | **Automatic SPHEREx data updates**, showing the current release and the last sync | `pipeline/spherex_releases.py` asks NASA IRSA which SPHEREx releases exist and records how recent our prepared targets are. Every page shows one line, e.g. *SPHEREx Quick Release 3 · data through Sep 2026 · last synced 15 Nov 2026 · checked …*, and says when a newer release has data our targets lack. A weekly GitHub Action re-runs the pipeline when a release appears and opens a pull request with the refreshed data. | [Home](https://rajryadav4.github.io/wanderers/) and [explorer](https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855): the "SPHEREx data" line | `pipeline/spherex_releases.py`, `.github/workflows/spherex-sync.yml`, `app/release.js`, `app/data/spherex_release.json` · [details](#keeping-the-spherex-data-current) |
+| 2 | **Combine the six SPHEREx detectors**, with a switch between individual and combined | A combined channel, *All 6 detectors combined (0.75–5.0 µm)*: each detector's co-add is divided by its own noise, then summed, so no detector dominates and faint objects gain signal-to-noise. The explorer switches between **Individual detectors** (D1–D6) and **Combined (all 6)**; the choice is kept in the link. | [WISE 0855, combined](https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855&ch=all) | `pipeline/analyze.py`, `app/app.js`, `app/frameinfo.js` · [details](#frame-details-and-data-flags) |
+| 3 | **Contamination and observation metadata**, clearly visible | Every frame shows mission, instrument, detectors and wavelength range, the wavelength at the target, observing dates, images stacked, flags at the target and in the aperture, saturation, bad pixels and SPHEREx's own quality flag. It ends with a verdict, **good / caution / poor**, and the reason. Flag meanings come from the FITS headers. Survey candidates carry tile-edge, crowded, saturated and artefact flags. | [Explorer](https://rajryadav4.github.io/wanderers/observatory.html?target=barnard): "Data quality" panel under the flipbook | `pipeline/analyze.py`, `app/frameinfo.js` · [details](#frame-details-and-data-flags) |
+| 4 | **Citizen-science classification**, aggregated across users | Every target and every survey candidate can be marked **Moving / Variable / Stationary / Artifact / Unsure**. A vote counts on the page at once. **Send my vote** files it through a GitHub issue form. A GitHub Action counts everyone's votes (one per person per object, newest wins) and shows a consensus once at least 3 people agree by 60%. | [Explorer](https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855): "Classify this object"; [survey](https://rajryadav4.github.io/wanderers/survey.html): any candidate | `app/classify.js`, `.github/ISSUE_TEMPLATE/classification.yml`, `pipeline/aggregate_votes.py`, `.github/workflows/classifications.yml` · [details](#community-classifications-citizen-science) |
+| 5 | **Large-scale candidate discovery and ranking** | The Sky Survey checks each mover against Gaia DR3 and ranks it with a transparent score. It also offers filters, a high-confidence preset, CSV/JSON export, links to other archives at the right epoch, and `promote.py` to send a candidate through the full WANDERERS pipeline. | [Sky Survey](https://rajryadav4.github.io/wanderers/survey.html) | `pipeline/survey/` · [details](#sky-survey-from-the-ranked-list-to-a-person-investigating) |
+| 6 | **Automated search of a billion-plus objects**: data in, movers out, ranked for people | The sky is cut into 12,288 HEALPix tiles. For each tile the pipeline reads every NEOWISE single-exposure detection from 2014 to 2024 straight from NASA's AWS copy (about 15 million per tile). It then links the detections into ten-year tracks, fits their motion, rejects artefacts, checks Gaia, and ranks what is left for people to inspect. It runs unattended and resumes after interruptions. Before trusting it we checked it: hidden fake movers, empty skies, and real fast stars it was not told about. The [live page](https://rajryadav4.github.io/wanderers/survey.html) shows how much of the sky is done; more than 10 billion detections had been processed when this was written. | [Sky Survey](https://rajryadav4.github.io/wanderers/survey.html): counts, sky map, validation, ranked list | `pipeline/survey/` (`tiles.py`, `link.py`, `rank.py`, `run.py`, `validate.py`) · [contract](docs/survey-contract.md) |
+
 ### Sixteen years in one picture
 
 ```mermaid
@@ -119,12 +132,27 @@ mindmap
 2. **Gaia "ghosts".** Circles show where every star Gaia knows about *should* be in each frame. Anything that
    moves without a ghost is unexplained.
 3. **Measured path.** The target's position is measured in every frame and compared with the catalogue motion.
+   What this does and does not show: the centroid is taken inside a small aperture (3–4 display pixels) placed at
+   the position Gaia predicts for that date, and only where the signal is at least 5σ there. So it answers "is the
+   object where the catalogue says, and how far has it moved?" — a real check of the catalogue, and what the five
+   missions rest on. It is **not** a blind search and cannot find an object no catalogue knows about. That is the
+   job of the mover search and of `pipeline/survey/`.
 4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (up to 150 per target), each
    placed at the wavelength that image recorded there, gives a 0.75–5 µm spectrum. Water, methane and CO/CO₂
-   bands are marked.
+   band positions are marked.
+   **A usable spectrum exists for 5 of the 11 shipped targets**, because bright stars saturate SPHEREx and those
+   points are dropped: WISE 0855 (117 of 158 points usable), Epsilon Indi B (111 of 180), Luhman 16 (75 of 150),
+   RW Aurigae (10 of 150) and Wolf 359 (1 of 60). Barnard's Star, R Draconis, Lalande 21185, Proxima Centauri,
+   61 Cygni and Kapteyn's Star have none. Those panels say so instead of drawing a line through noise.
 5. **Brightness change.** The two SPHEREx sky surveys are compared wavelength by wavelength.
-6. **Evidence card.** Simple, stated rules turn the measurements into a classification and a confidence
-   ("3 of 3 checks support it"). No black-box score.
+6. **Evidence card.** Simple, stated rules turn the measurements into a classification and a confidence. No
+   machine-learnt score: the rules are the twenty lines of `pipeline/evidence.py` printed below.
+   One wrinkle to read correctly. The headline count ("3 of 3 checks support it") counts the **key checks for the
+   class the card chose**, which is not the same as the longer list printed underneath. A card can read "3 of 3"
+   while the list below shows five checks, two of them failing, because those two are not key checks for that
+   class. Two key checks are counter-intuitive and worth stating plainly: for a cold brown dwarf, *absence* from
+   Gaia counts as support (Gaia is a visible-light survey, so a very cold object should be missing from it), and
+   for a variable star, *not* moving counts as support. Read the printed list, not the headline.
 
 How the card decides (`pipeline/evidence.py`, most specific rule first). The same rules, every time:
 
@@ -176,6 +204,17 @@ with your city, time zone and sidereal time. Calibration takes ~10 s: lay the ph
 quarter turns. The gyroscope measures the turns, so if the compass disagrees the app reports magnetic interference
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
+
+**Star Fix** (`app/starfix.html`, needs `start.cmd` or `node start.js`, which install the plate solver; plain `node server.js` works only after that). Upload original iPhone night-sky photos and
+WANDERERS finds where on Earth they were taken, from the stars only: it recognises the stars (cedar-solve plate solve),
+reads which way was down (the phone's gravity sensor, in the Apple MakerNote) and the exact time, and turns the point
+overhead into a latitude and longitude (astropy). The answer is a sentence ("about 130 km south-east of Geelong"), a
+map with an honest circle, and the distance to the GPS position the phone stored. One photo is right to about 50 to
+150 km; the median of a night's photos is better. `POST /api/star-fix` takes the raw photo bytes and runs
+`pipeline/star_fix.py` with the photo on stdin: nothing is written to disk or stored. The page opens with a built-in
+example and, on a static host, says how to start the local server. Checks:
+`.venv/bin/python -m unittest discover -s tests -p "test_star_fix.py"` (Windows: `.venv\Scripts\python.exe`) and
+`node --test test/starfixcore.test.js test/starfix-server.test.js`. Spec: `docs/specs/star-fix-build.md`.
 
 **The real sky behind the Sky Compass** (`app/realsky.js`), so clouds and city lights do not matter. A switch under the
 buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (HYG via the star database, with a City /
@@ -275,6 +314,35 @@ with optional `th=0.6` and `sm=0`. Frame numbers count from 0 in the order of th
 node --test test/framemath.test.js   # includes checks on the real WISE 0855 and Barnard's Star frames
 ```
 
+### Sky Survey: from the ranked list to a person investigating
+
+The Sky Survey page (`app/survey.html`) ranks the movers found in the NEOWISE archive. To work through them:
+
+- **Filter and sort** the table: unexplained only, minimum motion, minimum visits, minimum motion S/N, red only
+  (W1−W2 ≥ 0.5 or no W1: a cold brown dwarf's colour, a hint and not proof), and hide rows flagged at a tile edge,
+  crowded, saturated or classed as likely artefacts. **High-confidence** sets ≥ 12 visits, S/N ≥ 10 and hides all four.
+  The address keeps every filter and the sort, so a shared link shows the same list (`?preset=high` works in a link too).
+- **Download** the filtered, sorted list (every page) as CSV or JSON: id, position and epoch, motion and its error,
+  W1/W2, visits, class, Gaia result, score, flags and merged duplicates.
+- **Open a candidate** for links to other archives at the right date: IRSA Finder Chart, Aladin Lite and the Legacy
+  Surveys viewer where it should be today, SIMBAD and VizieR at its J2000 position, Gaia DR3 at 2016.0, plus where
+  it is in 2000, 2016, today and 2030.
+- **Promote it** to a full WANDERERS target with the WISE → NEOWISE → SPHEREx time-lapse in the explorer:
+
+```bash
+.venv/bin/python pipeline/survey/promote.py --id 10226-0001          # prints the commands (dry run)
+.venv/bin/python pipeline/survey/promote.py --top 5 --unexplained    # the five best unexplained candidates
+.venv/bin/python pipeline/survey/promote.py --id 10226-0001 --run    # runs fetch.py, analyze.py, evidence.py
+```
+
+It moves the candidate to 2018.5 with its own motion (midway between AllWISE and SPHEREx), picks a field wide enough
+for its 2010–2026 path, and runs the same `fetch.py --ra --dec`, `analyze.py` and `evidence.py` steps as typed
+coordinates; then open `observatory.html?target=<id it prints>`. `--run` needs the network and a few minutes.
+
+A source sitting on a tile boundary can be found in both tiles. Publishing merges such pairs (same position and
+motion near the edge; the longer track is kept, the other id is listed under "Also found") and counts them once.
+`python pipeline/survey/dedupe.py app/data/survey/tiles` reports how many the tile files hold.
+
 ### Any coordinates, on demand (needs `server.js`)
 
 With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
@@ -369,7 +437,24 @@ parametric bootstrap, plus any acceleration too small to detect.
 
 **Validation** is written into every result and shown on the page:
 - **Gaia hold-out:** the model is retrained with no Gaia data and predicts where Gaia DR3 saw the star in 2016.0.
-  The miss is 36 mas for Groombridge 1830, 108 mas for Groombridge 34 and 176 mas for Barnard's Star.
+  Every shipped star carries its own number in `app/data/stars/pred/`. Across the **14 stars that have a
+  hold-out, the median miss is 210 mas and the full range is 21 to 2,021 mas**:
+
+  | Miss | Star | | Miss | Star |
+  |---|---|---|---|---|
+  | 21 mas | R Draconis | | 230 mas | Lalande 21185 |
+  | 36 mas | Groombridge 1830 | | 232 mas | Tau Ceti |
+  | 103 mas | Wolf 359 | | 257 mas | 61 Cygni |
+  | 108 mas | Groombridge 34 | | 766 mas | Lacaille 9352 |
+  | 116 mas | Luyten's Star | | 1,274 mas | Kapteyn's Star |
+  | 176 mas | Barnard's Star | | 1,304 mas | RW Aurigae |
+  | 190 mas | Epsilon Indi B | | 2,021 mas | Proxima Centauri |
+
+  The good cases are nearby stars with long, clean catalogue histories. The bad cases have a reason: RW Aurigae is
+  a blended binary in nebulosity (below), and Proxima and Kapteyn's Star have the largest parallaxes in the set, so
+  a model fitted to sparse ground-based positions has the most room to go wrong. A few shipped stars (Sirius,
+  Rigil Kentaurus) are fitted to only 4–6 catalogue rows and carry no hold-out at all; treat those paths as
+  illustrative.
 - **Learnt values vs Gaia DR3:** the learnt motion and parallax are compared with Gaia DR3's own. Proper motions agree
   to within a few mas/yr; Proxima's learnt parallax is 761 ± 103 mas against Gaia's 768.
 - **Barnard's Star** gets an acceleration term of +1.33 mas/yr² in Dec. That is its known perspective acceleration.
@@ -525,6 +610,27 @@ node --test test/starprofile.test.js                     # colours, Sun ratios =
 
 ### Frame details and data flags
 
+**Six detectors, one at a time or combined.** SPHEREx sees 0.75–5.0 µm with six detectors (D1–D6), each covering
+one slice of the spectrum. Under the 3.4 / 4.6 µm channel buttons, the **SPHEREx detectors** switch picks
+**Individual detectors** (choose D1–D6) or **Combined (all 6)**. The combined image stacks the six detectors' co-adds
+of each survey visit: each is background-subtracted and divided by its own robust noise (median and MAD), then they
+are summed and divided by √(number of detectors with data). The picture is in units of the noise, no detector
+dominates, and a source seen by several detectors gains signal-to-noise. Motion is still measured at matched
+wavelengths (3.4 and 4.6 µm), because the combined image mixes wavelengths. The choice is in the link
+(`?ch=d1` … `?ch=d6`, `?ch=all`).
+
+**Data quality of every frame.** A panel under the flipbook follows the frame being shown:
+- **What:** mission and instrument, detectors and wavelength range, the wavelength at the target, first and last
+  observation (UTC), and the number of images stacked.
+- **Contamination:** SPHEREx flags at the target pixel and inside the 3-pixel photometry aperture, saturation
+  (OVERFLOW at the target), the number of bad or flagged pixels near the target, and SPHEREx's own L2 quality flag.
+- **Verdict:** **good / caution / poor**, with the reason. A combined frame is judged from its six detector co-adds.
+  WISE and NEOWISE frames have no flag planes, so only blank pixels and a saturated core are checked, and the panel
+  says so.
+
+The image table shows readable flag chips (hover for the meaning, taken from the FITS header's flag descriptions) and
+a legend.
+
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
 how many SPHEREx images were stacked, whether the object was seen and how strongly), how many SPHEREx spectrum
 measurements were left out because of flagged pixels, and the SPHEREx visits at that position. It shows only what
@@ -574,7 +680,7 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 
 | Source | Used for |
 |---|---|
-| NASA SPHEREx DR1 spectral images (IRSA) | 2025 and 2026 images, spectrum, brightness change |
+| NASA SPHEREx spectral images, DR1 and QR3 (IRSA; releases tracked in `app/data/spherex_release.json`) | 2025 and 2026 images, spectrum, brightness change |
 | NASA WISE / AllWISE atlas (IRSA) | 2010 images at 3.4 and 4.6 µm |
 | ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
@@ -589,10 +695,84 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 | ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
 | IRSA HiPS mirrors of 2MASS and DSS colour | sky underneath the Webb view |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
+| GitHub issues labelled `classification` in kneha07/WANDERERS (public votes) | community classifications (`app/data/classifications.json`, below) |
 
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
 turned off, the conservative bad-pixel flag set from the SPHEREx Explanatory Supplement, 3-pixel aperture
 photometry with local background, and per-pixel solid angle from each image's WCS.
+
+### Keeping the SPHEREx data current
+
+SPHEREx data reaches the public in releases at NASA IRSA (today Data Release 1 and Quick Release 3, which gets new
+images every week). Which releases exist, and how recent our prepared targets are, is kept in
+`app/data/spherex_release.json`, written by `pipeline/spherex_releases.py`:
+
+```bash
+.venv/bin/python pipeline/spherex_releases.py           # ask IRSA, update app/data/spherex_release.json
+.venv/bin/python pipeline/spherex_releases.py show      # what the file says
+.venv/bin/python pipeline/spherex_releases.py synced    # after rebuilding targets with fetch.py + analyze.py
+```
+
+- **Releases** come from IRSA's SIA collection list (astroquery `Irsa.list_collections(servicetype="SIA",
+  filter="spherex")`, then IRSA TAP if that fails), oldest data first: data releases, then quick releases.
+  `pipeline/fetch.py` searches them in that order and keeps the first copy of an exposure that two releases share.
+  If the file is missing or broken, `fetch.py` uses its built-in list (`spherex_dr1`, `spherex_qr3`).
+- **data through** is the newest SPHEREx image date in `app/data/<target>/target.json` (nothing is downloaded for
+  it); **last synced** is when the targets were last rebuilt; **checked** is when IRSA last answered.
+- **New data**: a release newer than the one a target was built from (the file records, per target, which releases
+  `fetch.py` searched, from the IRSA answers it cached).
+- **IRSA down** (it often answers 502): the last known file is kept, only `last_attempt` and `error` change, and the
+  script exits normally. With no file yet it writes one from what is known locally and says the online check failed.
+
+The explorer and the home page show this as one line, for example *SPHEREx Quick Release 3 · data through Sep 2026 ·
+last synced 15 Nov 2026 · checked 15 Nov 2026*, with a short note when new data is available (`app/release.js`; the
+line stays hidden if the file cannot be read).
+
+**Automatic updates.** [`.github/workflows/spherex-sync.yml`](.github/workflows/spherex-sync.yml) runs every Monday
+and can be started by hand (Actions > spherex-sync > Run workflow; tick **rebuild** to rebuild even without a new
+release; a rebuild needs IRSA to answer). When a new release appears, or on a rebuild request, it re-runs `fetch.py`, `analyze.py`, `gaia_facts.py`,
+`evidence.py` and `vet.py` for every prepared target and opens a pull request from the `spherex-sync` branch with the
+refreshed `app/data` (it never pushes to `main`; `explain.json` and `trajectory.json` are not regenerated). When only
+the status file changed it opens a pull request with that file alone; when nothing changed, or IRSA is down, it does
+nothing. While its pull request is open, scheduled runs do not rebuild again. One repository setting is needed:
+Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests". Pull requests opened by
+the workflow do not start the `checks` workflow by themselves: close and reopen the pull request to run them.
+
+### Community classifications (citizen science)
+
+Every target in the explorer and every Sky Survey candidate has a "Classify" card: Moving, Variable, Stationary,
+Artifact or Unsure (`app/classify.js`, `app/classify.css`). The site is static, so votes travel through GitHub:
+
+1. Your vote is saved in your browser and counted on the page at once, marked "incl. yours".
+2. **Send my vote** opens the issue form `.github/ISSUE_TEMPLATE/classification.yml` in `kneha07/WANDERERS`, already
+   filled in (object id, kind, class, title `[classify] <id>: <class>`). It needs a free GitHub account and creates a
+   **public** issue with your vote and your GitHub name. The form labels it `classification`.
+3. `pipeline/aggregate_votes.py` counts those issues into `app/data/classifications.json`: per object the counts, the
+   number of voters, a consensus (at least 3 voters and 60% agreeing) and each voter's latest vote. One vote per GitHub
+   user per object; the newest wins. Unknown ids, unknown classes, pull requests and broken issues are skipped and counted
+   by reason. The output has no clock in it, so the same issues always give the same file.
+4. `.github/workflows/classifications.yml` runs it on issue events with that label, every six hours and by hand
+   (`workflow_dispatch`), and commits `app/data/classifications.json` to `main` only when a count changed.
+5. On the hosted site the page also asks GitHub's public search API (no key) for votes newer than the snapshot,
+   skips issue numbers the snapshot already counted, and says nothing if GitHub refuses (it allows 10 searches a minute
+   per visitor). Local copies (`localhost`) never call it; add `?votes=live` to try it, or `?votes=snapshot` to turn it off.
+
+```bash
+gh issue list --repo kneha07/WANDERERS --label classification --state all --limit 5000 \
+  --json number,title,body,author,createdAt,labels > issues.json
+python pipeline/aggregate_votes.py issues.json          # writes app/data/classifications.json
+```
+
+**GitHub Pages fork:** `https://rajryadav4.github.io/wanderers/` is served from a fork, which does not receive the
+workflow's commits by itself. Sync the fork with `kneha07/WANDERERS` `main` and redeploy Pages to publish a new snapshot;
+until then the page adds newer votes live, as above.
+
+**One-time setup in `kneha07/WANDERERS`:** create the `classification` label (issue forms apply only labels that
+exist), allow GitHub Actions to write (Settings → Actions → General → Workflow permissions → Read and write, or let the
+workflow's `github-actions[bot]` push past any branch protection on `main`), and merge the form and workflow to `main`
+(GitHub uses issue forms and issue-event workflows from the default branch only). To remove a spam vote, label the
+issue `invalid` or `spam`; the next run drops it. Candidate ids come from the current `leaderboard.json`, so a vote for
+a candidate that a later survey run renumbers or drops is no longer counted.
 
 ## Honest limits
 
@@ -601,10 +781,17 @@ photometry with local background, and per-pixel solid angle from each image's WC
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
 - Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py` (or `node server.js`).
   On the public site any other position shows the live sky map, which is one combined image, not a time-lapse.
-- A usable SPHEREx spectrum exists for only some targets: very bright stars (Barnard's Star, R Draconis and
-  others) saturate SPHEREx, and their spectra are left out on purpose.
-- The automatic "what else moved" search finds its own target in only some of the fields where the target moves;
-  the page says so, and an empty list means "nothing found", not "nothing there".
+- A usable SPHEREx spectrum exists for 5 of the 11 targets (WISE 0855, Epsilon Indi B, Luhman 16, and RW Aurigae
+  and Wolf 359 with a handful of points). Very bright stars (Barnard's Star, R Draconis and others) saturate
+  SPHEREx and their points are dropped on purpose; the panel says so rather than drawing a line through noise.
+- The per-field "what else moved" search re-finds the known mover in 8 of the 9 fields whose target moves, after
+  the known-path pairing fix. An empty list means "this search found nothing", not "nothing is there", and an
+  unconfirmed pair is never a discovery.
+- The measured path is a centroid inside a small aperture placed at the catalogue-predicted position, so
+  "measured motion agrees with the catalogue" is a consistency check, not an independent detection.
+- Distances on the cards are 1/parallax with no error bar. For nearby stars that is fine; for R Draconis
+  (parallax 1.25 mas, a Mira whose photocentre moves) the figure is indicative only and the digits past the
+  first two are not meaningful.
 - In single NEOWISE exposures the brightest stars saturate: their frames are marked "saturated" and give no
   position (61 Cygni, R Draconis).
 - The public static site shows only the prepared targets. With `node server.js` (or `node start.js`), new coordinates are prepared on demand, and `/explore/` shows any patch live.
@@ -638,15 +825,19 @@ the data providers.
 
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
-            star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
+            star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py · star_fix.py
             make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
-app/        index.html (home) · observatory.html (console) · compass.html (phone)
+            aggregate_votes.py (community classifications)
+app/        index.html (home) · observatory.html (console) · compass.html (phone) · starfix.html (Star Fix)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
+            starfix.js · starfixcore.js · starfix.css · data/starfix-sample.json
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
+            classify.js · classify.css (community classifications)
             starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
             data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
-server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
+server.js   local demo server (live answers, any coordinates, learning a star, Star Fix, /explore/)
 fields.js   the any-coordinates job service used by server.js
+star-fix-solver.js   the Star Fix solver process (time limit, kill tree, answers) used by server.js
 start.js    one-click start for everything (also start.cmd, start.command)
 backend/    FastAPI live explorer API (port 8001)     web/   React live explorer, served at /explore/
 test/ tests/   Node and Python tests              artifacts/   review records, merge records, screenshots

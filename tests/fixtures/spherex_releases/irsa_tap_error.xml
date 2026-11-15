@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: a TAP error answer (VOTable with QUERY_STATUS ERROR and no table), as the TAP standard defines it. -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+ <RESOURCE type="results">
+  <INFO name="QUERY_STATUS" value="ERROR">Query execution time exceeded the limit</INFO>
+ </RESOURCE>
+</VOTABLE>

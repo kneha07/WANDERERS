@@ -6,20 +6,22 @@
 const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
 const { pipeline } = require("stream");
 const ROOT = path.join(__dirname, "app"), PORT = process.env.PORT || 8000;
-const fields = require("./fields").createFieldService();
+const { createFieldService, pickPython } = require("./fields");
+const { solvePhoto } = require("./star-fix-solver");
+const fields = createFieldService();
 // "Explore any patch" live mode: the React app (web/, built to web/dist) and its FastAPI server (backend/, port 8001).
 const EXPLORE = path.join(__dirname, "web", "dist"), LIVE = process.env.WANDERERS_LIVE || "http://127.0.0.1:8001";
 const LIVE_ROUTES = new Set(["/api/frames", "/api/resolve", "/api/about"]);
 const LIVE_DOWN = "The live SPHEREx server is not running. Start it with: node start.js " +
   "(or: backend/.venv/bin/python -m uvicorn backend.app:app --port 8001).";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
-  ".png": "image/png", ".svg": "image/svg+xml" };
+  ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml" };
 const RULES = `You are the analyst inside WANDERERS, a public tool built on real NASA SPHEREx and WISE images and ESA Gaia data.
 Use ONLY the measurements in the JSON below plus textbook astronomy background. Never say "discovery".
 If something is flagged or uncertain, say so. Plain language, at most 90 words, no markdown.`;
 
 // ---- live lookup of any sky position: runs the pipeline as a background job ----
-const PY = process.env.WANDERERS_PY || (fs.existsSync(path.join(__dirname, ".venv/bin/python")) ? path.join(__dirname, ".venv/bin/python") : "python3");
+const PY = process.env.WANDERERS_PY || pickPython(__dirname);   // same lookup as fields.js (Windows venv too, #27)
 const jobs = new Map(); let jobSeq = 0, busy = null;
 
 function runStep(job, args) {
@@ -82,9 +84,48 @@ function body(req, limit = 20000) {
   });
 }
 
+// Binary body: a Buffer, or null once it is larger than `limit` (then the rest is dropped, not kept).
+function bodyBytes(req, limit) {
+  return new Promise((ok, bad) => {
+    let n = 0, chunks = [];
+    req.on("data", (c) => {
+      if (!chunks) return;
+      n += c.length;
+      if (n > limit) { chunks = null; ok(null); } else chunks.push(c);
+    });
+    req.on("end", () => chunks && ok(Buffer.concat(chunks)));
+    req.on("error", bad); req.on("close", () => bad(new Error("closed")));   // no-op once settled
+  });
+}
+
+// ---- Star Fix: one photo (raw bytes) in, one JSON result out. This route is the HTTP adapter (size limit, one photo
+// at a time, status codes); the process rules (60 s, kill tree, the two 500s) are in star-fix-solver.js. ----
+// The photo is never written to disk or logged. Errors never show paths or stack traces.
+const STAR_FIX_MAX = 30 * 1024 * 1024;
+let starFixBusy = false;
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/api/health") { res.writeHead(200); return res.end("ok"); }
+  if (req.method === "POST" && url.pathname === "/api/star-fix") {
+    const reply = (code, body, headers = {}) => {   // the first answer wins (a late close after a timeout is ignored)
+      if (res.headersSent) return;
+      res.writeHead(code, { "content-type": "application/json", ...headers });
+      res.end(typeof body === "string" ? body : JSON.stringify(body), () => { if (code === 413) req.destroy(); });
+    };
+    if (starFixBusy) { req.resume(); return reply(409, { error: "busy" }); }   // drain the body, keep nothing
+    starFixBusy = true;
+    let buf;
+    try { buf = await bodyBytes(req, STAR_FIX_MAX); } catch { starFixBusy = false; return; }   // the browser left
+    if (!buf || !buf.length) {
+      starFixBusy = false;
+      return buf ? reply(400, { error: "no photo" }) : reply(413, { error: "photo too large" }, { connection: "close" });
+    }
+    const r = await solvePhoto(buf, { python: PY });
+    reply(r.code, r.body);
+    r.gone.then(() => { starFixBusy = false; });   // free the slot when Python has ended (after a 504 too)
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/lookup") {
     res.setHeader("content-type", "application/json");
     try {

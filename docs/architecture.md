@@ -9,7 +9,7 @@ Written against `main` at `3c896ba` (2026-11-14, after the redesign, Starquakes,
 ```mermaid
 flowchart LR
   subgraph browser["Your browser"]
-    site["app/ site<br/>home, observatory: flipbook, evidence card,<br/>insights, spectrum, star database,<br/>Starquakes, Through Webb, Sky Compass<br/>Day/Night theme"]
+    site["app/ site<br/>home, observatory: flipbook, evidence card,<br/>insights, spectrum, star database,<br/>Starquakes, Through Webb, Sky Compass,<br/>Star Fix, Day/Night theme"]
     aladin["Aladin Lite sky map<br/>runs in the browser"]
     explore["/explore/ live explorer<br/>web/, React"]
   end
@@ -20,12 +20,14 @@ flowchart LR
     quick["/api/lookup, /api/job/id<br/>quick look"]
     starjob["/api/star-predict<br/>/api/star-job/id"]
     ask["/api/ask"]
+    starfix["/api/star-fix<br/>one photo at a time"]
     proxy["/api/frames<br/>proxy"]
   end
 
   subgraph py["pipeline/ (Python)"]
     fetch["fetch.py"] --> analyze["analyze.py"] --> evid["evidence.py"] --> vet["vet.py"]
     starml["star_ml.py"]
+    sfpy["star_fix.py<br/>photo on stdin, offline"]
   end
 
   api["backend/ FastAPI :8001"]
@@ -51,6 +53,7 @@ flowchart LR
   fieldsvc -->|"runs"| fetch
   quick -->|"runs, 36 cutouts"| fetch
   starjob --> starml
+  starfix --> sfpy
   ask --> claude
 
   fetch --> cache
@@ -74,7 +77,7 @@ only reads `app/data/` plus the Aladin sky map, but cannot prepare new fields, a
 | You run | You get |
 |---|---|
 | Nothing, any static host serving `app/` | The five missions, evidence cards, spectrum, star database (precomputed paths), Aladin sky map for any RA/Dec, Sky Compass, add/subtract frames. All of it runs in the browser. |
-| `node server.js` (port 8000) | Plus: any coordinates on demand, "Ask WANDERERS" (needs the `claude` command signed in), and learning the path of any star in the database. |
+| `node server.js` (port 8000) | Plus: any coordinates on demand, "Ask WANDERERS" (needs the `claude` command signed in), learning the path of any star in the database, and Star Fix (where your own night-sky photo was taken). |
 | `node start.js`, or double-click `start.cmd` / `start.command` | Plus: the `/explore/` live explorer. It sets up `backend/.venv` and `web/`, then starts the FastAPI server (port 8001) and `server.js` together. |
 
 ## 3. Where the data goes (the pipeline)
@@ -139,6 +142,7 @@ works straight from a clone without running anything.
 | | `POST /api/field`, `GET /api/job?id=` | **`fields.js`.** Prepares any position and field size (60 to 900 arcsec) by running `fetch.py`, `analyze.py` and `evidence.py`. One job runs at a time, up to four wait. Shows no server paths in errors. |
 | | `POST /api/lookup`, `GET /api/job/<id>` | The **older quick look** (`server.js`). The same three steps, but `fetch.py --max 36`, so fewer cutouts and a faster result. One job at a time, replies 409 when busy. No field-of-view choice. |
 | | `POST /api/star-predict`, `GET /api/star-job/<id>` | Learns one star's path with `star_ml.py`. The key must be one of the stars in the database. |
+| | `POST /api/star-fix` | **Star Fix.** The body is the raw bytes of one photo. Runs `pipeline/star_fix.py` with the photo on stdin and relays its one JSON line: `fix`, `sky_only`, `no_solve` or `bad_file`. 400 empty body, 413 above 30 MB, 409 while another photo is read, 504 after 60 s, 500 with a fixed message when Python is missing. The process rules are in `star-fix-solver.js`. Nothing is stored. Spec: [specs/star-fix-build.md](specs/star-fix-build.md). |
 | | `GET /api/frames`, `GET /api/live-health` | Proxied to the FastAPI server on port 8001. When it is down the proxy answers 502 and says how to start it. |
 | `backend/` :8001 | `GET /api/frames?q=&fov=&per_group=&det=` | Finds a star by name (CDS Sesame) or position, asks IRSA which SPHEREx images cover it, reads only the needed pixels from the public S3 copy, aligns and stacks them by survey epoch, and returns frames as PNG with measurements. Details: [blink/README.md](blink/README.md) and [blink/api.md](blink/api.md). |
 | | `GET /api/health` | `{"ok": true}` |
@@ -163,6 +167,8 @@ is a team decision. This table is a description, not a recommendation.
 |---|---|---|
 | `app/` | The static site | yes |
 | `app/data/<target>/`, `app/data/stars/`, `app/data/declination.json` | What the pipeline produces and the site reads | yes (so a clone works with no setup) |
+| `app/data/spherex_release.json` | SPHEREx releases at IRSA and how recent the prepared targets are (`pipeline/spherex_releases.py`, kept current by `.github/workflows/spherex-sync.yml`; read by `fetch.py` and `app/release.js`) | yes |
+| `app/data/classifications.json` | Community votes (Moving / Variable / Stationary / Artifact / Unsure), counted from GitHub issues by `pipeline/aggregate_votes.py` and `.github/workflows/classifications.yml`; `app/classify.js` shows them and adds newer votes live on the hosted site | yes |
 | `data/cache/` | Raw downloads (SPHEREx cutouts, AllWISE, Gaia answers, the HYG file) | no |
 | `backend/cache/` | The live explorer's results | no |
 | `artifacts/` | Review records, merge records, demo screenshots | yes |

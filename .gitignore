@@ -13,3 +13,9 @@ data/*.sh
 # browser-check profiles (test/browser/realsky.mjs); they can hold synced account data
 artifacts/real-sky/prof*/
 .venv-py39
+
+# Sky Survey working files (pipeline/survey/run.py): per-tile results, run manifest and lock. The page reads only
+# summary.json and leaderboard.json; keep the tile files locally to resume a run or re-rank (--rank-only).
+app/data/survey/tiles/*.json
+app/data/survey/manifest.json
+app/data/survey/.run.lock
