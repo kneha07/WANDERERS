@@ -1,0 +1,5 @@
+{
+ "about": "Made-up test ids for tests/fixtures/classify/issues.json (test_aggregate_votes.py and test/classify.test.js). Not real votes.",
+ "targets": ["barnard", "r_dra", "wise0855"],
+ "candidates": ["10226-0001", "11391-0001", "8545-0003"]
+}

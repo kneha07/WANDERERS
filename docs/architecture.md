@@ -164,6 +164,7 @@ is a team decision. This table is a description, not a recommendation.
 | `app/` | The static site | yes |
 | `app/data/<target>/`, `app/data/stars/`, `app/data/declination.json` | What the pipeline produces and the site reads | yes (so a clone works with no setup) |
 | `app/data/spherex_release.json` | SPHEREx releases at IRSA and how recent the prepared targets are (`pipeline/spherex_releases.py`, kept current by `.github/workflows/spherex-sync.yml`; read by `fetch.py` and `app/release.js`) | yes |
+| `app/data/classifications.json` | Community votes (Moving / Variable / Stationary / Artifact / Unsure), counted from GitHub issues by `pipeline/aggregate_votes.py` and `.github/workflows/classifications.yml`; `app/classify.js` shows them and adds newer votes live on the hosted site | yes |
 | `data/cache/` | Raw downloads (SPHEREx cutouts, AllWISE, Gaia answers, the HYG file) | no |
 | `backend/cache/` | The live explorer's results | no |
 | `artifacts/` | Review records, merge records, demo screenshots | yes |

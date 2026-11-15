@@ -1,0 +1,53 @@
+# One citizen-science vote: what a WANDERERS target or Sky Survey candidate looks like.
+# The site's "Send my vote" button (app/classify.js) opens this form with every field filled in through the URL.
+# pipeline/aggregate_votes.py counts these issues into app/data/classifications.json (.github/workflows/classifications.yml).
+# It reads the answers under their labels ("Object ID", "Kind", "Classification"), so keep those labels as they are.
+name: Classify an object
+description: Vote on what a WANDERERS target or Sky Survey candidate looks like. Votes are counted on the site.
+title: "[classify] "
+labels: ["classification"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for classifying! This issue is public: your vote and your GitHub name are visible to everyone.
+        Each person's newest vote per object counts, so to change your mind, send a new vote.
+        The site counts votes at its next update.
+  - type: input
+    id: object_id
+    attributes:
+      label: Object ID
+      description: The target (for example barnard) or Sky Survey candidate (for example 10226-0001). Filled in by the site.
+      placeholder: barnard
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      description: A target in the explorer, or a candidate from the Sky Survey's ranked list.
+      options:
+        - target
+        - candidate
+    validations:
+      required: true
+  - type: dropdown
+    id: class
+    attributes:
+      label: Classification
+      description: "Moving: changes position between frames or years. Variable: stays put, but its brightness changes. Stationary: stays put and looks the same. Artifact: not a real object (a glitch, spike, ghost or image edge). Unsure: can't tell."
+      options:
+        - Moving
+        - Variable
+        - Stationary
+        - Artifact
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional. What made you choose this? Not counted, but read by the team.
+    validations:
+      required: false
