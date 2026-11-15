@@ -1,102 +1,92 @@
 # Star Fix build report
 
-Status: **DONE**. Branch `feature/star-fix` (worktree `.worktrees/star-fix`), 10 commits on top of `docs/star-fix-design`.
-Nothing is pushed. Brief: [`docs/specs/star-fix-build.md`](../../docs/specs/star-fix-build.md).
+Status: **DONE**, fix round 1 included. Branch `feature/star-fix` (worktree `.worktrees/star-fix`). Nothing is pushed.
+Brief: [`docs/specs/star-fix-build.md`](../../docs/specs/star-fix-build.md). Reviews of round 1: `artifacts/review-tech_lead-star-fix.md`,
+`artifacts/review-project_manager-star-fix.md`, `artifacts/review-user_advocate-star-fix.md`.
 Only distances are written here. No GPS position of a sample photo is in this file or in the repo.
 
 ## 1. Acceptance criteria
 
-Commands (from the worktree root, Windows, Git Bash):
+Commands (from the worktree root, Windows, Git Bash), after fix round 1:
 
 ```bash
-.venv/Scripts/python.exe -m unittest discover -s tests -p "test_star_fix.py"     # exit 0, 9 tests, 41 s
-node --test test/starfixcore.test.js test/starfix-server.test.js test/compass-cta.test.js \
-  test/home.test.js test/server.test.js test/fields.test.js                          # exit 0, 70 pass, 1 skip
+.venv/Scripts/python.exe -m unittest discover -s tests -p "test_star_fix.py"   # exit 0, 10 tests
+node --test test/*.test.js                                                    # exit 0, 319 tests, 318 pass, 1 skip
 ```
+
+The one skip is in `fields.test.js` ("python3 not available"); it is also on the base commit.
 
 | # | Result | Evidence |
 |---|---|---|
-| A1 | PASS | `test_round_trip_for_every_orientation`: 3 places x 2 times x orientations 1, 3, 6, 8 x 3 random rotations, all < 2 km. The zenith comes from astropy `AltAz` (alt 90), a path that `position()` does not use. A wrong axis table fails the test (checked). |
-| A2 | PASS | `20260614_082051102`: `fix`, 33 km from (-38.5, 145.2), `Carina`, 53 matches. |
+| A1 | PASS | Round trip, 3 places x 2 times x orientations 1, 3, 6, 8 x 3 random rotations, all < 2 km. The zenith comes from astropy `AltAz`, a path that `position()` does not use. |
+| A2 | PASS | `20260614_082051102`: `fix`, 33 km from (-38.5, 145.2), `Carina`. |
 | A3 | PASS | `20231125_204326416` (past the zenith): `fix`, 55 km from its own GPS. |
-| A4 | PASS | `20231125_211246181` (twilight): `no_solve`. `stars` is 381 now (see 4.2). |
-| A5 | PASS | Random bytes and an empty body: `bad_file`. A JPEG copy without EXIF: `sky_only`, `missing` = `["gravity", "time"]`, `Carina`. |
-| A6 | PASS | The four 14 June results: one night, 61 km (60.6) from (-38.5, 145.2), radius 65.5 km (shown as 65). |
-| A7 | PASS | `combine` and `circle` tests in `test/starfixcore.test.js`: one far photo moves the answer < 50 km and is in `outliers`; 1 photo gives 150 km; 2 h apart gives two nights; every circle point is within 1 %. |
-| A8 | PASS | `test/starfix-server.test.js`: empty 400; 31 MB 413 (`{"error":"photo too large"}`), then `/api/health` 200; random bytes 200 `bad_file`; no Python 500 with the fixed message; 409 while one is read. No answer holds a path. |
-| A9 | PASS | `server.js` has no `python3`. `PY = process.env.WANDERERS_PY \|\| pickPython(__dirname)` (source test). |
-| A10 | PASS | All 29 JS test files that passed on the base commit still pass, one by one (list in 3). All 10 Python test files pass. Nothing failed on the base commit. One skip in `fields.test.js` ("python3 not available") is also on the base commit. |
-| A11 | not run (orchestrator) | Checked in Playwright, 1100 px, both themes: four 14 June files give one block; headline "about 130 km south-east of Geelong, Australia"; "Usually right to about 65 km."; check line "61 km"; map with two marks; the answer is above the list and the list is closed ("4 photos used"). No screenshot file was saved to the repo. |
-| A12 | PASS | `test/compass-cta.test.js`: hero links `observatory.html`, `compass.html`, `starfix.html`, exact door words, How It Works in the top navigation, footer link. Doors are 56 px high (phone). |
-| A13 | not run (orchestrator) | Checked in Playwright: the example shows first with "Example"; it goes after the first result; "Remove my photos" brings it back. On a static server (`python -m http.server -d app`) the example shows, the upload is disabled and the one line shows. |
-| A14 | PASS | `describe()` exact text for every case, warnings included. No forbidden word in `describe()`, `headline()`, `photosLine()`, `reading()` or the visible text of `starfix.html` (templates and aria labels included). |
-| A15 | PASS | `app/data/starfix-sample.json`: 4 entries, each `gps` is exactly `{"lat": -38.5, "lon": 145.2}`, combined 61 km from it. |
-| A16 | PASS (source) + checked | One `btn-primary` (test). Playwright at 390 px: `scrollWidth` = `clientWidth`. Every control takes focus and shows a 2 px outline (the file input shows it on its label). |
-| A17 | PASS | `test_weak_false_solve_of_a_recompressed_photo_is_refused`: JPEG q92 copy of `20260614_081100956` is 84 km from its own GPS (2840 km before the gate). The original HEIC: `fix`, 83 km. |
+| A4 | PASS | `20231125_211246181` (twilight): `no_solve`. |
+| A5 | PASS | Random bytes, an empty body and a 64 MP picture: `bad_file`. A JPEG copy without EXIF: `sky_only`, `missing` = `["gravity", "time"]`. |
+| A6 | PASS | The four 14 June results: one night, 61 km from (-38.5, 145.2), radius 65.5 km. |
+| A7 | PASS | `combine`, `circle` and `sessions` unit tests in `test/starfixcore.test.js`. |
+| A8 | PASS | `test/starfix-server.test.js`: 400 empty; 413 above 30 MB, then health 200; 200 `bad_file`; 500 "Star Fix could not run..." without Python or with a missing package; 500 "Could not read this photo." after a crash; 409 busy. No answer holds a path. |
+| A9 | PASS | No `python3` in `server.js`; `PY = process.env.WANDERERS_PY \|\| pickPython(__dirname)`. |
+| A10 | PASS | `node --test test/*.test.js` exit 0. Before round 1, each old JS and Python test file also passed one by one. |
+| A11 | PASS | Screenshots after the four 14 June photos: `page-light.png`, `page-dark.png` (1280 px), `page-phone-light.png`, `page-phone-dark.png` (390 px, mobile emulation). One block, place sentence, "Usually right to about 65 km.", GPS check line 61 km, map with the circle and two marks, list closed. |
+| A12 | PASS | `test/compass-cta.test.js`. `home-1280.png`: three doors in one row at 1280 x 720, all above the fold. |
+| A13 | PASS (browser) | Playwright: example first; gone after the first result; back after "Remove my photos". Static server: example, upload disabled, one line. |
+| A14 | PASS | Exact `describe()` texts (round 1 words). No forbidden word in core text or in the visible text of `starfix.html`. |
+| A15 | PASS | `app/data/starfix-sample.json`: 4 entries, each `gps` exactly `{"lat": -38.5, "lon": 145.2}`, 61 km. |
+| A16 | PASS | One `btn-primary` (test). 390 px: no horizontal scroll. Every control takes focus with a 2 px outline. |
+| A17 | PASS | JPEG q92 copy of `20260614_081100956`: 84 km from its own GPS (2840 km without the gate). The HEIC: 83 km. |
 
 ## 2. UX rules U1 to U10
 
 | # | Result | How it was checked |
 |---|---|---|
-| U1 | PASS | Unit test: every row exists ("waiting") before the first request. Playwright: rows and "Reading photo 1 of 4" show at once. |
-| U2 | PASS | Unit tests: one request at a time, in order; added files go to the end; the same name and size is skipped, also while it waits. Playwright: a second copy of a photo did not add a row. |
-| U3 | PASS | Unit test: a failed request becomes `error`; Try again sends the same File object. Playwright: a forced network error shows "Could not read this photo. Add it again." and Try again; the retry gives the real answer. The 75 s abort is in `photoQueue` (not run: it needs 75 s). |
-| U4 | PASS | Keyed blocks and rows, text set only when it changes, rows move only when their place changes. A new night goes on top. Note in 4.1. |
-| U5 | PASS | Canvas has `aspect-ratio: 2 / 1`. The example slot keeps a reserved height until the sample and the city list load (within about 11 px of the real height). |
-| U6 | PASS | The control stays on while `/api/health` is pending; it is disabled and the line shows only after a failure (Playwright, static server). |
-| U7 | PASS | Unit tests for `clear()` and `restore()`. Playwright: Remove shows the example, focus goes to the upload control, "Photos removed. Undo" shows for 8 s; Undo brings 4 results back with 0 requests. No `confirm()` (source test). |
-| U8 | PASS | Playwright: dragover shows the accent outline and "Drop to add"; dragleave and Escape remove it. `notes.txt` gives "This file is not a photo." and a 31 MB file gives the 30 MB text, both without a request. |
-| U9 | PASS (code) | A newer answer cancels the running 400 ms glide and starts from the drawn circle; no motion under `prefers-reduced-motion`. No frame capture was made. |
-| U10 | PASS | The progress region is `aria-live="polite"`: "Reading photo N of M", then the final headline once (visually hidden). Rows have a mark and words. |
+| U1 | PASS | Unit test and Playwright: rows and "Reading photo 1 of 4" show before the first request. |
+| U2 | PASS | Unit tests: one request at a time, in order, dedupe also against waiting rows. A duplicate gives the status line "Already added: {name}" (Playwright). |
+| U3 | PASS | Unit test and Playwright: a failed request gives "Could not read this photo." and Try again with the same File. The 75 s abort is in `photoQueue` (not run: 75 s). |
+| U4 | PASS | Round 1: a summary click (mouse, Enter or Space) makes the list the person's; the automatic rule stops. Playwright: open list stays open after a duplicate; closed list stays closed after a refused file. |
+| U5 | PASS | CLS at 390 px, first visit, empty cache: 0.003 (light), 0.003 (dark), 0.006 with fonts 1.2 s late and health 2.5 s late. Was 0.154. |
+| U6 | PASS | The line shows and the control is disabled only after `/api/health` fails (static server). |
+| U7 | PASS | Unit tests for `clear()` and `restore()`. Playwright: focus to the upload control, "Photos removed. Undo" for 8 s, Undo restores 4 results with 0 requests. |
+| U8 | PASS | Playwright: drop state with "Drop to add"; `notes.txt` and a 31 MB file get their rows without a request. |
+| U9 | PASS | The window and the circle glide together (400 ms), a newer answer starts from the drawn state, no motion under reduced motion. Now visible: the circle is about 1/8 of the map height. |
+| U10 | PASS | `aria-live="polite"`: "Reading photo N of M", then the final headline once. |
 
-## 3. Full test run (A10)
+## 3. Fix round 1
 
-JS, each file on its own, exit 0: `aladinlink`, `chartlayout`, `compass-cta`, `compass-flows`, `compass-sightcheck`,
-`compass-style`, `fields` (1 skip, also on base), `frameinfo`, `framemath`, `hips`, `home`, `liveproxy`, `observatory`,
-`orient`, `pathview`, `physicspath`, `search-compass`, `search`, `server`, `sky-compass`, `sky`, `skyview`, `starcore`,
-`stardb`, `starpath`, `starprofile`, `starquake`, `telescope`, `theme` (all `test/<name>.test.js`), plus the new
-`starfix-server` (6) and `starfixcore` (23).
+| Item | Fix | Evidence | Commit |
+|---|---|---|---|
+| M1 map | Window from the data: half-height = 4 x max(radius, GPS distance), 2:1, 6 to 40 degrees across; crop of `day.jpg`, smooth upscale. Ponytail note: about 20 km per pixel of `day.jpg`. | 65 km circle: radius about 38 px at 608 px width, 22 px at 358 px (was 9 and 5 px). | `10ff89b` |
+| M2 doors | Row right under the lede; one row from a 1024 px window (text column 470 px and up), compact text while narrow; stacked below. | Door 3 bottom: 671 of 720 px (1280 x 720), 615 of 768 (1024 x 768). `home-1280.png`. | `5db6315` |
+| M3 U4 | `touched` from the summary click; no automatic change after that. | Playwright, see U4. | `10ff89b` |
+| M4 CLS | The drop hint has its own line (as the wireframe). | CLS 0.003 to 0.006 at 390 px. | `10ff89b` |
+| L-a | "Could not read this photo." next to "Try again". | A14 test. | `10ff89b` |
+| L-b | "This file is not a photo. Choose a .heic or .jpg file." / "This file is too large (30 MB limit). Use the original photo." | A14 test. | `10ff89b` |
+| L-c | `night(rows)`: refused files listed, not counted; an outlier counts but is not used; the headline count is the used photos. | Unit test "night". Playwright: "4 photos used" after a refused file. | `10ff89b` |
+| L-d | "No place found from these photos." ("yet" only while photos wait or are read). | Unit test. | `10ff89b` |
+| L-e | "Already added: {name}" in the existing status line. | Unit test (`add()` returns the names), Playwright. | `10ff89b` |
+| L-f | Two 500 answers: setup missing (spawn error, "No module named") vs a crash on this photo. | Server tests with node as the interpreter and a shadowed `pillow_heif`. | `726c7a7` |
+| L-g | Pictures above 60 MP are `bad_file` before decoding; Pillow's `DecompressionBombError` also gives `bad_file`. | Unit test (64 MP PNG); 144 MP answers in 0.0 s. | `16ba4bd` |
+| F5 | This report now lists the screenshot files that exist. | Section 1, A11 and A12. | this commit |
 
-Python, exit 0: `tests/test_data_quality.py`, `test_evidence.py`, `test_fetch.py`, `test_link_paths.py`, `test_movers.py`,
-`test_star_ml.py`, `test_star_trajectory.py`, `test_starquake.py`, `test_vet.py`, `test/test_fov.py`, plus the new
-`tests/test_star_fix.py` (9).
+The spec now matches the code: sections 6, 8, 10.1, 10.2 (words, lines, map) and 10.4 (U2, U4, U5).
 
-All 14 sample photos with the gate (distance to each file's own GPS): 2023 night: 50 and 55 km, four `no_solve`;
-14 June: 115, 84, 155, 34 km; 19 June: 94, 105, 44, 63 km.
+## 4. Decisions kept from the build
 
-## 4. Decisions and differences from the brief
+- Map marks use the Night accent `#8AB6EF` in both themes (`--map-accent`): the map is always dark.
+- `zone_mismatch` compares longitudes across 180 degrees.
+- `warnings` is in `fix`, `sky_only` and `no_solve` (needed for `small_photo`).
+- A result without a time (`no_solve`, `bad_file`, errors) joins the newest night (orchestrator rule 5b).
+- A new night goes on top; blocks are not sorted again.
+- The OpenStreetMap link opens a new tab, so the results stay.
 
-### 4.1 Page
+## 5. Leftovers (not fixed in round 1)
 
-- The photo list and its queue are a pure function `photoQueue(send, onChange)` in `starfixcore.js`, so that dedupe,
-  order, Try again and Undo have unit tests without a browser.
-- The list of a night is open while photos are read or when a photo was not used, and closed when every photo was used.
-  This rule stops when the person opens or closes the list. Exception (U4): a photo that becomes "not used" always opens it.
-  Reason: U4 alone would keep the list open after a run, and A11 needs it closed.
-- When files arrive, the new night block shows at once at the top with its rows. The example stays below it until the
-  first result (brief 10.2.5), then it is hidden.
-- A result without a time (`no_solve`, `bad_file`, errors) joins the newest night (orchestrator rule 5b). Example: a
-  2023 twilight photo uploaded with 14 June photos shows in the 14 June list.
-- Blocks are not sorted again by date: a new night goes on top (U4), so nothing moves under the person.
-- Files with no `.heic`, `.heif`, `.jpg`, `.jpeg` or `.png` name get "This file is not a photo." without a request.
-- The map marks use the Night Observatory accent `#8AB6EF` in both themes (`--map-accent` on `.sf-map`). The map is
-  always dark; the Day accent was weak on the dark sea. The legend uses HTML text, so the A14 test reads it.
-- The "Open in OpenStreetMap" link opens a new tab, so the results stay.
-- Only the number of a km value is mono, so no wide mono space comes before "km".
+- Orientation 3 and 8 have no photo test (TL M2). A2 covers orientation 1; A3, A17 and the other portrait photos cover 6. A1 checks the table for all four.
+- No automatic test for the 60 s kill (504); the tech lead checked it by hand.
+- The Undo line ends after 8 s (WCAG 2.2.1 asks for a way to extend it).
+- With a large radius the nearest city can be a small place ("near San Tung Chung Hang"); a better rule would prefer the largest city inside the circle.
 
-### 4.2 Python and server
-
-- `zone_mismatch` compares longitudes across 180 degrees (wrapped difference). The plain formula flags 179 W vs UTC+12.
-- Quality gate (A17): `MIN_MATCHES 8`, `MAX_RMSE_ARCSEC 300`, `MAX_FALSE_PROB 1e-8`. A weak solve now tries the next
-  sigma or crop. The first 14 June photo now takes its 51-match solve; the example JSON was made again (still 61 km).
-- `stars` in `no_solve` is the spot count of the last try (whole picture, sigma 2), as in `probe.py`. With the gate the
-  twilight photo reaches that try, so it reports 381 (11 before). The page does not show this number.
-- `warnings` is in `fix`, `sky_only` and `no_solve` (needed for `small_photo`). `small_photo`: long side below 1600 px.
-- 504 (60 s) is not in an automatic test: it needs 60 s.
-- Home doors: three across when the hero text column is at least 600 px wide, else stacked (container query). At 1440 px
-  they are three across; at 900 to 1100 px and on a phone they stack.
-
-## 5. Commits
+## 6. Commits
 
 ```
 e191f88 step 1: pipeline/star_fix.py and tests A1-A5
@@ -108,6 +98,10 @@ f41a4a1 step 4: start.js solver install, requirements
 24f3515 step 6: home hero doors, footer link
 32e81f1 step 7: README and architecture.md
 502ad47 page: km number in mono
+f41e46a build report
+16ba4bd fix round 1 L-g: bad_file above 60 MP
+726c7a7 fix round 1 L-f: two 500 answers
+10ff89b fix round 1 M1, M3, M4, L-a to L-e
+5db6315 fix round 1 M2: doors in one row from 1024 px
+5d74369 fix round 1: new A11 screenshots
 ```
-
-Not done here: the A11, A13 and A16 screenshot files (orchestrator), push, pull request.
