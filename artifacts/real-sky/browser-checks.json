@@ -1,5 +1,5 @@
 {
- "when": "2026-11-15T18:30:00.047Z",
+ "when": "2026-11-15T18:57:12.908Z",
  "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
@@ -105,7 +105,7 @@
    "label": "Basic, 48° N",
    "lat": 47.6,
    "order": 1,
-   "seconds": 3,
+   "seconds": 5,
    "plan": "Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
    "msg": "Saved for latitude 48° N. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
    "tiles": 60
@@ -114,8 +114,8 @@
    "label": "Standard, 34° S",
    "lat": -33.9,
    "order": 2,
-   "seconds": 8,
-   "plan": "Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
+   "seconds": 18,
+   "plan": "Latitude 34° S, Visible: 60 pictures, about 2.9 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
    "msg": "Saved for latitude 34° S. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
    "tiles": 248
   }
@@ -209,7 +209,7 @@
   {
    "name": "service worker trim keeps the 5 newest pictures, oldest dropped first",
    "ok": true,
-   "detail": "42 → 5"
+   "detail": "43 → 5"
   },
   {
    "name": "service worker drops the recent cache once it is older than the age limit",
@@ -239,7 +239,7 @@
   {
    "name": "a reissued survey: its recent pictures are dropped and the new date is recorded",
    "ok": true,
-   "detail": "8 → 0, {\"at\":1794767456825,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "8 → 0, {\"at\":1794769089643,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "Eye, dark site: about 2,500 stars above the horizon",
@@ -334,7 +334,7 @@
   {
    "name": "save Basic, 48° N: finished",
    "ok": true,
-   "detail": "Saved for latitude 48° N. On an iPhone, add this page to the (3 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)"
+   "detail": "Saved for latitude 48° N. On an iPhone, add this page to the (5 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)"
   },
   {
    "name": "saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest",
@@ -354,12 +354,12 @@
   {
    "name": "a reissued survey: the saved pictures are fetched again in place",
    "ok": true,
-   "detail": "spoiled tile 3 → 48299 bytes, 65 → 65 files, {\"at\":1794767481268,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "spoiled tile 3 → 54011 bytes, 65 → 65 files, {\"at\":1794769119291,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "save Standard, 34° S: finished",
    "ok": true,
-   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (8 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
+   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (18 s; Latitude 34° S, Visible: 60 pictures, about 2.9 MB (92% of the whole s)"
   },
   {
    "name": "Standard, 34° S: about 190 tiles of its own on top",
