@@ -105,8 +105,26 @@ Mover:
 After ranking (leaderboard rows) a mover also has
 `"gaia": {"checked": true, "match": true, "source_id": "4810594479418041856", "sep_arcsec": 0.4, "pm": 8644.0, "g": 8.06}`,
 `"score": 3.2, "reasons": ["…"], "class": "known (Gaia)", "rank": 1`.
+A leaderboard row whose source was also found in a neighbouring tile ends with `"duplicates": ["8546-0007"]`
+(the other copies' ids; see `survey/dedupe.py` below). Rows without duplicates have no such key.
 
 `leaderboard.json`: `{"generated": "ISO time", "n_candidates": int, "candidates": [ranked movers, top 1000]}`
+
+### Cross-tile duplicates (`survey/dedupe.py`, used by `run.publish`)
+A source on a tile boundary can be linked in both tiles. Before ranking, publish finds movers from touching tiles
+whose positions agree within 3″ (plus 3σ of the move, at most 8″) when each is moved with its own motion to the
+midpoint of the two epochs, and whose motions agree (3D velocity difference below the largest of 20 mas/yr, 3σ of
+the combined `pm_err`, 3 % of the motion). The track with more visits (then higher `pm_snr`, then smaller id) is
+kept; the others are left out of the ranking and of every count (`movers`, `unexplained`, `tiles`,
+`n_candidates`), and a limits line says how many were merged. Gaia is still asked about every mover of a tile, so
+the per-tile Gaia cache stays valid. `python pipeline/survey/dedupe.py <out>/tiles` counts duplicates in tile files.
+
+### Promoting a candidate (`survey/promote.py`)
+`python pipeline/survey/promote.py --id <id> [--id …] [--top N [--unexplained]] [--run] [--json]` prints (default)
+or runs the commands that make a candidate a full WANDERERS target: `fetch.py --ra --dec --fov --name`,
+`analyze.py <target id>`, `evidence.py`, then `observatory.html?target=<target id>`. The position is the
+candidate's, moved with its own motion to 2018.5 (midway between AllWISE 2010.5 and SPHEREx 2026.5); the field is
+300″, or 600″/900″ when the 2010–2026 path needs it.
 
 `summary.json`:
 ```json
@@ -124,7 +142,13 @@ unexplained only, min pm, red only; sort), and for a selected candidate: its NEO
 (IRSA SPHEREx HiPS `https://irsa.ipac.caltech.edu/data/hips/SPHEREx/spherex_allsky_cube` and AllWISE colour
 `https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/RGB-W4-W2-W1`), its numbers and reasons, and "investigate"
 links: `observatory.html?ra=…&dec=…` (sky map), Through Webb, Backyard Worlds (https://www.zooniverse.org/projects/marckuchner/backyard-worlds-planet-9),
-copy coordinates. Same brand/theme rules as the other pages (theme bootstrap, `brand.css`, logo, theme toggle,
+copy coordinates. Discovery tools (`app/surveytools.js`): filters for min visits, min motion S/N, hiding tile-edge /
+crowded / saturated / likely-artefact rows, a "high-confidence" preset (≥ 12 visits, S/N ≥ 10, all four hidden) and
+a sort menu, all kept in the address (`class, minpm, red, visits, snr, hide, q, tile, sort, dir`, plus
+`preset=high` in a link); CSV and JSON download of the filtered, sorted list (Blob, no server); links to IRSA
+Finder Chart, Aladin Lite and the Legacy Surveys viewer at today's predicted position, SIMBAD and VizieR at J2000
+and Gaia DR3 in VizieR at 2016.0; the candidate's position in 2000, 2016, today and 2030; the `promote.py` command.
+Same brand/theme rules as the other pages (theme bootstrap, `brand.css`, logo, theme toggle,
 Day/Night tokens), mobile-friendly at 375 px with no sideways scroll, and every element id the script uses must exist.
 
 ## Rules for everyone
