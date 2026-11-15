@@ -20,13 +20,27 @@ function fakeElement(id) {
     addEventListener: (type, fn) => (listeners[type] = listeners[type] || []).push(fn),
     dispatch(type, ev = {}) { for (const fn of listeners[type] || []) fn({ target: this, preventDefault() {}, ...ev }); },
     click() { if (this.onclick) return this.onclick({ target: this }); },
-    querySelectorAll: () => [], querySelector: () => null, setAttribute() {}, removeAttribute() {}, focus() {}, blur() {},
+    querySelectorAll(sel) {   // <button data-*> written through innerHTML come back as fake elements
+      if (sel !== "button") return [];
+      if (this._qsFor !== this.innerHTML) {
+        this._qsFor = this.innerHTML;
+        this._qs = [...this.innerHTML.matchAll(/<button([^>]*)>/g)].map((m) => Object.assign(fakeElement(),
+          { dataset: Object.fromEntries([...m[1].matchAll(/data-([a-z]+)="([^"]*)"/g)].map((d) => [d[1], d[2]])) }));
+      }
+      return this._qs;
+    },
+    querySelector() { return this.querySelectorAll("button")[0] || null; },
+    setAttribute() {}, removeAttribute() {}, focus() {}, blur() {},
     setPointerCapture() {}, play: () => Promise.resolve(), remove() {}, appendChild() {},
-    getContext: () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })), set: (t, k, v) => ((t[k] = v), true) }),
+    texts: [],   // canvas fillText calls: [text, x, y]
+    getContext() {
+      const texts = this.texts, base = { fillText: (t, x, y) => texts.push([String(t), x, y]), measureText: (t) => ({ width: String(t).length * 7 }) };
+      return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })), set: (t, k, v) => ((t[k] = v), true) });
+    },
   };
 }
 
-function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles" } = {}) {
+function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles", pathView } = {}) {
   const els = {}, timers = [], windowListeners = {}, rafs = [];
   let clock = 0;
   const $ = (id) => els[id] || (els[id] = fakeElement(id));
@@ -56,11 +70,12 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   }
   const introMod = { playIntro: async (o) => { await null; o.onDone({ lat: 47.61, lon: -122.33 }); }, earthFacts: () => ({ distanceAU: 1, speedKms: 30 }) };
   const importIntro = () => (intro === "ok" ? Promise.resolve(introMod) : Promise.reject(new Error("CDN unreachable")));
-  const StarSearch = { attach() {}, load: () => Promise.resolve([]), search: () => [], hms: (d) => `${d}h`, dms: (d) => `${d}d`, describe: () => [] };
+  const picked = {};
+  const StarSearch = { attach(input, list, onPick) { picked.onPick = onPick; }, load: () => Promise.resolve([]), search: () => [], hms: (d) => `${d}h`, dms: (d) => `${d}d`, describe: () => [] };
   const navigator = { geolocation, vibrate: () => true, mediaDevices: { getUserMedia: () => Promise.reject(new Error("no camera")) } };
   const env = {
     window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
-    Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: undefined,
+    Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: pathView,
     getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     DeviceOrientationEvent: undefined, innerWidth: 390, innerHeight: 844, console: { warn() {}, log() {} },
@@ -76,7 +91,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const runTimers = (maxMs = Infinity) => { for (const t of timers.splice(0)) if (t.fn && t.ms <= maxMs) t.fn(); };
   const flush = () => new Promise((r) => setImmediate(r));
   const frame = () => { for (const fn of rafs.splice(0)) fn(); };   // draw one animation frame
-  return { $, els, dirs, body, window, windowListeners, timers, runTimers, flush, frame, ...window.__wanderers, location: loc };
+  return { $, els, dirs, body, window, windowListeners, timers, runTimers, flush, frame, pickStar: (st) => picked.onPick(st), ...window.__wanderers, location: loc };
 }
 // feed iPhone-style events: camera pointing at az/alt (compass heading = az, gyro frame offset 137 deg)
 function aimPhone(c, az, alt, n = 60) {
@@ -241,4 +256,32 @@ test("telemetry shows the time-zone city with every underscore replaced", async 
   await c.$("go").onclick();
   c.frame();
   assert.match(c.$("telemetry").innerHTML, /Port of Spain/);
+});
+
+test("Recalibrate without motion sensors explains why instead of opening a calibration that never moves", async () => {
+  const c = loadCompass({ intro: "fail" });
+  await c.$("go").onclick();
+  c.runTimers(300);                                // no sensor events: drag mode
+  assert.equal(c.$("calib").hidden, true);
+  c.$("recalBtn").click();
+  assert.equal(c.$("calib").hidden, true, "no calibration sheet without sensors");
+  assert.equal(c.F.flat, null);
+  assert.match(c.$("guideSub").textContent, /needs a phone's motion sensors/);
+  aimPhone(c, 100, 10);                            // with sensors it opens as before
+  c.$("recalBtn").click();
+  assert.equal(c.$("calib").hidden, false);
+});
+
+test("picking a target from the list after a star search drops the stale ?star=", async () => {
+  const c = loadCompass({ intro: "fail", search: "?target=found&star=Sirius" });
+  await c.flush(); await c.flush();
+  c.pickStar({ name: "Vega", ra: 279.23473, dec: 38.78369, alt: [] });
+  assert.equal(c.location.searchParams.get("star"), "Vega");
+  const btn = (id) => c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === id);
+  btn("r_dra").click();
+  assert.equal(c.location.searchParams.get("target"), "r_dra");
+  assert.equal(c.location.searchParams.get("star"), null, `URL ${c.location.search}`);
+  btn("found").click();                            // the searched star's own chip keeps its name
+  assert.equal(c.location.searchParams.get("target"), "found");
+  assert.equal(c.location.searchParams.get("star"), "Vega");
 });
