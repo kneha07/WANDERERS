@@ -1,0 +1,53 @@
+# Counts the community's classification votes (GitHub issues labelled "classification", opened from
+# .github/ISSUE_TEMPLATE/classification.yml) into app/data/classifications.json and commits it to main, but only when
+# a vote changed. pipeline/aggregate_votes.py is deterministic, so an unchanged set of issues writes the same bytes.
+# The GitHub Pages copy of the site is a fork: it shows a new snapshot only after it is synced and redeployed
+# (README, "Community classifications"). Until then the page itself fetches newer votes live.
+#
+# Safety: issue text is never put into a shell command. The script reads it as JSON data from gh.
+name: classifications
+on:
+  issues:
+    types: [opened, edited, closed, reopened, deleted, labeled, unlabeled, transferred]
+  schedule:
+    - cron: "23 */6 * * *"   # every six hours, in case an issue event was missed
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: classifications
+  cancel-in-progress: false
+
+jobs:
+  aggregate:
+    name: Count classification votes
+    # issue events: only votes (or a vote that just lost its label)
+    if: >-
+      github.event_name != 'issues' ||
+      contains(github.event.issue.labels.*.name, 'classification') ||
+      github.event.label.name == 'classification'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # commit app/data/classifications.json
+      issues: read      # list the votes
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Read the classification issues
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: >-
+          gh issue list --repo "$GITHUB_REPOSITORY" --label classification --state all --limit 5000
+          --json number,title,body,author,createdAt,labels > "$RUNNER_TEMP/issues.json"
+      - name: Count them
+        run: python pipeline/aggregate_votes.py "$RUNNER_TEMP/issues.json" --out app/data/classifications.json
+      - name: Commit only when the counts changed
+        run: |
+          if git diff --quiet -- app/data/classifications.json; then echo "No change in the votes."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898099+github-actions[bot]@users.noreply.github.com"
+          git add app/data/classifications.json
+          git commit -m "Community classifications: update the vote counts"
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -588,10 +588,47 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 | ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
 | IRSA HiPS mirrors of 2MASS and DSS colour | sky underneath the Webb view |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
+| GitHub issues labelled `classification` in kneha07/WANDERERS (public votes) | community classifications (`app/data/classifications.json`, below) |
 
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
 turned off, the conservative bad-pixel flag set from the SPHEREx Explanatory Supplement, 3-pixel aperture
 photometry with local background, and per-pixel solid angle from each image's WCS.
+
+### Community classifications (citizen science)
+
+Every target in the explorer and every Sky Survey candidate has a "Classify" card: Moving, Variable, Stationary,
+Artifact or Unsure (`app/classify.js`, `app/classify.css`). The site is static, so votes travel through GitHub:
+
+1. Your vote is saved in your browser and counted on the page at once, marked "incl. yours".
+2. **Send my vote** opens the issue form `.github/ISSUE_TEMPLATE/classification.yml` in `kneha07/WANDERERS`, already
+   filled in (object id, kind, class, title `[classify] <id>: <class>`). It needs a free GitHub account and creates a
+   **public** issue with your vote and your GitHub name. The form labels it `classification`.
+3. `pipeline/aggregate_votes.py` counts those issues into `app/data/classifications.json`: per object the counts, the
+   number of voters, a consensus (at least 3 voters and 60% agreeing) and each voter's latest vote. One vote per GitHub
+   user per object; the newest wins. Unknown ids, unknown classes, pull requests and broken issues are skipped and counted
+   by reason. The output has no clock in it, so the same issues always give the same file.
+4. `.github/workflows/classifications.yml` runs it on issue events with that label, every six hours and by hand
+   (`workflow_dispatch`), and commits `app/data/classifications.json` to `main` only when a count changed.
+5. On the hosted site the page also asks GitHub's public search API (no key) for votes newer than the snapshot,
+   skips issue numbers the snapshot already counted, and says nothing if GitHub refuses (it allows 10 searches a minute
+   per visitor). Local copies (`localhost`) never call it; add `?votes=live` to try it, or `?votes=snapshot` to turn it off.
+
+```bash
+gh issue list --repo kneha07/WANDERERS --label classification --state all --limit 5000 \
+  --json number,title,body,author,createdAt,labels > issues.json
+python pipeline/aggregate_votes.py issues.json          # writes app/data/classifications.json
+```
+
+**GitHub Pages fork:** `https://rajryadav4.github.io/wanderers/` is served from a fork, which does not receive the
+workflow's commits by itself. Sync the fork with `kneha07/WANDERERS` `main` and redeploy Pages to publish a new snapshot;
+until then the page adds newer votes live, as above.
+
+**One-time setup in `kneha07/WANDERERS`:** create the `classification` label (issue forms apply only labels that
+exist), allow GitHub Actions to write (Settings → Actions → General → Workflow permissions → Read and write, or let the
+workflow's `github-actions[bot]` push past any branch protection on `main`), and merge the form and workflow to `main`
+(GitHub uses issue forms and issue-event workflows from the default branch only). To remove a spam vote, label the
+issue `invalid` or `spam`; the next run drops it. Candidate ids come from the current `leaderboard.json`, so a vote for
+a candidate that a later survey run renumbers or drops is no longer counted.
 
 ## Honest limits
 
@@ -639,9 +676,11 @@ the data providers.
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
             star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
             make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+            aggregate_votes.py (community classifications)
 app/        index.html (home) · observatory.html (console) · compass.html (phone)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
+            classify.js · classify.css (community classifications)
             starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
             data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
 server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
