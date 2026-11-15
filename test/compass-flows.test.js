@@ -268,10 +268,11 @@ test("zoom: two fingers pinch the view, and the finger that stays down does not 
   assert.ok(Math.abs(c.S.manual.az - (180 - 70 / c.S.zoom)) < 1e-9);
 });
 
-// a phone page with a fixed time and place, so frames drawn at high zoom do not move the view
+// a phone page with a fixed time and place, so frames drawn at high zoom do not move the view.
+// Aim below 38 deg up: above that, an iPhone's compass heading means the top of the phone, not the camera.
 const AT = "2026-11-15T06:00:00Z", HERE = { lat: 47.6, lon: -122.3 };
-async function phoneAt(az, alt, more = "") {
-  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}${more}` });
+async function phoneAt(az, alt) {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}` });
   await c.flush();
   await c.$("go").onclick();
   aimPhone(c, az, alt);
