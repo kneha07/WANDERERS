@@ -437,10 +437,35 @@ node --test test/frameinfo.test.js   # includes checks on every committed target
 ## Explore any patch (live mode)
 
 Open <http://localhost:8000/explore/>, type any star name or sky position, and see its SPHEREx images as a blink
-video, fetched live from IRSA. It needs the live API (`backend/`, port 8001) next to `node server.js`, and a build
-of `web/`. The coordinate box links to it for positions outside the five missions.
-Double-click `start.cmd` (Windows) or `start.command` (macOS), or run `node start.js`.
-Setup and details: [docs/blink/README.md](docs/blink/README.md).
+video, fetched live from IRSA. The Data tab starts with "About this star": three sentences from the catalogs (CDS
+Sesame, SIMBAD), our own SPHEREx measurement and one quoted Wikipedia sentence. The coordinate box links to the
+explorer for positions outside the five missions.
+
+```
+backend/   FastAPI live API (port 8001): spherex.py (frames), about.py (About this star), app.py (routes)
+web/       React + TypeScript explorer, built to web/dist, served by server.js under /explore/
+start.js   one-click start: backend/.venv, root .venv (on-demand fields), web build, both servers
+docs/blink/   README.md (setup, limits) · api.md (the API contract)
+```
+
+Start everything with `node start.js`, or double-click `start.cmd` (Windows) or `start.command` (macOS). By hand:
+
+| Step | macOS / Linux | Windows |
+|---|---|---|
+| Python packages (once) | `python3 -m venv backend/.venv` then `backend/.venv/bin/python -m pip install -r backend/requirements.txt` | `py -3 -m venv backend\.venv` then `backend\.venv\Scripts\python -m pip install -r backend\requirements.txt` |
+| Live API | `backend/.venv/bin/python -m uvicorn backend.app:app --port 8001` | `backend\.venv\Scripts\python -m uvicorn backend.app:app --port 8001` |
+| Web app | `cd web && npm ci && npm run build`, then `node server.js` | the same |
+
+Tests of the live mode (from the repo root unless noted):
+
+```bash
+backend/.venv/bin/python -m pytest backend -q     # Windows: backend\.venv\Scripts\python -m pytest backend -q
+node --test test/*.test.js                         # server.js routes, the live proxy, the teammates' modules
+cd web && npm test && npm run build                # the explorer's pure functions, then a type check and build
+node web/scripts/verify-ui.mjs http://localhost:5173/explore/   # browser checks (needs npm run dev in web/)
+```
+
+Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). API: [docs/blink/api.md](docs/blink/api.md).
 
 ## Data (all public)
 
