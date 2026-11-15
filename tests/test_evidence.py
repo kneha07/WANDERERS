@@ -105,6 +105,27 @@ class EvidenceCardTests(unittest.TestCase):
         self.assertEqual(evidence.card(target(motion=motion()))['numbers'][0]['label'], 'measured motion')
 
 
+class ShippedExplanationTests(unittest.TestCase):
+    """app/data/<id>/explain.json is written once (pipeline/explain.py); it must not contradict the current card."""
+
+    def test_quoted_motion_and_years_match_the_data(self):
+        import json
+        import re
+        data = MODULE.parents[1] / 'app' / 'data'
+        for f in sorted(data.glob('*/explain.json')):
+            t = json.loads((f.parent / 'target.json').read_text(encoding='utf-8'))
+            e = json.loads(f.read_text(encoding='utf-8'))
+            text = ' '.join([e['summary']] + [qa['a'] for qa in e['qa']])
+            m = t.get('motion') or {}
+            ok = {f"{m[k]:.2f}" for k in ('measured_arcsec_per_yr', 'expected_arcsec_per_yr') if k in m}
+            for rate in re.findall(r'(\d+\.\d+)\s*(?:″|arcsec(?:onds)?)\s*(?:/|per )\s*(?:yr|year)', text):
+                self.assertIn(rate, ok, f'{f.parent.name}: {rate}″/yr')
+            if m:
+                last = int(m['to_year'])
+                for y in re.findall(r'\b(20[0-9]{2})\b', text):
+                    self.assertLessEqual(int(y), last, f'{f.parent.name}: {y}')
+
+
 class InsightTests(unittest.TestCase):
     def facts(self, **changes):
         return {f['id']: f for f in evidence.insights(target(**changes))['facts']}
