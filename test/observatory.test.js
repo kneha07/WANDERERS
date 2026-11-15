@@ -176,6 +176,34 @@ test("Star database: a slow learnt path for the previous star is not drawn under
   assert.deepEqual(p.errors, []);
 });
 
+test("Star database: ?star= accepts a name as well as a key", async (t) => {
+  const p = open("?target=barnard");
+  t.after(p.close);
+  await p.settle(150);
+  p.window.WANDERERS.selectTab("stars");
+  for (const [q, name] of [["Vega", "Vega"], ["alpha lyrae", "Vega"], ["Barnard's Star", "Barnard&#39;s Star"], ["hip87937", "Barnard&#39;s Star"]]) {
+    p.window.StarsTab.open(q);
+    await p.settle(250);
+    assert.match(p.$("starDetail").innerHTML, new RegExp(`<h3>${name}</h3>`), q);
+    assert.match(search(p).get("star"), /^[a-z0-9_]+$/, `${q}: the link keeps the key`);
+  }
+  p.window.StarsTab.open("Not A Star");
+  await p.settle(100);
+  assert.equal(p.$("starMsg").textContent, "That star is not in the database.");
+});
+
+test("Star database: the 'no star by that name' message goes once a search finds something", async (t) => {
+  const p = open("?target=barnard");
+  t.after(p.close);
+  await p.settle(150);
+  const type = async (v) => { p.$("starQ").value = v; p.$("starQ").dispatchEvent({ type: "input", target: p.$("starQ") }); await p.settle(150); };
+  await type("zzzzqq");
+  assert.match(p.$("starMsg").textContent, /No star by that name/);
+  await type("Vega");
+  assert.doesNotMatch(p.$("starMsg").textContent, /No star by that name/);
+  assert.doesNotMatch(p.$("starPredMsg").textContent, /node server|pipeline/);
+});
+
 // ---------- the coordinate box ----------
 function typeCoords(p, ra, dec) {
   p.$("raIn").value = ra; p.$("decIn").value = dec;
