@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 // One-click boot for WANDERERS and its live "Explore any patch" mode.
-//   node start.js [--precompute]       (or double-click start.cmd on Windows, start.command on macOS)
-// 1. Sets up backend/.venv and web/ when they are missing or out of date.
+//   node start.js [--precompute] [--no-open]   (or double-click start.cmd on Windows, start.command on macOS)
+// 1. Sets up backend/.venv, the root .venv (on-demand fields) and web/ when they are missing or out of date.
 // 2. Starts the live SPHEREx API (port 8001) and server.js (port 8000), or reuses ours if they already run.
 // 3. Waits for both, then opens http://localhost:8000. Ctrl+C (or closing the window) stops both.
 // Needs Node.js and Python 3.11+. No npm packages beyond web/'s own.
+// PORT and LIVE_PORT (default 8000 and 8001) let a second copy run next to the first one.
 const { spawn, spawnSync } = require("child_process"), fs = require("fs"), path = require("path");
 const http = require("http"), net = require("net"), readline = require("readline");
 const ROOT = __dirname, WEB = path.join(ROOT, "web"), WIN = process.platform === "win32";
 const VENV_PY = path.join(ROOT, "backend", ".venv", WIN ? "Scripts\\python.exe" : "bin/python");
-const APP_URL = "http://localhost:8000", API_HEALTH = "http://127.0.0.1:8001/api/health";
+// The teammates' on-demand fields (fields.js -> pipeline/fetch.py) need their own packages in the root .venv.
+const PIPE_PY = path.join(ROOT, ".venv", WIN ? "Scripts\\python.exe" : "bin/python");
+const PIPE_REQ = path.join(ROOT, "pipeline", "requirements.txt");
+const PORT = Number(process.env.PORT) || 8000, LIVE_PORT = Number(process.env.LIVE_PORT) || 8001;
+const APP_URL = `http://localhost:${PORT}`, API_HEALTH = `http://127.0.0.1:${LIVE_PORT}/api/health`;
 const kids = [];
 let stopping = false;
 
@@ -57,13 +62,13 @@ const listening = (port) => new Promise((ok) => {
 });
 
 async function isOurs(port) {
-  if (port === 8001) { const r = await get(API_HEALTH); return !!r && r.status === 200 && r.body.includes('"ok"'); }
-  const [h, home] = await Promise.all([get("http://127.0.0.1:8000/api/health"), get("http://127.0.0.1:8000/")]);
+  if (port === LIVE_PORT) { const r = await get(API_HEALTH); return !!r && r.status === 200 && r.body.includes('"ok"'); }
+  const [h, home] = await Promise.all([get(`http://127.0.0.1:${PORT}/api/health`), get(`http://127.0.0.1:${PORT}/`)]);
   return !!h && h.body.trim() === "ok" && !!home && home.body.includes("WANDERERS");
 }
 
-function start(name, cmd, argv) {
-  const p = spawn(cmd, argv, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+function start(name, cmd, argv, env = process.env) {
+  const p = spawn(cmd, argv, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
   for (const s of [p.stdout, p.stderr]) readline.createInterface({ input: s }).on("line", (l) => console.log(`[${name}] ${l}`));
   p.on("exit", (code) => { if (!stopping) { console.log(`[${name}] stopped (exit ${code}); stopping the rest.`); shutdown(1); } });
   kids.push(p);
@@ -103,6 +108,16 @@ function openBrowser(url) {
     run(py[0], [...py[1], "-m", "venv", path.join("backend", ".venv")]);
     run(VENV_PY, ["-m", "pip", "install", "-r", path.join("backend", "requirements.txt")]);
   }
+  // The root .venv: without it a field job for new coordinates fails ("No module named 'pyvo'"). Checked by
+  // importing pyvo, so a broken or half-done install is repaired on the next start.
+  if (!fs.existsSync(PIPE_REQ)) console.log("\n(No pipeline/requirements.txt: skipping the root .venv; on-demand fields are off.)");
+  else if (!fs.existsSync(PIPE_PY) || spawnSync(PIPE_PY, ["-c", "import pyvo"], { stdio: "ignore" }).status !== 0) {
+    step("Setting up the Python environment for on-demand fields (.venv, pipeline/requirements.txt), once");
+    const py = fs.existsSync(PIPE_PY) ? [PIPE_PY, []] : findPython();
+    if (!py) console.log("(Python 3.11 or newer is needed for on-demand fields; the rest works without it.)");
+    else if (py[0] === PIPE_PY || run(py[0], [...py[1], "-m", "venv", ".venv"], { soft: true }))
+      run(PIPE_PY, ["-m", "pip", "install", "-r", PIPE_REQ], { soft: true });
+  }
   if (!fs.existsSync(path.join(WEB, "node_modules"))) {
     step("Installing the web app packages (web/node_modules), once");
     run("npm", ["ci"], { cwd: WEB });
@@ -119,11 +134,14 @@ function openBrowser(url) {
   }
 
   step("Starting the servers");
-  for (const [port, name, cmd, argv] of [
-    [8001, "api", VENV_PY, ["-m", "uvicorn", "backend.app:app", "--port", "8001"]],
-    [8000, "web", process.execPath, [path.join(ROOT, "server.js")]],
+  // fields.js looks only for .venv/bin/python, so on Windows it is told where the root venv's python is.
+  const webEnv = { ...process.env, PORT: String(PORT), WANDERERS_LIVE: `http://127.0.0.1:${LIVE_PORT}` };
+  if (fs.existsSync(PIPE_PY)) Object.assign(webEnv, { WANDERERS_PYTHON: process.env.WANDERERS_PYTHON || PIPE_PY, WANDERERS_PY: process.env.WANDERERS_PY || PIPE_PY });
+  for (const [port, name, cmd, argv, env] of [
+    [LIVE_PORT, "api", VENV_PY, ["-m", "uvicorn", "backend.app:app", "--port", String(LIVE_PORT)]],
+    [PORT, "web", process.execPath, [path.join(ROOT, "server.js")], webEnv],
   ]) {
-    if (!(await listening(port))) start(name, cmd, argv);
+    if (!(await listening(port))) start(name, cmd, argv, env);
     else if (await isOurs(port)) console.log(`Port ${port}: our server already runs; reusing it.`);
     else {
       console.error(`Port ${port} is in use by another program. Stop that program (or free the port), then run start.js again.`);
@@ -132,7 +150,7 @@ function openBrowser(url) {
   }
 
   const t0 = Date.now();
-  while (!((await get(API_HEALTH)) && (await get("http://127.0.0.1:8000/")))) {
+  while (!((await get(API_HEALTH)) && (await get(`http://127.0.0.1:${PORT}/`)))) {
     if (Date.now() - t0 > 60000) {
       console.error("The servers did not answer within 60 s. Read the [api] and [web] lines above for the reason.");
       shutdown(1);
@@ -140,6 +158,6 @@ function openBrowser(url) {
     await sleep(500);
   }
   console.log(`\nReady: ${APP_URL}  (live explorer: ${APP_URL}/explore/)`);
-  openBrowser(APP_URL);
+  if (!process.argv.includes("--no-open")) openBrowser(APP_URL);
   if (kids.length) console.log("Press Ctrl+C to stop.");
 })();

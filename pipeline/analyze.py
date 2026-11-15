@@ -360,6 +360,18 @@ def analyze(tid):
             name = f"{ch}_wise2010.png"; save_png(img, out / name)
             fr = {"year": 2010.5, "label": "WISE 2010", "mission": "WISE", "png": name, "img": img}
             frames[ch].append(fr); flip[ch].append(fr)
+        # NEOWISE: one stacked image per sky visit, Dec 2013 - 2024, same band (pipeline/neowise.py)
+        band = {"w2": "w2", "w1": "w1"}.get(ch)
+        for nf in sorted((CACHE / tid / "neowise").glob(f"{band}_*.fits")) if band else []:
+            h = fits.open(nf)[0]
+            img, _ = reproject_interp((h.data, WCS(h.header).celestial), gw, shape_out=(npix, npix))
+            if not np.isfinite(img).any():
+                continue
+            yr = float(Time(h.header["MJD-OBS"], format="mjd").jyear)
+            name = f"{ch}_neowise_{nf.stem.split('_')[1]}.png"; save_png(img, out / name)
+            fr = {"year": yr, "label": f"NEOWISE {Time(yr, format='jyear').datetime:%b %Y}", "mission": "NEOWISE",
+                  "png": name, "img": img, "n_images": int(h.header.get("NFRAMES", 0))}
+            frames[ch].append(fr); flip[ch].append(fr)
         for i, v in enumerate(visits):
             sel = sorted([s for s in spx if visit_of(s["year"]) == i and spec["spx"](s)], key=lambda s: s["year"])
             if not sel:
@@ -445,7 +457,7 @@ def analyze(tid):
         f["detected"] = snr >= 5            # only measure a position where the object is clearly there
         f["snr"] = round(snr, 1)
         c = centroid(f["img"], float(px), float(py), r=rad) if f["detected"] else None
-        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if f["mission"] == "WISE" else None
+        hole = saturated_core(f["img"], float(px), float(py), rad + 2) if f["mission"] in ("WISE", "NEOWISE") else None
         if hole is not None:                # very bright star: the archive blanks its saturated core,
             c, f["detected"], f["saturated_core"] = hole, True, True   # so the hole's centre is its position
         if c is None:

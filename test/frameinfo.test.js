@@ -58,19 +58,23 @@ test("visits are numbered and their images added up", () => {
 
 test("real data: WISE 0855 (faint, partly flagged)", real, () => {
   const d = FI.describe(load("wise0855"), "w2");
-  assert.equal(d.rows.length, 11);                        // flipbook frames after the wanderers data refresh
+  assert.equal(d.rows.length, 32);                        // WISE 2010 + 21 NEOWISE visits (2014-2024) + 10 SPHEREx frames
   assert.equal(d.rows[0].source, "AllWISE atlas");
-  assert.equal(d.rows[1].seen, "not detected");           // the faintest SPHEREx frame (image set fetched 2026-11-15, #41)
-  assert.equal(d.rows[1].images, 2);
-  assert.ok(d.rows.slice(2).every((r) => r.seen === "seen"));
-  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.pct, d.quality.level], [41, 150, 27, "warn"]);
+  const neo = d.rows.slice(1, 22);
+  assert.ok(neo.every((r) => r.source === "NEOWISE single exposures" && r.seen === "seen"), "every NEOWISE visit sees it");
+  assert.equal(d.rows[22].source, "SPHEREx");
+  assert.equal(d.rows[22].seen, "not detected");          // May 2025, one image, 2.8 sigma
+  assert.equal(d.rows[22].images, 1);
+  assert.ok(d.rows.slice(23).every((r) => r.seen === "seen"));
+  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.pct, d.quality.level], [41, 158, 26, "warn"]);
   assert.equal(d.visits.length, 3);
 });
 
 test("real data: Barnard's Star (too bright: every measurement flagged, no detection data)", real, () => {
   const d = FI.describe(load("barnard"), "w2");
-  assert.equal(d.rows.length, 11);                        // flipbook frames carry their own detection check now
-  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.level], [150, 150, "bad"]);   // image set of 2026-11-15 (#41)
+  assert.equal(d.rows.length, 30);                        // WISE 2010 + 21 NEOWISE visits + 8 SPHEREx frames, each with its own detection check
+  assert.equal(d.rows.filter((r) => r.source === "NEOWISE single exposures").length, 21);
+  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.level], [188, 188, "bad"]);
   assert.match(d.quality.text, /None were usable/);
 });
 

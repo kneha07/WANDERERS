@@ -1,0 +1,246 @@
+"""get_frames and its cache with the network faked (IRSA SIA, S3, Gaia): no network, no real FITS files."""
+import base64
+import io
+import json
+import os
+import time
+
+import numpy as np
+import pytest
+from fastapi import HTTPException
+from PIL import Image
+
+from backend import spherex
+
+DAY = 86400
+REAL_GAIA_FIELD = spherex.gaia_field
+
+
+class FakeSky:
+    """Stands in for IRSA SIA, the S3 images and Gaia. Each image is a fixed star at the view center whose brightness
+    depends on the detector (as in SPHEREx: each detector sees a star at a different wavelength)."""
+
+    def __init__(self, epochs, bright=None):
+        self.epochs = epochs  # [(mjd, ["D1", "D2"]), ...]
+        self.bright = bright or {}
+        self.fail = set()  # urls that raise a network error
+        self.builds = 0
+
+    def query_images(self, center, stats=None):
+        self.builds += 1
+        return [{"mjd": mjd + 0.01 * k, "detector": d, "url": f"{d}@{mjd}", "em_min": 1.0, "em_max": 2.0}
+                for mjd, dets in self.epochs for k, d in enumerate(dets)]
+
+    def read_cutout(self, url, ra, dec):
+        if url in self.fail:
+            raise OSError("S3 connection reset")
+        n = ra.shape[0]
+        yy, xx = np.indices((n, n))
+        c = (n - 1) / 2
+        return self.bright.get(url.split("@")[0], 50.0) * np.exp(-((xx - c) ** 2 + (yy - c) ** 2) / 2.0)  # no noise
+
+
+@pytest.fixture
+def sky(tmp_path, monkeypatch):
+    fake = FakeSky([(60000.0, ["D1", "D2"]), (60200.0, ["D1", "D2"])])
+    monkeypatch.setattr(spherex, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(spherex, "query_images", fake.query_images)
+    monkeypatch.setattr(spherex, "read_cutout", fake.read_cutout)
+    monkeypatch.setattr(spherex, "gaia_field", lambda center, radius: [])
+    monkeypatch.setattr(spherex.time, "sleep", lambda s: None)
+    return fake
+
+
+def frames(**kw):
+    return spherex.get_frames("10 20", fov=2, per_group=2, **kw)
+
+
+def age_cache(tmp_path, seconds):
+    for p in tmp_path.glob("*.json"):
+        t = time.time() - seconds
+        os.utime(p, (t, t))
+
+
+def test_a_complete_build_is_cached_for_7_days_then_rebuilt(sky, tmp_path):
+    assert frames()["cached"] is False
+    again = frames()
+    assert (again["cached"], again["quality"]["cache_age_s"] <= 2, sky.builds) == (True, True, 1)
+    age_cache(tmp_path, 6 * DAY)
+    assert frames()["quality"]["cache_age_s"] == pytest.approx(6 * DAY, abs=5)
+    age_cache(tmp_path, 8 * DAY)  # QR3 adds surveys every week: an old answer can miss them
+    assert (frames()["cached"], sky.builds) == (False, 2)
+
+
+def test_a_build_with_failed_images_is_kept_for_one_hour_only(sky, tmp_path):
+    sky.fail = {"D2@60200.0"}
+    first = frames()
+    assert (first["n_failed"], first["cached"]) == (1, False)
+    assert any("not kept" in n for n in first["notes"])
+    assert frames()["cached"] is True  # a reload within the hour does not rebuild
+    age_cache(tmp_path, 2 * 3600)
+    sky.fail = set()
+    assert (frames()["n_failed"], sky.builds) == (0, 2)
+
+
+def test_an_old_answer_is_served_with_a_note_when_irsa_is_down(sky, tmp_path):
+    frames()
+    age_cache(tmp_path, 8 * DAY)
+    def down(center, stats=None):
+        raise HTTPException(502, "IRSA did not answer")
+    spherex.query_images = down  # monkeypatch restores the fake's original at teardown
+    old = frames()
+    assert old["cached"] is True
+    assert any("IRSA did not answer" in n for n in old["notes"])
+
+
+def test_cache_write_gives_up_quietly_when_windows_keeps_the_file_locked(tmp_path, monkeypatch):
+    # Windows refuses os.replace while another request reads the file: PermissionError(13).
+    def locked(src, dst):
+        raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+    monkeypatch.setattr(spherex.os, "replace", locked)
+    monkeypatch.setattr(spherex.time, "sleep", lambda s: None)
+    assert spherex.write_json(tmp_path / "a.json", {"x": 1}) is False
+    assert os.listdir(tmp_path) == []  # no .tmp file left behind
+
+
+def test_cache_write_retries_a_short_lock(tmp_path, monkeypatch):
+    real, calls = os.replace, []
+    def busy_twice(src, dst):
+        calls.append(dst)
+        if len(calls) <= 2:
+            raise PermissionError(13, "locked")
+        real(src, dst)
+    monkeypatch.setattr(spherex.os, "replace", busy_twice)
+    monkeypatch.setattr(spherex.time, "sleep", lambda s: None)
+    assert spherex.write_json(tmp_path / "a.json", {"x": 1}) is True
+    assert json.loads((tmp_path / "a.json").read_text()) == {"x": 1}
+    assert os.listdir(tmp_path) == ["a.json"]
+
+
+def pixels(png):
+    return np.asarray(Image.open(io.BytesIO(base64.b64decode(png.split(",")[1]))))
+
+
+def test_blink_and_difference_compare_only_detectors_that_both_frames_have(sky):
+    # Barnard's Star case: the first survey has D1 and D2, the last only D2. A fixed star is fainter in D1, so a
+    # stack of all detectors makes it brighten from frame to frame, and the difference shows a false residual.
+    sky.epochs = [(60000.0, ["D1", "D2"]), (60200.0, ["D2"])]
+    sky.bright = {"D1": 10.0, "D2": 100.0}
+    r = frames()
+    assert [f["detectors"] for f in r["frames"]] == [["D1", "D2"], ["D2"]]
+    assert [f["stack_detectors"] for f in r["frames"]] == [["D2"], ["D2"]]
+    assert (pixels(r["frames"][0]["png"]) == pixels(r["frames"][1]["png"])).all()  # the fixed star does not blink
+    assert r["difference"]["detectors"] == ["D2"]
+    assert set(np.unique(pixels(r["difference"]["png"]))) == {128}  # gray everywhere: no residual
+    assert any("only D2" in n for n in r["notes"])
+
+
+def test_without_a_detector_in_every_frame_each_frame_stacks_all_its_detectors_and_says_so(sky):
+    sky.epochs = [(60000.0, ["D1", "D2"]), (60100.0, ["D3"]), (60200.0, ["D1"])]
+    r = frames()
+    assert [f["stack_detectors"] for f in r["frames"]] == [["D1", "D2"], ["D3"], ["D1"]]
+    assert r["difference"]["detectors"] == ["D1"]  # the first and the last frame share D1
+    assert any("No detector is in every frame" in n for n in r["notes"])
+
+
+def test_typed_coordinates_without_a_source_say_no_motion_is_known_not_no_source(sky):
+    # A typed RA/Dec has no proper motion, so a fast mover is not at the typed position: an empty fit there means
+    # "no predicted position", not "nothing above 5 sigma".
+    sky.bright = {"D1": 0.0, "D2": 0.0}
+    r = frames()
+    assert [(f["centroid"], f["notes"]) for f in r["frames"]] == [(None, ["no proper motion known: no predicted position"])] * 2
+
+
+def test_a_source_at_typed_coordinates_is_still_measured(sky):
+    r = frames()
+    assert all(f["centroid"] and f["notes"] == [] for f in r["frames"])
+
+
+class Response:
+    def __init__(self, text):
+        self.ok, self.status_code, self.text = True, 200, text
+
+
+def test_a_failed_gaia_query_costs_one_short_wait_then_the_overlay_stays_off_for_10_minutes(sky, monkeypatch):
+    calls, now = [], [time.time()]
+    def esa(url, params=None, timeout=None, **kw):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise spherex.requests.Timeout("ESA TAP did not answer")
+        return Response("source_id,ra,dec,pmra,pmdec,phot_g_mean_mag,parallax,parallax_over_error\n"
+                        "1,10.0,20.0,1.0,2.0,12.5,3.0,30.0\n")
+    monkeypatch.setattr(spherex, "gaia_field", REAL_GAIA_FIELD)
+    monkeypatch.setattr(spherex.requests, "get", esa)
+    monkeypatch.setattr(spherex.time, "time", lambda: now[0])
+    monkeypatch.setattr(spherex, "_down_until", {})
+    first = frames()
+    assert (first["gaia"], calls) == (None, [8])  # one try with a short timeout, not 3 x 30 s
+    assert any("Gaia" in n for n in first["notes"])
+    assert (frames()["gaia"], len(calls)) == (None, 1)  # within 10 minutes: no new wait
+    now[0] += 11 * 60
+    stars = frames()["gaia"]["stars"]
+    assert [(s["source_id"], s["parallax"]) for s in stars] == [("1", 3.0)]
+
+
+def test_a_network_error_is_retried_but_a_program_error_is_not(sky):
+    sky.fail = {"D2@60200.0"}  # OSError: S3 dropped the connection
+    assert any("needed 2 retries" in n for n in frames()["notes"])
+
+    reads = []
+    def broken(url, ra, dec):
+        reads.append(url)
+        raise KeyError("FLAGS")  # a bug or a changed file layout: trying again cannot help
+    spherex.read_cutout = broken  # monkeypatch restores the fake at teardown
+    with pytest.raises(HTTPException) as e:
+        spherex.get_frames("10 21", fov=2, per_group=2)
+    assert (e.value.status_code, len(reads)) == (502, 4)  # 4 images, one read each, not 3
+
+
+SESAME_HIT = b"""<?xml version="1.0"?><Sesame><Target><name>Wolf 359</name>
+<Resolver name="Sc=Simbad"><oname>Wolf  359</oname><jradeg>164.1205</jradeg><jdedeg>7.0146</jdedeg>
+<pm><pmRA>-3866.338</pmRA><pmDE>-2699.215</pmDE></pm></Resolver></Target></Sesame>"""
+SESAME_NONE = b"""<?xml version="1.0"?><Sesame><Target><name>zzqx</name><INFO> *** Nothing found *** </INFO></Target></Sesame>"""
+
+
+class Xml:
+    def __init__(self, content):
+        self.ok, self.status_code, self.content = True, 200, content
+
+
+def test_a_name_resolves_on_the_next_cds_mirror_when_the_first_one_hangs(monkeypatch):
+    asked = []
+    def cds(url, params=None, timeout=None, **kw):
+        asked.append((url.split("/")[2], timeout))
+        if "unistra" in url:
+            raise spherex.requests.Timeout("the CDS mirror waits for SIMBAD")
+        return Xml(SESAME_HIT)
+    monkeypatch.setattr(spherex.requests, "get", cds)
+    monkeypatch.setattr(spherex, "_down_until", {})  # no mirror marked down by an earlier test
+    spherex.sesame.cache_clear()
+    coord, name, pm = spherex.resolve("Wolf 359")
+    assert (name, pm, round(coord.ra.deg, 4)) == ("Wolf 359", (-3866.338, -2699.215), 164.1205)
+    assert asked == [("cds.unistra.fr", 8), ("vizier.cfa.harvard.edu", 8)]  # one short try per mirror
+
+
+def test_an_unknown_name_fails_fast_with_a_plain_message(monkeypatch):
+    monkeypatch.setattr(spherex.requests, "get", lambda url, **kw: Xml(SESAME_NONE))
+    spherex.sesame.cache_clear()
+    with pytest.raises(HTTPException) as e:
+        spherex.resolve("zzqx not a star")
+    assert e.value.status_code == 400
+    assert e.value.detail.startswith("No object called 'zzqx not a star' found.")
+
+
+def test_after_a_mirror_fails_the_next_names_skip_it_for_10_minutes(monkeypatch):
+    asked = []
+    def cds(url, params=None, timeout=None, **kw):
+        asked.append(url.split("/")[2])
+        if "unistra" in url:
+            raise spherex.requests.Timeout("the CDS mirror waits for SIMBAD")
+        return Xml(SESAME_HIT)
+    monkeypatch.setattr(spherex.requests, "get", cds)
+    monkeypatch.setattr(spherex, "_down_until", {})
+    spherex.sesame.cache_clear()
+    spherex.resolve("Wolf 359")
+    spherex.resolve("Wolf 359 again")
+    assert asked == ["cds.unistra.fr", "vizier.cfa.harvard.edu", "vizier.cfa.harvard.edu"]
