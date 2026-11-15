@@ -13,12 +13,18 @@
   (function () { var t; try { t = localStorage.getItem("wanderers-theme"); } catch (e) {}
     if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     document.documentElement.dataset.theme = t; })();
+  /* Explorer mode before first paint: ?mode= for this visit, else the saved preference, else General Explorer. */
+  (function () { var m = (location.search.match(/[?&]mode=(kids|teens|adults|research)\b/) || [])[1];
+    if (!m) { try { m = localStorage.getItem("wanderers-mode"); } catch (e) {} }
+    if (!/^(kids|teens|adults|research)$/.test(m || "")) m = "adults";
+    document.documentElement.dataset.mode = m; })();
 </script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="brand.css">
 <link rel="stylesheet" href="release.css?v=20261115b">
 <link rel="stylesheet" href="home.css?v=20261116r">
+<link rel="stylesheet" href="explorer.css?v=20261116b">
 </head>
 <body class="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -50,8 +56,28 @@
 </header>
 
 <main id="main">
+  <!-- ============ DISCOVER (Kids Explorer, Student Explorer) ============ -->
+  <section class="discover playful-only" id="discover" aria-labelledby="discoverTitle">
+    <div class="dc-head">
+      <p class="eyebrow"><span class="kids-only">Space adventure</span><span class="teens-only">Sky stories</span> · real NASA pictures</p>
+      <h1 id="discoverTitle" class="dc-title"><span class="kids-only">The sky is full of wanderers!</span><span class="teens-only">The sky is never still.</span></h1>
+      <p class="dc-lede" data-explain="motion">Nearby stars drift across the sky.</p>
+    </div>
+    <div class="story-deck" id="storyDeck" tabindex="0" aria-label="Sky stories. Use the arrow keys or the buttons to move between stories."><p class="dc-loading">Loading the sky…</p></div>
+    <div class="mission" id="mission" hidden></div>
+    <div class="activities" aria-label="More things to do">
+      <a class="act" href="compass.html"><span class="act-k">Live</span><b>Find real stars with your phone</b><span>Sky Compass shows what’s above you, even indoors.</span></a>
+      <a class="act" href="observatory.html?target=wise0855"><span class="act-k">Observatory</span><b><span class="kids-only">Meet the coldest brown dwarf</span><span class="teens-only">Blink like an astronomer</span></b><span>Flip between real pictures taken years apart.</span></a>
+      <div class="act soon" aria-disabled="true"><span class="act-k">Coming soon</span><b>Space Camera &amp; My Space Story</b><span>Snap the sky and make a story card. Photos stay on your device.</span></div>
+    </div>
+    <div class="dc-foot">
+      <p class="dc-note" data-explain="evidence">We only say what the pictures show.</p>
+      <button type="button" class="btn btn-ghost" id="showScience" aria-controls="science" aria-expanded="false">Show the scientist view</button>
+    </div>
+  </section>
+
   <!-- ============ HERO ============ -->
-  <section class="hero" aria-labelledby="heroTitle">
+  <section class="hero sci" aria-labelledby="heroTitle">
     <div class="hero-grid">
       <div class="hero-copy">
         <p class="eyebrow">Infrared observatory · 2010 → 2026 · NASA Space Apps 2026</p>
@@ -88,8 +114,32 @@
     <div class="hero-coords mono" id="heroCoords" aria-hidden="true"></div>
   </section>
 
+  <!-- ============ RESEARCH ACCESS (Research Mode) ============ -->
+  <section class="research-panel research-only" id="research" aria-labelledby="researchTitle">
+    <header class="rp-head">
+      <div>
+        <p class="eyebrow">Research Mode · data access</p>
+        <h2 id="researchTitle">Every target, its epochs and its files.</h2>
+      </div>
+      <a class="btn btn-ghost tiny" href="data/index.json" download>Target list · index.json</a>
+    </header>
+    <ul class="rp-legend" aria-label="How values are labelled">
+      <li><span class="tag-chip data">Measured</span> from the WISE and SPHEREx frames by the pipeline</li>
+      <li><span class="tag-chip">Catalogue</span> Gaia DR3, or the cited literature (Luhman &amp; Esplin 2016 for WISE 0855)</li>
+      <li><span class="tag-chip ai">Interpretation</span> rule-based class; plain-language text is written by Claude and labelled</li>
+    </ul>
+    <div class="rp-table" role="region" aria-label="Targets" tabindex="0">
+      <table>
+        <thead><tr><th scope="col">Target</th><th scope="col">RA (deg, ICRS)</th><th scope="col">Dec (deg)</th><th scope="col">Epochs · 4.6 µm (yr)</th><th scope="col">Measured motion</th><th scope="col">Catalogue</th><th scope="col">Classification · confidence</th><th scope="col">Data</th></tr></thead>
+        <tbody id="researchRows"><tr><td colspan="8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="rp-note" data-explain="evidence">Rule-based classification.</p>
+    <p class="rp-note">Each <code>target.json</code> holds the frames, measured track, spectrum, flags and evidence written by <code>pipeline/analyze.py</code> and <code>pipeline/evidence.py</code>. Sources: SPHEREx DR1 and QR3, AllWISE and NEOWISE (NASA/IPAC IRSA); Gaia DR3 (ESA).</p>
+  </section>
+
   <!-- ============ 01 ============ -->
-  <section class="chapter" id="science" aria-labelledby="c1">
+  <section class="chapter sci" id="science" aria-labelledby="c1">
     <header class="chapter-head">
       <span class="chapter-no mono">01</span>
       <div>
@@ -114,7 +164,7 @@
           <span class="tag-chip illus">Illustration</span>
         </div>
         <h3>Position · proper motion</h3>
-        <p>Nearby stars travel across the sky by a few arcseconds a year. Too slow to see in a night, it adds up across a decade. Barnard's Star moves the width of the full Moon in about 180 years.</p>
+        <p data-explain="motion">Nearby stars travel across the sky by a few arcseconds a year. Too slow to see in a night, it adds up across a decade. Barnard's Star moves the width of the full Moon in about 180 years.</p>
         <p class="fact mono" id="factMotion"></p>
       </article>
       <article class="concept">
@@ -129,14 +179,14 @@
           <span class="tag-chip illus">Illustration</span>
         </div>
         <h3>Brightness · variability</h3>
-        <p>Some stars pulsate, others hide behind passing dust. Comparing the two SPHEREx sky surveys, wavelength by wavelength, shows whether an object brightened or faded between visits.</p>
+        <p data-explain="brightness">Some stars pulsate, others hide behind passing dust. Comparing the two SPHEREx sky surveys, wavelength by wavelength, shows whether an object brightened or faded between visits.</p>
         <p class="fact mono" id="factVar"></p>
       </article>
     </div>
   </section>
 
   <!-- ============ 02 ============ -->
-  <section class="chapter" aria-labelledby="c2">
+  <section class="chapter sci" aria-labelledby="c2">
     <header class="chapter-head">
       <span class="chapter-no mono">02</span>
       <div>
@@ -168,7 +218,7 @@
   </section>
 
   <!-- ============ 03 ============ -->
-  <section class="chapter" id="how" aria-labelledby="c3">
+  <section class="chapter sci" id="how" aria-labelledby="c3">
     <header class="chapter-head">
       <span class="chapter-no mono">03</span>
       <div>
@@ -204,7 +254,7 @@
   </section>
 
   <!-- ============ 04 ============ -->
-  <section class="chapter" id="targets" aria-labelledby="c4">
+  <section class="chapter sci" id="targets" aria-labelledby="c4">
     <header class="chapter-head">
       <span class="chapter-no mono">04</span>
       <div>
@@ -217,7 +267,7 @@
   </section>
 
   <!-- ============ ABOUT ============ -->
-  <section class="chapter about" id="about" aria-labelledby="c5">
+  <section class="chapter about sci" id="about" aria-labelledby="c5">
     <header class="chapter-head">
       <span class="chapter-no mono">05</span>
       <div>
@@ -272,5 +322,7 @@
 <script src="release.js?v=20261115a"></script>
 <script src="theme.js"></script>
 <script src="home.js?v=20261116a"></script>
+<script src="explorer.js?v=20261116b"></script>
+<script src="explorer-home.js?v=20261116b"></script>
 </body>
 </html>
