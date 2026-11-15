@@ -93,6 +93,31 @@ class Photos(unittest.TestCase):
         self.assertEqual(r["status"], "fix")
         self.assertLess(km((r["lat"], r["lon"]), (r["gps"]["lat"], r["gps"]["lon"])), 150)
 
+    def test_weak_false_solve_of_a_recompressed_photo_is_refused(self):   # A17
+        # A JPEG copy (quality 92) of this portrait photo loses the sigma 3 solve; a weak false match (15 stars,
+        # RMSE 516", Prob 2e-7) then put it 2800 km off. The quality gate must skip that solve and find the right one.
+        data = photo("20260614_081100956_iOS.heic")
+        heic = Image.open(io.BytesIO(data))
+        m = sf.read_meta(heic)
+        jpeg = io.BytesIO()
+        heic.convert("RGB").save(jpeg, "JPEG", quality=92)
+        s = sf.solve(Image.open(jpeg))
+        self.assertIn("R", s)
+        p = sf.position(s["R"], m["g"], m["orient"], m["utc"])
+        self.assertLess(km((p["lat"], p["lon"]), (m["gps"]["lat"], m["gps"]["lon"])), 150)
+        r = sf.star_fix(data)
+        self.assertEqual(r["status"], "fix")
+        self.assertLess(km((r["lat"], r["lon"]), (r["gps"]["lat"], r["gps"]["lon"])), 150)
+
+    def test_small_photo_is_flagged(self):   # below 1600 px on the long side the matches fall to 8-16
+        im = Image.open(io.BytesIO(photo("20260614_082051102_iOS.heic"))).convert("RGB")
+        im.thumbnail((1200, 1200))
+        small = io.BytesIO()
+        im.save(small, "JPEG", quality=95)
+        r = sf.star_fix(small.getvalue())
+        self.assertIn("small_photo", r["warnings"], r["status"])
+        self.assertNotIn("small_photo", sf.star_fix(photo("20260614_082051102_iOS.heic"))["warnings"])
+
     def test_twilight_photo_has_too_few_stars(self):   # A4
         r = sf.star_fix(photo("20231125_211246181_iOS.heic"))
         self.assertEqual(r["status"], "no_solve")

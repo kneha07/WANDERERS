@@ -29,6 +29,11 @@ iers.conf.iers_degraded_accuracy = "ignore"  # UT1-UTC error stays below 0.9 s =
 pillow_heif.register_heif_opener()
 EXIF, GPS = 0x8769, 0x8825                   # EXIF sub-directories
 _t3 = None                                   # the solver with its star database, loaded on the first solve
+# Solve quality gate, measured on 4 photos and 96 recompressed copies (2026-11-15): every right solve had RMSE <= 165"
+# and Prob <= 2.6e-9 (the weakest: 8 matches, Prob 2.0e-9, RMSE 145", 1.2 km off). The false solves had RMSE 423-516"
+# and Prob 2.3e-7 or 5.2e-6; one (15 matches) put a JPEG copy of 20260614_081100956 2800 km off.
+MIN_MATCHES, MAX_RMSE_ARCSEC, MAX_FALSE_PROB = 8, 300, 1e-8
+SMALL_PX = 1600   # long side below this: 8-16 matches at 1280 px and one false solve before the gate (measured)
 
 # Gravity (device axes: x right of the screen, y top of the phone, z out of the screen) -> (picture right, picture down)
 # of the upright picture, for each EXIF orientation of the rear camera.
@@ -114,7 +119,7 @@ def solve(im):
     k = 2048 / max(gray.size)
     gray = gray.resize((round(gray.width * k), round(gray.height * k)), Image.LANCZOS)
     W, H = gray.size
-    r = {}
+    r = None
     for frac in (0.5, 0.35, 1.0):            # the star database covers 10-30 degree fields; a phone sees about 65
         cw, ch = int(W * frac), int(H * frac)
         ox, oy = (W - cw) // 2, (H - ch) // 2
@@ -123,12 +128,13 @@ def solve(im):
             spots = len(cents)                   # reported from the last try: whole picture, sigma 2
             if len(cents) < 6:
                 continue
-            r = _t3.solve_from_centroids(cents[:60], (ch, cw), solve_timeout=5000, return_matches=True)
-            if r.get("RA") is not None:
+            t = _t3.solve_from_centroids(cents[:60], (ch, cw), solve_timeout=5000, return_matches=True)
+            if t.get("RA") is not None and t["Matches"] >= MIN_MATCHES and t["RMSE"] <= MAX_RMSE_ARCSEC and t["Prob"] <= MAX_FALSE_PROB:
+                r = t                            # else: a weak or false solve, try the next sigma or crop
                 break
-        if r.get("RA") is not None:
+        if r:
             break
-    if r.get("RA") is None or r["Matches"] < 8:
+    if not r:
         return {"stars": spots}
     mc, ms = np.array(r["matched_centroids"]), np.array(r["matched_stars"])
     px, sky = (mc[:, 1] + ox, mc[:, 0] + oy), SkyCoord(ms[:, 0] * u.deg, ms[:, 1] * u.deg)
@@ -166,16 +172,17 @@ def star_fix(data):
     except Exception:   # not an image Pillow (or pillow-heif) can decode
         return {"status": "bad_file"}
     m = read_meta(im)
+    warn = ["small_photo"] if max(im.size) < SMALL_PX else []
     s = solve(ImageOps.exif_transpose(im))
     if "R" not in s:
-        return {"status": "no_solve", "stars": s["stars"]}
+        return {"status": "no_solve", "stars": s["stars"], "warnings": warn}
     utc = m["utc"] and m["utc"].strftime("%Y-%m-%dT%H:%M:%SZ")
     missing = [k for k, gone in (("gravity", m["g"] is None), ("time", utc is None),
                                  ("rear_camera", m["orient"] not in AXES or "front" in m["lens"].lower())) if gone]
     if missing:   # mirrored orientations (2, 4, 5, 7) count as an unsupported camera
-        return {"status": "sky_only", "sky": s["sky"], "model": m["model"], **({"utc": utc} if utc else {}), "missing": missing}
+        return {"status": "sky_only", "sky": s["sky"], "model": m["model"], **({"utc": utc} if utc else {}), "missing": missing,
+                "warnings": warn}
     p = position(s["R"], m["g"], m["orient"], m["utc"])
-    warn = []
     if abs((p["lon"] - 15 * m["offset"] + 180) % 360 - 180) > 45:   # the photo time or the file is suspect
         warn.append("zone_mismatch")
     if m["focal35"] is not None and not 20 <= m["focal35"] <= 30:     # only the main camera is tested

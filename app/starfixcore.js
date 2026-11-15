@@ -58,14 +58,15 @@
   const MISSING = { gravity: "the file has no tilt data. Use the original iPhone file.", time: "the file has no time data. Use the original iPhone file.",
     rear_camera: "this camera is not supported. Use the main rear camera." };
   const WARN = { zone_mismatch: "The place does not match the photo's time zone. The file may be edited.",
-    untested_lens: "Zoom or wide lens: the result may be less exact." };
+    untested_lens: "Zoom or wide lens: the result may be less exact.", small_photo: "This photo is small. Use the original file for a better result." };
 
-  // The row text for one photo. Page-only statuses: too_large, error (409, 500, 504, network), waiting, reading.
+  // The row text for one photo, with its warnings. Page-only statuses: too_large, error (409, 500, 504, network), waiting, reading.
   function describe(r, isOutlier) {
-    if (r.status === "sky_only") return `Stars recognised (${r.sky.constellation}), but ${MISSING[r.missing[0]]}`;
-    if (r.status !== "fix") return TEXT[r.status] || TEXT.error;
+    const base = r.status === "sky_only" ? `Stars recognised (${r.sky.constellation}), but ${MISSING[r.missing[0]]}`
+      : r.status === "fix" ? (isOutlier ? "Not used: it disagrees with the other photos" : `Used · stars of ${r.sky.constellation}`)
+        : TEXT[r.status] || TEXT.error;
     const warn = (r.warnings || []).map((w) => WARN[w]).filter(Boolean);
-    return [(isOutlier ? "Not used: it disagrees with the other photos" : `Used · stars of ${r.sky.constellation}`) + (warn.length ? "." : ""), ...warn].join(" ");
+    return [base + (warn.length && !base.endsWith(".") ? "." : ""), ...warn].join(" ");
   }
 
   // Nearest row of data/earth/cities.json ([name, country, lat, lon]) -> {name, country, lat, lon, km}, or null.

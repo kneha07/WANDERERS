@@ -94,6 +94,11 @@ test("describe: warnings are added to the row", () => {
   assert.equal(C.describe(fix({ warnings: ["untested_lens"] }), false), "Used · stars of Carina. Zoom or wide lens: the result may be less exact.");
   assert.equal(C.describe(fix({ warnings: ["zone_mismatch", "untested_lens"] }), true),
     "Not used: it disagrees with the other photos. The place does not match the photo's time zone. The file may be edited. Zoom or wide lens: the result may be less exact.");
+  assert.equal(C.describe(fix({ warnings: ["small_photo"] }), false), "Used · stars of Carina. This photo is small. Use the original file for a better result.");
+  assert.equal(C.describe({ status: "no_solve", stars: 9, warnings: ["small_photo"] }),
+    "Too few stars to recognise. Use a darker, clearer photo. This photo is small. Use the original file for a better result.");
+  assert.equal(C.describe({ ...skyOnly(["gravity", "time"]), warnings: ["small_photo"] }),
+    "Stars recognised (Carina), but the file has no tilt data. Use the original iPhone file. This photo is small. Use the original file for a better result.");
 });
 
 const CITIES = require("../app/data/earth/cities.json");
@@ -144,7 +149,7 @@ const clean = (s) => !FORBIDDEN.test(String(s).replace(/Star Fix/g, ""));
 
 test("no sentence from starfixcore holds a technical word (A14)", () => {
   const texts = [];
-  for (const r of [fix(), fix({ warnings: ["zone_mismatch", "untested_lens"] }), skyOnly(["gravity"]), skyOnly(["time"]), skyOnly(["rear_camera"]),
+  for (const r of [fix(), fix({ warnings: ["zone_mismatch", "untested_lens", "small_photo"] }), skyOnly(["gravity"]), skyOnly(["time"]), skyOnly(["rear_camera"]),
     { status: "no_solve" }, { status: "bad_file" }, { status: "too_large" }, { status: "error" }, { status: "waiting" }, { status: "reading" }])
     texts.push(C.describe(r, false), C.describe(r, true));
   const c = C.combine(SAMPLE), city = C.nearestCity(c.lat, c.lon, CITIES);
