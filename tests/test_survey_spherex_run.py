@@ -253,3 +253,57 @@ def test_real_rank_in_publish_carries_the_spherex_reason(env):
     publish(env, rank_fn=RK.rank)
     unex = [r for r in board(env) if r["spherex"]["confirmed"]]
     assert unex and all(any(x.startswith("SPHEREx sees it") for x in r["reasons"]) for r in unex)
+
+
+# ------------------------------------------------- each stage spends only its own budget (a slow SPHEREx stage
+# must not use up the Gaia budget: both run tile by tile in the same pass)
+class FakeClock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def _slow_stages(clock, sx_cost, gaia_cost):
+    def sx(k5, movers, deadline=None):
+        CALLS.append((k5, [m["id"] for m in movers]))
+        clock.t += sx_cost
+        return [sx_result(k5, int(m["id"].split("-")[1])) for m in movers]
+
+    def xmatch(movers, cache_dir, **kw):
+        clock.t += gaia_cost
+        return fakes.crossmatch_gaia(movers, cache_dir, **kw)
+    return sx, xmatch
+
+
+def test_a_slow_spherex_stage_does_not_use_up_the_gaia_budget(env):
+    clock = FakeClock()
+    sx, xmatch = _slow_stages(clock, sx_cost=500.0, gaia_cost=1.0)
+    s = R.publish(env.out, cache_dir=env.cache, use_gaia=True, xmatch_fn=xmatch, rank_fn=fakes.rank, runs=[],
+                  use_spherex=True, spherex_fn=sx, gaia_budget_s=60.0, spherex_budget_s=10_000.0, clock=clock)
+    assert s["gaia_unchecked"] == 0, "every tile still got its Gaia check"
+
+
+def test_a_slow_gaia_check_does_not_use_up_the_spherex_budget(env):
+    clock = FakeClock()
+    sx, xmatch = _slow_stages(clock, sx_cost=1.0, gaia_cost=500.0)
+    R.publish(env.out, cache_dir=env.cache, use_gaia=True, xmatch_fn=xmatch, rank_fn=fakes.rank, runs=[],
+              use_spherex=True, spherex_fn=sx, gaia_budget_s=10_000.0, spherex_budget_s=60.0, clock=clock)
+    assert len(CALLS) == 3, "every tile with unexplained movers was looked up in SPHEREx"
+
+
+def test_the_spherex_budget_still_stops_the_stage(env):
+    clock = FakeClock()
+    sx, xmatch = _slow_stages(clock, sx_cost=100.0, gaia_cost=0.0)
+    R.publish(env.out, cache_dir=env.cache, use_gaia=True, xmatch_fn=xmatch, rank_fn=fakes.rank, runs=[],
+              use_spherex=True, spherex_fn=sx, gaia_budget_s=None, spherex_budget_s=150.0, clock=clock)
+    assert len(CALLS) == 2, "the budget is spent after the second tile"
+
+
+def test_the_gaia_budget_still_stops_the_gaia_check(env):
+    clock = FakeClock()
+    sx, xmatch = _slow_stages(clock, sx_cost=0.0, gaia_cost=100.0)
+    s = R.publish(env.out, cache_dir=env.cache, use_gaia=True, xmatch_fn=xmatch, rank_fn=fakes.rank, runs=[],
+                  use_spherex=False, gaia_budget_s=150.0, clock=clock)
+    assert s["gaia_unchecked"] > 0

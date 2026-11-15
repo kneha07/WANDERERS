@@ -63,18 +63,18 @@ test("real data: WISE 0855 (faint, partly flagged)", real, () => {
   const neo = d.rows.slice(1, 22);
   assert.ok(neo.every((r) => r.source === "NEOWISE single exposures" && r.seen === "seen"), "every NEOWISE visit sees it");
   assert.equal(d.rows[22].source, "SPHEREx");
-  assert.equal(d.rows[22].seen, "not detected");          // May 2025, one image, 2.8 sigma
-  assert.equal(d.rows[22].images, 1);
+  assert.equal(d.rows[22].seen, "not detected");          // May 2025, two images
+  assert.equal(d.rows[22].images, 2);
   assert.ok(d.rows.slice(23).every((r) => r.seen === "seen"));
-  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.pct, d.quality.level], [41, 158, 26, "warn"]);
+  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.pct, d.quality.level], [41, 160, 26, "warn"]);
   assert.equal(d.visits.length, 3);
 });
 
 test("real data: Barnard's Star (too bright: every measurement flagged, no detection data)", real, () => {
   const d = FI.describe(load("barnard"), "w2");
-  assert.equal(d.rows.length, 30);                        // WISE 2010 + 21 NEOWISE visits + 8 SPHEREx frames, each with its own detection check
+  assert.equal(d.rows.length, 34);                        // WISE 2010 + 21 NEOWISE visits + 12 SPHEREx frames (DR1 and QR3), each with its own detection check
   assert.equal(d.rows.filter((r) => r.source === "NEOWISE single exposures").length, 21);
-  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.level], [188, 188, "bad"]);
+  assert.deepEqual([d.quality.flagged, d.quality.total, d.quality.level], [242, 242, "bad"]);
   assert.match(d.quality.text, /None were usable/);
 });
 

@@ -1462,10 +1462,14 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
         min_pm = _num(last.get("min_pm"))
         if min_pm is None:
             min_pm = core_min_pm()
-    deadline = None if gaia_budget_s is None else clock() + max(0.0, gaia_budget_s)
+    # Each stage has its own budget of network time, counted only while that stage runs: the two stages take turns
+    # tile by tile, and a wall-clock deadline would let a slow SPHEREx stage use up the Gaia budget (and vice versa).
+    spent = {"gaia": 0.0, "spherex": 0.0}
+
+    def left(stage: str, budget: float | None) -> bool:
+        return budget is None or spent[stage] < max(0.0, budget)
     sx = _resolve_optional(spherex_fn or DEFAULT_SPHEREX, "SPHEREx check (survey.spherex.check_tile)") \
         if use_spherex else None
-    sx_deadline = None if spherex_budget_s is None else clock() + max(0.0, spherex_budget_s)
     sx_stats = {"tiles": 0, "fail_streak": 0, "pending_movers": 0}
     totals = {k: 0 for k in TILE_COUNT_KEYS + ["movers", "unexplained", "gaia_unchecked", "spherex_checked",
                                                 "spherex_confirmed"]}
@@ -1504,9 +1508,11 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
             if xmatch is not None:
                 gaia = gaia_cache_get(cache, k5, movers)
                 if gaia is None and stats["fail_streak"] < gaia_fail_limit \
-                        and (deadline is None or clock() < deadline) and not (should_abort and should_abort()):
+                        and left("gaia", gaia_budget_s) and not (should_abort and should_abort()):
                     stats["queries"] += 1
+                    t_g = clock()
                     gaia, ok = crossmatch_tile(xmatch, movers, cache)
+                    spent["gaia"] += clock() - t_g
                     if ok:
                         stats["fail_streak"] = 0
                         gaia_cache_put(cache, k5, movers, gaia)
@@ -1523,9 +1529,12 @@ def publish(out: Path | str, *, cache_dir: Path | str | None = DEFAULT_CACHE, us
                 wanted = [spherex_wanted(m, spherex_all) for m in movers]
                 sxr = spherex_cache_get(cache, k5, movers, wanted)
                 if sxr is None and any(wanted) and sx_stats["fail_streak"] < spherex_fail_limit \
-                        and (sx_deadline is None or clock() < sx_deadline) and not (should_abort and should_abort()):
+                        and left("spherex", spherex_budget_s) and not (should_abort and should_abort()):
                     sx_stats["tiles"] += 1
+                    t_s = clock()
+                    sx_deadline = None if spherex_budget_s is None else t_s + max(0.0, spherex_budget_s - spent["spherex"])
                     sxr, complete = spherex_tile(sx, k5, movers, wanted, sx_deadline)
+                    spent["spherex"] += clock() - t_s
                     network = any(str(d.get("error") or "").startswith("network: ") for d in sxr)
                     sx_stats["fail_streak"] = sx_stats["fail_streak"] + 1 if network else 0
                     if sx_stats["fail_streak"] == spherex_fail_limit:

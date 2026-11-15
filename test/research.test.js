@@ -8,17 +8,21 @@ const Rs = require("../app/research.js");
 const { safeName } = require("../app/share.js");
 const read = (p) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
 const target = (id) => JSON.parse(read(`app/data/${id}/target.json`));
+// The evidence-card line of a target that starts with `start`.
+const card = (id, start) => target(id).evidence.checks.map((x) => x.text).find((x) => x.startsWith(start));
 const parseCSV = (s) => s.trim().split("\n").map((l) => l.match(/("([^"]|"")*"|[^,]*)(,|$)/g).filter((x, i, a) => i < a.length - 1 || x !== "").map((c) => c.replace(/,$/, "").replace(/^"|"$/g, "").replace(/""/g, '"')));
 
 test("summary: measured, catalogue and interpretation are labelled, with the real numbers", () => {
   const md = Rs.summary(target("barnard"), { url: "https://example.org/observatory.html?target=barnard", release: "SPHEREx Quick Release 3", generated: "2026-11-15" });
   assert.match(md, /^# Barnard's Star · WANDERERS observation summary/);
   assert.match(md, /_Measured_ .*_Catalogue_/);
-  assert.match(md, /- Measured: 10\.402″\/yr/);
-  assert.match(md, /- Catalogue \(Gaia DR3, epoch 2016\): 10\.393″\/yr/);
-  assert.match(md, /Δm = \+0\.034 ± 0\.030 mag \(1σ; positive = fainter\)/);
+  // The numbers come from target.json, so a data refresh (new epochs) does not break this test.
+  const t = target("barnard"), v = t.variability, sg = (x) => (x >= 0 ? "+" : "") + x.toFixed(3);
+  assert.ok(md.includes(`- Measured: ${t.motion.measured_arcsec_per_yr.toFixed(3)}″/yr`));
+  assert.ok(md.includes(`- Catalogue (Gaia DR3, epoch 2016): ${t.motion.expected_arcsec_per_yr.toFixed(3)}″/yr`));
+  assert.ok(md.includes(`Δm = ${sg(v.delta_mag)} ± ${v.uncertainty_mag.toFixed(3)} mag (1σ; positive = fainter)`));
   assert.match(md, /## Evidence \(_Interpretation_/);
-  assert.match(md, /✓ Moved 163″ between 2010 and 2026/);
+  assert.ok(md.includes(`✓ ${card("barnard", "Moved ").split(" (")[0]}`));
   assert.match(md, /Residual vs predicted position: rms [\d.]+″/);
   assert.match(md, /SPHEREx Quick Release 3/);
   assert.match(md, /Candidates are never discoveries/);
@@ -49,9 +53,10 @@ test("spectrum CSV matches the target's spectrum", () => {
 
 test("short summary for sharing is factual and short", () => {
   const s = Rs.shortSummary(target("barnard"), "https://example.org/x");
-  assert.match(s, /^Barnard's Star: Nearby star with fast proper motion\. Moved 163″ between 2010 and 2026; measured 10\.40″\/yr vs catalogue 10\.39″\/yr\./);
+  const moved = card("barnard", "Moved ").split(" (")[0], [meas, cat] = card("barnard", "Measured speed").split(": ")[1].split("″/yr")[0].split(" vs ");
+  assert.ok(s.startsWith(`Barnard's Star: Nearby star with fast proper motion. ${moved}; measured ${meas}″/yr vs catalogue ${cat}″/yr.`), s);
   assert.ok(s.length < 300);
-  assert.match(Rs.shortSummary(target("r_dra")), /Faded by 0\.34 ± 0\.06 mag/);
+  assert.ok(Rs.shortSummary(target("r_dra")).includes(card("r_dra", "Faded by ").split(" mag")[0] + " mag"));
 });
 
 test("research table: rows, search, class filter, sort with blanks last, CSV quoting", () => {

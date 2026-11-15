@@ -721,8 +721,22 @@ images every week). Which releases exist, and how recent our prepared targets ar
   it); **last synced** is when the targets were last rebuilt; **checked** is when IRSA last answered.
 - **New data**: a release newer than the one a target was built from (the file records, per target, which releases
   `fetch.py` searched, from the IRSA answers it cached).
-- **IRSA down** (it often answers 502): the last known file is kept, only `last_attempt` and `error` change, and the
-  script exits normally. With no file yet it writes one from what is known locally and says the online check failed.
+- **IRSA down** (it often answers 502): the check lists NASA IRSA's public SPHEREx bucket instead
+  (`s3://nasa-irsa-spherex`, anonymous): its release folders (`dr1/`, `qr2/`, `qr3/`, ...) and the newest `level2`
+  half-week folder of each, e.g. *Quick Release 3 at IRSA has images through 2026 week 40*. `qr2/` is left out: it is
+  the Quick Release that DR1 reprocessed and replaced; any other new `drN/` or `qrN/` folder counts as a new release.
+  The file then has `checked_via: "S3 bucket"` and the line reads *checked 15 Nov 2026 (S3 listing; IRSA services
+  down)*. Only when the bucket fails too is the last known file kept (only `last_attempt` and `error` change) and the
+  line says *IRSA release check failed*. The script exits normally either way; `--require-online` still needs IRSA.
+- **Images and cutouts without IRSA**: when IRSA's SIA or cutout service fails, `fetch.py` falls back to
+  `pipeline/spherex_s3.py` by itself and says so in its log. That module keeps a footprint index of the Level-2
+  images built from their FITS headers, read from the bucket with HTTP Range requests (`python
+  pipeline/spherex_s3.py index qr3`; resumable, cached in `data/cache/spherex_s3_index/`), finds the images that hold
+  a target at each image's own time, and reads only the rows around the target from `IMAGE`, `FLAGS` and `VARIANCE`
+  plus the `WCS-WAVE` table. The cutouts are byte-for-byte the same as IRSA's (same extensions, header cards, pixel
+  offsets and pixels; checked against 21 cached IRSA cutouts). The search is saved as
+  `data/cache/<target>/<release>_s3.json`, which counts as "searched" here when the index covered every week folder.
+  `python pipeline/fetch.py --s3 <ids>` takes this path without asking IRSA first (useful while IRSA flickers).
 
 The explorer and the home page show this as one line, for example *SPHEREx Quick Release 3 · data through Sep 2026 ·
 last synced 15 Nov 2026 · checked 15 Nov 2026*, with a short note when new data is available (`app/release.js`; the

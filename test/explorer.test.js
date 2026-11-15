@@ -11,6 +11,14 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const E = require("../app/explorer.js");
 const H = require("../app/explorer-home.js");
 const target = (id) => JSON.parse(read(`app/data/${id}/target.json`));
+const esc = (s) => s.replaceAll(".", "[.]"); // the values hold only digits, dots and ″
+// Barnard's numbers as its evidence card states them, so a data refresh (new epochs) does not break the tests.
+const barnardCard = () => {
+  const c = target("barnard").evidence.checks.map((x) => x.text);
+  const [, moved] = c.find((x) => /^Moved/.test(x)).match(/^Moved ([\d.]+″)/);
+  const [, meas, cat] = c.find((x) => /^Measured speed/.test(x)).match(/([\d.]+) vs ([\d.]+)″\/yr/);
+  return { moved: esc(moved), meas: esc(meas), cat: esc(cat) };
+};
 
 test("four modes, in order, with Research Mode open to everyone", () => {
   assert.deepEqual(E.IDS, ["kids", "teens", "adults", "research"]);
@@ -60,9 +68,9 @@ test("every concept has an explanation for every mode; General Explorer is the f
 
 test("facts come from the evidence cards, not typed in", () => {
   const b = H.facts(target("barnard"));
-  assert.equal(b.moved, "163″");
+  assert.match(b.moved, new RegExp(`^${barnardCard().moved}$`));
   assert.equal(b.span, "2010 and 2026");
-  assert.match(b.measured, /^10\.40″\/yr$/);
+  assert.match(b.measured, new RegExp(`^${barnardCard().meas}″/yr$`));
   assert.match(H.facts(target("wise0855")).methane, /^[\d.]+×$/);
   const r = H.facts(target("r_dra"));
   assert.equal(r.moved, "", "R Draconis did not measurably move");
@@ -81,7 +89,8 @@ test("stories: same data for Kids and Students, different words, no empty placeh
     assert.ok(s.chip.length > 2, s.id);
   }
   assert.notEqual(kids[0].text, teens[0].text);
-  assert.match(teens[0].text, /163″.*10\.40″\/yr.*10\.39″\/yr/);
+  const B = barnardCard();
+  assert.match(teens[0].text, new RegExp(`${B.moved}.*${B.meas}″/yr.*${B.cat}″/yr`));
   assert.equal(H.buildStories("kids", { barnard: ts.barnard }).length, 1, "a missing target is skipped");
   const noMove = JSON.parse(JSON.stringify(ts.barnard)); noMove.evidence.checks = [];
   assert.equal(H.buildStories("kids", { barnard: noMove }).length, 0, "a story without its fact is skipped");
