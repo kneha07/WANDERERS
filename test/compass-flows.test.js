@@ -8,12 +8,13 @@ const path = require("node:path");
 const APP = path.join(__dirname, "..", "app");
 const Orient = require("../app/orient.js");
 const Sky = require("../app/sky.js");
+const HIDDEN = new Set([...fs.readFileSync(path.join(APP, "compass.html"), "utf8").matchAll(/<[^>]*\bid="([^"]+)"[^>]*\shidden[\s>]/g)].map((m) => m[1]));
 
 // ---- a fake browser: just enough DOM for compass.js ----
 function fakeElement(id) {
   const listeners = {}, classes = new Set();
   return {
-    id, hidden: false, textContent: "", innerHTML: "", value: "", checked: false, disabled: false, className: "",
+    id, hidden: HIDDEN.has(id), textContent: "", innerHTML: "", value: "", checked: false, disabled: false, className: "",
     dataset: {}, style: {}, width: 240, height: 240, videoWidth: 0, listeners,
     classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c), toggle: (c, on) => (on ?? !classes.has(c)) ? classes.add(c) : classes.delete(c) },
     addEventListener: (type, fn) => (listeners[type] = listeners[type] || []).push(fn),
@@ -101,4 +102,18 @@ test("with the intro available it plays and then opens the AR view", async () =>
   assert.equal(c.$("ar").hidden, false);
   c.$("infoBtn").click();
   assert.match(c.$("infoRows").innerHTML, /1\.0000 AU from the Sun/);
+});
+
+test("a phone with only the absolute (compass) orientation stream gets motion control, not drag mode", async () => {
+  const c = loadCompass({ intro: "fail" });
+  await c.$("go").onclick();
+  // Chrome on a phone without a gyroscope: deviceorientation carries nulls, deviceorientationabsolute has the angles
+  for (const fn of c.windowListeners.deviceorientation) fn({ alpha: null, beta: null, gamma: null, absolute: false });
+  for (let i = 0; i < 5; i++) for (const fn of c.windowListeners.deviceorientationabsolute) fn({ alpha: 30, beta: 60, gamma: 0 });
+  assert.equal(c.S.sensors, true);
+  const p = c.F.pointing();
+  assert.ok(p && Math.abs(Orient.wrap180(p.az - 330)) < 1, `camera direction from the absolute stream, got ${p && p.az}`);
+  c.runTimers(300);
+  assert.equal(c.$("calib").hidden, false, "calibration offered instead of drag mode");
+  assert.doesNotMatch(c.$("guideSub").textContent, /No motion sensors/);
 });
