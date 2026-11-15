@@ -13,7 +13,7 @@ const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const F = new Orient.Fusion();
 const S = {
   targets: [], sel: null, loc: null, locNote: "location not shared yet", place: null, cities: null,
-  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, zoom: 1, regionImg: null, lastTele: 0, buzzed: {},
+  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, zoom: 1, hold: false, regionImg: null, lastTele: 0, buzzed: {},
 };
 window.__wanderers = { F, S };   // debug handle for automated tests (feed sensor events with exact timestamps)
 // Links for checks and screenshots: ?at=2026-11-15T06:00:00Z&lat=47.6&lon=-122.3&go=1&intro=skip&cam=0&sky=eye
@@ -211,7 +211,7 @@ function calibrationTick() {
 
 // ---------- pointing: sensors, or drag on desktop ----------
 function pose() {
-  const p = S.sensors ? F.pointing() : null;
+  const p = S.sensors && !S.hold ? F.pointing() : null;
   if (p) return p;
   const f = vec(S.manual.az, S.manual.alt);
   let up = [0, 0, 1].map((z, i) => z - f[2] * f[i]); const n = Math.hypot(...up) || 1; up = up.map((x) => x / n);
@@ -229,6 +229,16 @@ const ZOOM_MAX = 300;
 function setZoom(z) {
   S.zoom = Math.max(S.camOn ? 1 : 0.5, Math.min(ZOOM_MAX, z));
   $("cam").style.transform = S.zoom === 1 ? "" : `scale(${S.zoom})`;
+  updateHold();
+}
+// Hold mode (the mount): from 8x the phone's sensors jitter by more than the view, so the view stops following
+// the phone and uses S.manual, like drag mode. It lets go below 6x (the gap stops flicker).
+function updateHold() {
+  if (S.sensors && !S.hold && S.zoom >= 8) {
+    const p = F.pointing();
+    if (p) S.manual = { az: p.az, alt: p.alt };
+    S.hold = true;
+  } else if (S.hold && S.zoom < 6) S.hold = false;
 }
 const fingers = new Map();
 let pinch = null;
@@ -549,7 +559,7 @@ function telemetry(now, L, P) {
     ["LAT", `${Math.abs(L.lat).toFixed(3)}°${L.lat >= 0 ? "N" : "S"}`], ["LON", `${Math.abs(L.lon).toFixed(3)}°${L.lon >= 0 ? "E" : "W"}`],
     ["LOCAL", `${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ${tz.split("/").pop().replace(/_/g, " ")}`],
     ["UTC", now.toISOString().slice(11, 19)], ["LST", hm(lst)], ["DECL", `${F.decl >= 0 ? "+" : ""}${F.decl.toFixed(1)}°`], ["CAL", cal],
-    ...(S.zoom !== 1 ? [["ZOOM", `${S.zoom.toFixed(1)}×`]] : []),
+    ...(S.zoom !== 1 ? [["ZOOM", `${S.zoom.toFixed(S.zoom >= 10 ? 0 : 1)}×${S.hold ? " HELD" : ""}`]] : []),
   ].map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
   if (!$("info").hidden) renderInfo(now, L, lst, tz);
   webbTick(P, now, L, lst);

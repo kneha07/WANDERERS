@@ -264,6 +264,38 @@ test("zoom: two fingers pinch the view, and the finger that stays down does not 
   assert.ok(Math.abs(c.S.manual.az - (180 - 70 / c.S.zoom)) < 1e-9);
 });
 
+// a phone page with a fixed time and place, so frames drawn at high zoom do not move the view
+const AT = "2026-11-15T06:00:00Z", HERE = { lat: 47.6, lon: -122.3 };
+async function phoneAt(az, alt, more = "") {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}${more}` });
+  await c.flush();
+  await c.$("go").onclick();
+  aimPhone(c, az, alt);
+  return c;
+}
+const near = (p, az, alt, tol = 1) => Math.abs(Orient.wrap180(p.az - az)) < tol && Math.abs(p.alt - alt) < tol;
+
+test("hold mode: from 8x the view stops following the phone, and below 6x it follows again", async () => {
+  const c = await phoneAt(100, 20);
+  c.setZoom(7.9);
+  assert.equal(c.S.hold, false, "not at 7.9x");
+  c.setZoom(8);
+  assert.equal(c.S.hold, true, "held at 8x");
+  const held = c.pose();
+  assert.ok(near(held, 100, 20), `held where the phone pointed, got ${held.az}, ${held.alt}`);
+  aimPhone(c, 140, 35);                                       // the phone moves (or its sensors jitter)
+  assert.deepEqual([c.pose().az, c.pose().alt], [held.az, held.alt], "the held view does not move");
+  c.frame();
+  assert.match(c.$("telemetry").innerHTML, /ZOOM<\/b> 8\.0× HELD/);
+  c.setZoom(12); c.frame();
+  assert.match(c.$("telemetry").innerHTML, /ZOOM<\/b> 12× HELD/, "no decimals from 10x");
+  c.setZoom(6.5);
+  assert.equal(c.S.hold, true, "still held at 6.5x: the gap stops flicker");
+  c.setZoom(5.9);
+  assert.equal(c.S.hold, false, "let go below 6x");
+  assert.ok(near(c.pose(), 140, 35), `follows the phone again, got ${c.pose().az}, ${c.pose().alt}`);
+});
+
 test("location note: a later GPS timeout does not claim the location was declined", async () => {
   const run = async (events) => {
     const geolocation = { watchPosition: (ok, fail) => { for (const e of events) e.code ? fail(e) : ok({ coords: { latitude: 47.6, longitude: -122.3, accuracy: 12, altitude: null } }); } };
