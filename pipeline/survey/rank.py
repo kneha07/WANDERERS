@@ -58,7 +58,11 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------------------------------------------
-TAP_URL = "https://gea.esac.esa.int/tap-server/tap/sync"
+TAP_URL = "https://gea.esac.esa.int/tap-server/tap/sync"          # ESA Gaia archive (the reference service)
+TAP_MIRRORS = ("https://gaia.ari.uni-heidelberg.de/tap/sync",)  # ARI Heidelberg Gaia service: same gaiadr3 tables
+TAP_URLS = (TAP_URL,) + TAP_MIRRORS     # tried in order; a service that fails is skipped for MIRROR_COOLDOWN_S
+MIRROR_COOLDOWN_S = 1800.0
+_down_until: dict = {}                  # tap_url -> time.monotonic() before which it is not tried again
 GAIA_TABLE = "gaiadr3.gaia_source"
 GAIA_COLUMNS = ["source_id", "ra", "dec", "pmra", "pmdec", "parallax", "phot_g_mean_mag", "ref_epoch"]
 GAIA_EPOCH = 2016.0            # Gaia DR3 reference epoch (used when a row has no ref_epoch)
@@ -408,7 +412,7 @@ class _TileCache:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps({"tile": self.key, "source": f"Gaia DR3 ({GAIA_TABLE}) via ESA TAP",
+            tmp.write_text(json.dumps({"tile": self.key, "source": f"Gaia DR3 ({GAIA_TABLE}) via TAP (ESA archive or the ARI Heidelberg mirror)",
                                        "answers": self.answers}), encoding="utf-8")
             os.replace(tmp, self.path)
             self.dirty = False
@@ -420,9 +424,20 @@ class _Session:
     """Counts queries, cache hits and consecutive failures over one crossmatch_gaia call."""
 
     def __init__(self, tap_url, timeout):
-        self.tap_url, self.timeout = tap_url, timeout
+        self.urls = [tap_url] if isinstance(tap_url, str) else [u for u in tap_url if u]
+        if not self.urls:
+            raise ValueError("no Gaia TAP service given")
+        self.tap_url, self.timeout = self.urls[0], timeout
         self.failures = 0
         self.queries = self.cache_hits = 0
+
+    def _services(self):
+        """The services to try, in order: those not cooling down after a failure (all of them if every one is)."""
+        if len(self.urls) == 1:
+            return list(self.urls)
+        now = time.monotonic()
+        up = [u for u in self.urls if _down_until.get(u, 0.0) <= now]
+        return up or list(self.urls)
 
     def answer(self, adql, cache: _TileCache):
         hit = cache.get(adql)
@@ -436,32 +451,45 @@ class _Session:
         if self.failures >= MAX_CONSECUTIVE_FAILURES:
             raise _ServiceDown("Gaia service unavailable (skipped after repeated failures)")
         err = None
-        for k in range(ATTEMPTS):
-            if k and RETRY_SLEEP_S > 0:
-                time.sleep(RETRY_SLEEP_S)
-            self.queries += 1
-            try:
-                answer = _tap_query(self.tap_url, adql, self.timeout)
-            except TapError as e:
-                if _is_too_large(str(e)):
-                    raise _TooLarge(str(e)) from None
-                err = f"Gaia service error: {e}"
-                if (getattr(e, "status", None) or 0) >= 500:
-                    continue                          # server trouble: try again
-                break                                 # the service rejected the query: retrying won't help
-            except Exception as e:                    # network trouble of any kind: never raise
-                err = f"Gaia query failed: {type(e).__name__}: {e}"
-                continue
-            try:
-                cols = _parse_answer(answer)
-            except ValueError as e:
-                err = f"Gaia answer unusable: {e}"
-                break
-            if cols["n_raw"] >= MAX_ROWS:
-                raise _TooLarge(f"{cols['n_raw']} rows (limit {MAX_ROWS})")
-            self.failures = 0
-            cache.put(adql, self.tap_url, answer)
-            return cols
+        for url in self._services():
+            down = False                              # this service is unreachable or broken: try the next one
+            for k in range(ATTEMPTS):
+                if k and RETRY_SLEEP_S > 0:
+                    time.sleep(RETRY_SLEEP_S)
+                self.queries += 1
+                try:
+                    answer = _tap_query(url, adql, self.timeout)
+                except TapError as e:
+                    if _is_too_large(str(e)):
+                        raise _TooLarge(str(e)) from None
+                    err = f"Gaia service error: {e}"
+                    if (getattr(e, "status", None) or 0) >= 500:
+                        down = True
+                        continue                      # server trouble: try again
+                    down = False
+                    break                             # the service rejected the query: retrying won't help
+                except Exception as e:                # network trouble of any kind: never raise
+                    err = f"Gaia query failed: {type(e).__name__}: {e}"
+                    down = True
+                    continue
+                try:
+                    cols = _parse_answer(answer)
+                except ValueError as e:
+                    err = f"Gaia answer unusable: {e}"
+                    down = True
+                    break
+                if cols["n_raw"] >= MAX_ROWS:
+                    raise _TooLarge(f"{cols['n_raw']} rows (limit {MAX_ROWS})")
+                self.failures = 0
+                self.tap_url = url
+                _down_until.pop(url, None)
+                cache.put(adql, url, answer)
+                return cols
+            if not down:
+                break                                 # a rejected query fails the same way everywhere
+            if len(self.urls) > 1:
+                _down_until[url] = time.monotonic() + MIRROR_COOLDOWN_S
+                log.warning("Gaia service %s failing (%s); trying the next one", url, err)
         self.failures += 1
         raise RuntimeError(err)
 
@@ -507,7 +535,7 @@ def _id_key(mover):
     return str(mover.get("id", ""))
 
 
-def crossmatch_gaia(movers, cache_dir, tap_url=TAP_URL, radius_arcsec=3.0, timeout=60):
+def crossmatch_gaia(movers, cache_dir, tap_url=TAP_URLS, radius_arcsec=3.0, timeout=60):
     """Check each mover against Gaia DR3 and add ``mover["gaia"]`` in place; returns ``movers``.
 
     ``gaia`` is ``{"checked", "match", "source_id", "sep_arcsec", "pm", "g"}``:
@@ -522,6 +550,8 @@ def crossmatch_gaia(movers, cache_dir, tap_url=TAP_URL, radius_arcsec=3.0, timeo
     One query per tile (``k5``; movers without ``k5`` share one group), at most ``MAX_CONES_PER_QUERY`` movers per
     query; raw answers cached in ``cache_dir/gaia_dr3_tile_<k5>.json`` keyed by the exact query text, so a rerun
     with the same movers makes no network calls. See the module docstring for the matching rules.
+    ``tap_url``: one TAP sync endpoint, or several tried in order (default: ESA, then the ARI Heidelberg mirror of
+    the same gaiadr3 tables); a service that keeps failing is skipped for ``MIRROR_COOLDOWN_S``.
     """
     if movers is None:
         return movers

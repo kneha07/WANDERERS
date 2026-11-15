@@ -1,0 +1,183 @@
+{
+ "about": "Community classifications of WANDERERS targets and Sky Survey candidates, counted from GitHub issues labelled \"classification\" in kneha07/WANDERERS by pipeline/aggregate_votes.py. Do not edit by hand.",
+ "classes": [
+  "moving",
+  "variable",
+  "stationary",
+  "artifact",
+  "unsure"
+ ],
+ "ignored": {
+  "duplicate": 1,
+  "malformed": 5,
+  "moderated": 2,
+  "not_a_vote": 2,
+  "unknown_class": 1,
+  "unknown_id": 1
+ },
+ "issues_read": 26,
+ "label": "classification",
+ "last_issue": 25,
+ "last_vote": "2026-11-05T10:00:00Z",
+ "min_agreement": 0.6,
+ "min_voters": 3,
+ "objects": {
+  "10226-0001": {
+   "agreement": 0.667,
+   "consensus": "moving",
+   "counts": {
+    "artifact": 0,
+    "moving": 2,
+    "stationary": 1,
+    "unsure": 0,
+    "variable": 0
+   },
+   "kind": "candidate",
+   "last_vote": "2026-11-03T11:00:00Z",
+   "voters": 3,
+   "votes": [
+    {
+     "at": "2026-11-03T09:00:00Z",
+     "class": "moving",
+     "issue": 6,
+     "user": "alice"
+    },
+    {
+     "at": "2026-11-03T10:00:00Z",
+     "class": "moving",
+     "issue": 7,
+     "user": "bob"
+    },
+    {
+     "at": "2026-11-03T11:00:00Z",
+     "class": "stationary",
+     "issue": 8,
+     "user": "erin"
+    }
+   ]
+  },
+  "11391-0001": {
+   "agreement": 1.0,
+   "consensus": null,
+   "counts": {
+    "artifact": 0,
+    "moving": 1,
+    "stationary": 0,
+    "unsure": 0,
+    "variable": 0
+   },
+   "kind": "candidate",
+   "last_vote": "2026-11-05T10:00:00Z",
+   "voters": 1,
+   "votes": [
+    {
+     "at": "2026-11-05T10:00:00Z",
+     "class": "moving",
+     "issue": 22,
+     "user": "judy"
+    }
+   ]
+  },
+  "barnard": {
+   "agreement": 0.75,
+   "consensus": "moving",
+   "counts": {
+    "artifact": 0,
+    "moving": 3,
+    "stationary": 0,
+    "unsure": 0,
+    "variable": 1
+   },
+   "kind": "target",
+   "last_vote": "2026-11-01T13:00:00Z",
+   "voters": 4,
+   "votes": [
+    {
+     "at": "2026-11-01T10:00:00Z",
+     "class": "moving",
+     "issue": 1,
+     "user": "alice"
+    },
+    {
+     "at": "2026-11-01T11:00:00Z",
+     "class": "moving",
+     "issue": 2,
+     "user": "bob"
+    },
+    {
+     "at": "2026-11-01T12:00:00Z",
+     "class": "variable",
+     "issue": 3,
+     "user": "carol"
+    },
+    {
+     "at": "2026-11-01T13:00:00Z",
+     "class": "moving",
+     "issue": 4,
+     "user": "dave"
+    }
+   ]
+  },
+  "r_dra": {
+   "agreement": 1.0,
+   "consensus": null,
+   "counts": {
+    "artifact": 1,
+    "moving": 0,
+    "stationary": 0,
+    "unsure": 0,
+    "variable": 0
+   },
+   "kind": "target",
+   "last_vote": "2026-11-04T11:00:00Z",
+   "voters": 1,
+   "votes": [
+    {
+     "at": "2026-11-04T11:00:00Z",
+     "class": "artifact",
+     "issue": 12,
+     "user": "ivan"
+    }
+   ]
+  },
+  "wise0855": {
+   "agreement": 0.333,
+   "consensus": null,
+   "counts": {
+    "artifact": 0,
+    "moving": 1,
+    "stationary": 0,
+    "unsure": 1,
+    "variable": 1
+   },
+   "kind": "target",
+   "last_vote": "2026-11-04T10:00:00Z",
+   "voters": 3,
+   "votes": [
+    {
+     "at": "2026-11-04T08:00:00Z",
+     "class": "unsure",
+     "issue": 9,
+     "user": "frank"
+    },
+    {
+     "at": "2026-11-04T09:00:00Z",
+     "class": "moving",
+     "issue": 10,
+     "user": "grace"
+    },
+    {
+     "at": "2026-11-04T10:00:00Z",
+     "class": "variable",
+     "issue": 11,
+     "user": "heidi"
+    }
+   ]
+  }
+ },
+ "replaced": 2,
+ "repo": "kneha07/WANDERERS",
+ "schema": 1,
+ "template": ".github/ISSUE_TEMPLATE/classification.yml",
+ "votes_counted": 12
+}

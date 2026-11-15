@@ -165,4 +165,3 @@ a { color: var(--accent); }
 }
 /* Uppercase labels: keep units such as µm lower-case (an uppercased µ reads as "M") */
 .keep-case, .eyebrow .u, .tag-chip .u { text-transform: none; letter-spacing: .04em; }
-

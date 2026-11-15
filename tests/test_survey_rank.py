@@ -117,6 +117,7 @@ class FakeGaia:
 def offline(monkeypatch, request):
     """No sleeping between retries, and no real network unless the test is the opt-in live one."""
     monkeypatch.setattr(R, "RETRY_SLEEP_S", 0.0)
+    monkeypatch.setattr(R, "_down_until", {})          # no mirror cool-down carried over between tests
     if not request.node.name.startswith("test_real_"):
         def blocked(*a, **k):
             raise urllib.error.URLError("network disabled in tests")
@@ -556,7 +557,7 @@ def test_service_treated_as_down_after_repeated_failures(monkeypatch, tmp_path):
     monkeypatch.setattr(R, "_tap_query", failing(urllib.error.URLError("down"), calls))
     movers = [blank_mover(10.0 * i, 0.0, 500, 0, k5=1000 + i, mid=f"t{i}") for i in range(8)]
     R.crossmatch_gaia(movers, tmp_path)
-    assert len(calls) == R.MAX_CONSECUTIVE_FAILURES * R.ATTEMPTS
+    assert len(calls) == R.MAX_CONSECUTIVE_FAILURES * R.ATTEMPTS * len(R.TAP_URLS)   # each query tries every service
     assert all(m["gaia"]["checked"] is False for m in movers)
     assert "unavailable" in movers[-1]["gaia"]["error"]
 
@@ -575,7 +576,7 @@ def test_transient_failure_retried(monkeypatch, tmp_path):
     assert len(calls) == 2 and m["gaia"]["match"] is True
 
 
-@pytest.mark.parametrize("status,expected_calls", [(503, 2), (400, 1)])
+@pytest.mark.parametrize("status,expected_calls", [(503, R.ATTEMPTS * len(R.TAP_URLS)), (400, 1)])   # 5xx: every service tried
 def test_server_errors_retried_but_rejected_queries_not(monkeypatch, tmp_path, status, expected_calls):
     calls = []
     monkeypatch.setattr(R, "_tap_query", failing(R.TapError(f"HTTP {status}: nope", status=status), calls))
@@ -778,3 +779,100 @@ def test_real_gaia_wise_0855_is_unexplained(tmp_path):
     R.crossmatch_gaia([m], tmp_path, timeout=90)
     assert m["gaia"]["checked"] is True, m["gaia"].get("error")
     assert m["gaia"]["match"] is False
+
+
+# ------------------------------------------------------------------ ESA archive, then the ARI Heidelberg mirror
+ARI = "https://gaia.ari.uni-heidelberg.de/tap/sync"
+
+
+def test_default_services_are_esa_then_ari():
+    assert R.TAP_URLS[0] == R.TAP_URL == "https://gea.esac.esa.int/tap-server/tap/sync"
+    assert ARI in R.TAP_URLS and R.TAP_URLS.index(ARI) == 1
+    import inspect
+    assert inspect.signature(R.crossmatch_gaia).parameters["tap_url"].default == R.TAP_URLS
+
+
+def _esa_down_ari_up(calls, stars):
+    good = FakeGaia(stars)
+
+    def f(tap_url, adql, timeout):
+        calls.append(tap_url)
+        if "esac" in tap_url:
+            raise urllib.error.URLError("timed out")
+        return good(tap_url, adql, timeout)
+    return f
+
+
+def test_falls_back_to_the_mirror_when_esa_is_down(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(R, "_tap_query", _esa_down_ari_up(calls, [KAP]))
+    m = mover_for(KAP)
+    R.crossmatch_gaia([m], tmp_path)
+    assert m["gaia"]["checked"] is True and m["gaia"]["match"] is True
+    assert calls[:R.ATTEMPTS] == [R.TAP_URL] * R.ATTEMPTS and calls[-1] == ARI
+
+
+def test_a_failed_service_is_skipped_during_its_cooldown(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(R, "_tap_query", _esa_down_ari_up(calls, [KAP]))
+    for i in range(3):
+        R.crossmatch_gaia([mover_for(KAP, k5=2000 + i, mid=f"c{i}")], tmp_path / str(i))
+    assert calls.count(R.TAP_URL) == R.ATTEMPTS          # ESA only tried for the first tile
+    assert calls.count(ARI) == 3
+
+
+def test_service_tried_again_after_the_cooldown(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(R, "_tap_query", _esa_down_ari_up(calls, [KAP]))
+    R.crossmatch_gaia([mover_for(KAP, k5=3001, mid="a")], tmp_path / "a")
+    R._down_until[R.TAP_URL] = 0.0                       # cool-down over
+    R.crossmatch_gaia([mover_for(KAP, k5=3002, mid="b")], tmp_path / "b")
+    assert calls.count(R.TAP_URL) == 2 * R.ATTEMPTS
+
+
+def test_rejected_query_is_not_retried_on_the_mirror(monkeypatch, tmp_path):
+    calls = []
+
+    def reject(tap_url, adql, timeout):
+        calls.append(tap_url)
+        raise R.TapError("HTTP 400: syntax error", status=400)
+    monkeypatch.setattr(R, "_tap_query", reject)
+    m = mover_for(KAP)
+    R.crossmatch_gaia([m], tmp_path)
+    assert calls == [R.TAP_URL]
+    assert m["gaia"]["checked"] is False and "syntax" in m["gaia"]["error"]
+
+
+def test_server_errors_move_on_to_the_mirror(monkeypatch, tmp_path):
+    calls, good = [], FakeGaia([KAP])
+
+    def f(tap_url, adql, timeout):
+        calls.append(tap_url)
+        if "esac" in tap_url:
+            raise R.TapError("HTTP 502: Bad Gateway", status=502)
+        return good(tap_url, adql, timeout)
+    monkeypatch.setattr(R, "_tap_query", f)
+    m = mover_for(KAP)
+    R.crossmatch_gaia([m], tmp_path)
+    assert m["gaia"]["match"] is True and calls[-1] == ARI
+
+
+def test_a_single_service_string_still_works(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(R, "_tap_query", _esa_down_ari_up(calls, [KAP]))
+    m = mover_for(KAP)
+    R.crossmatch_gaia([m], tmp_path, tap_url=ARI)
+    assert calls == [ARI] and m["gaia"]["match"] is True
+
+
+def test_cache_records_the_service_that_answered(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(R, "_tap_query", _esa_down_ari_up(calls, [KAP]))
+    R.crossmatch_gaia([mover_for(KAP)], tmp_path)
+    blob = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert {a["tap_url"] for a in blob["answers"].values()} == {ARI}
+
+
+def test_no_service_given_is_an_error():
+    with pytest.raises(ValueError):
+        R._Session([], 10)

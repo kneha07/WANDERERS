@@ -274,6 +274,35 @@ with optional `th=0.6` and `sm=0`. Frame numbers count from 0 in the order of th
 node --test test/framemath.test.js   # includes checks on the real WISE 0855 and Barnard's Star frames
 ```
 
+### Sky Survey: from the ranked list to a person investigating
+
+The Sky Survey page (`app/survey.html`) ranks the movers found in the NEOWISE archive. To work through them:
+
+- **Filter and sort** the table: unexplained only, minimum motion, minimum visits, minimum motion S/N, red only
+  (W1−W2 ≥ 0.5 or no W1: a cold brown dwarf's colour, a hint and not proof), and hide rows flagged at a tile edge,
+  crowded, saturated or classed as likely artefacts. **High-confidence** sets ≥ 12 visits, S/N ≥ 10 and hides all four.
+  The address keeps every filter and the sort, so a shared link shows the same list (`?preset=high` works in a link too).
+- **Download** the filtered, sorted list (every page) as CSV or JSON: id, position and epoch, motion and its error,
+  W1/W2, visits, class, Gaia result, score, flags and merged duplicates.
+- **Open a candidate** for links to other archives at the right date: IRSA Finder Chart, Aladin Lite and the Legacy
+  Surveys viewer where it should be today, SIMBAD and VizieR at its J2000 position, Gaia DR3 at 2016.0, plus where
+  it is in 2000, 2016, today and 2030.
+- **Promote it** to a full WANDERERS target with the WISE → NEOWISE → SPHEREx time-lapse in the explorer:
+
+```bash
+.venv/bin/python pipeline/survey/promote.py --id 10226-0001          # prints the commands (dry run)
+.venv/bin/python pipeline/survey/promote.py --top 5 --unexplained    # the five best unexplained candidates
+.venv/bin/python pipeline/survey/promote.py --id 10226-0001 --run    # runs fetch.py, analyze.py, evidence.py
+```
+
+It moves the candidate to 2018.5 with its own motion (midway between AllWISE and SPHEREx), picks a field wide enough
+for its 2010–2026 path, and runs the same `fetch.py --ra --dec`, `analyze.py` and `evidence.py` steps as typed
+coordinates; then open `observatory.html?target=<id it prints>`. `--run` needs the network and a few minutes.
+
+A source sitting on a tile boundary can be found in both tiles. Publishing merges such pairs (same position and
+motion near the edge; the longer track is kept, the other id is listed under "Also found") and counts them once.
+`python pipeline/survey/dedupe.py app/data/survey/tiles` reports how many the tile files hold.
+
 ### Any coordinates, on demand (needs `server.js`)
 
 With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
@@ -573,7 +602,7 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 
 | Source | Used for |
 |---|---|
-| NASA SPHEREx DR1 spectral images (IRSA) | 2025 and 2026 images, spectrum, brightness change |
+| NASA SPHEREx spectral images, DR1 and QR3 (IRSA; releases tracked in `app/data/spherex_release.json`) | 2025 and 2026 images, spectrum, brightness change |
 | NASA WISE / AllWISE atlas (IRSA) | 2010 images at 3.4 and 4.6 µm |
 | ESA Gaia DR3 | positions and motions of the targets and of every field star (ghosts) |
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
@@ -588,10 +617,84 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 | ESA ESASky JWST NIRCam / MIRI / NIRISS HiPS | live Webb pixels where covered |
 | IRSA HiPS mirrors of 2MASS and DSS colour | sky underneath the Webb view |
 | NOAA/BGS World Magnetic Model 2025 | magnetic to true north in the Sky Compass |
+| GitHub issues labelled `classification` in kneha07/WANDERERS (public votes) | community classifications (`app/data/classifications.json`, below) |
 
 Methods follow the IRSA SPHEREx tutorials: wavelength per pixel from the `WCS-WAVE` lookup table with SIP
 turned off, the conservative bad-pixel flag set from the SPHEREx Explanatory Supplement, 3-pixel aperture
 photometry with local background, and per-pixel solid angle from each image's WCS.
+
+### Keeping the SPHEREx data current
+
+SPHEREx data reaches the public in releases at NASA IRSA (today Data Release 1 and Quick Release 3, which gets new
+images every week). Which releases exist, and how recent our prepared targets are, is kept in
+`app/data/spherex_release.json`, written by `pipeline/spherex_releases.py`:
+
+```bash
+.venv/bin/python pipeline/spherex_releases.py           # ask IRSA, update app/data/spherex_release.json
+.venv/bin/python pipeline/spherex_releases.py show      # what the file says
+.venv/bin/python pipeline/spherex_releases.py synced    # after rebuilding targets with fetch.py + analyze.py
+```
+
+- **Releases** come from IRSA's SIA collection list (astroquery `Irsa.list_collections(servicetype="SIA",
+  filter="spherex")`, then IRSA TAP if that fails), oldest data first: data releases, then quick releases.
+  `pipeline/fetch.py` searches them in that order and keeps the first copy of an exposure that two releases share.
+  If the file is missing or broken, `fetch.py` uses its built-in list (`spherex_dr1`, `spherex_qr3`).
+- **data through** is the newest SPHEREx image date in `app/data/<target>/target.json` (nothing is downloaded for
+  it); **last synced** is when the targets were last rebuilt; **checked** is when IRSA last answered.
+- **New data**: a release newer than the one a target was built from (the file records, per target, which releases
+  `fetch.py` searched, from the IRSA answers it cached).
+- **IRSA down** (it often answers 502): the last known file is kept, only `last_attempt` and `error` change, and the
+  script exits normally. With no file yet it writes one from what is known locally and says the online check failed.
+
+The explorer and the home page show this as one line, for example *SPHEREx Quick Release 3 · data through Sep 2026 ·
+last synced 15 Nov 2026 · checked 15 Nov 2026*, with a short note when new data is available (`app/release.js`; the
+line stays hidden if the file cannot be read).
+
+**Automatic updates.** [`.github/workflows/spherex-sync.yml`](.github/workflows/spherex-sync.yml) runs every Monday
+and can be started by hand (Actions > spherex-sync > Run workflow; tick **rebuild** to rebuild even without a new
+release; a rebuild needs IRSA to answer). When a new release appears, or on a rebuild request, it re-runs `fetch.py`, `analyze.py`, `gaia_facts.py`,
+`evidence.py` and `vet.py` for every prepared target and opens a pull request from the `spherex-sync` branch with the
+refreshed `app/data` (it never pushes to `main`; `explain.json` and `trajectory.json` are not regenerated). When only
+the status file changed it opens a pull request with that file alone; when nothing changed, or IRSA is down, it does
+nothing. While its pull request is open, scheduled runs do not rebuild again. One repository setting is needed:
+Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests". Pull requests opened by
+the workflow do not start the `checks` workflow by themselves: close and reopen the pull request to run them.
+
+### Community classifications (citizen science)
+
+Every target in the explorer and every Sky Survey candidate has a "Classify" card: Moving, Variable, Stationary,
+Artifact or Unsure (`app/classify.js`, `app/classify.css`). The site is static, so votes travel through GitHub:
+
+1. Your vote is saved in your browser and counted on the page at once, marked "incl. yours".
+2. **Send my vote** opens the issue form `.github/ISSUE_TEMPLATE/classification.yml` in `kneha07/WANDERERS`, already
+   filled in (object id, kind, class, title `[classify] <id>: <class>`). It needs a free GitHub account and creates a
+   **public** issue with your vote and your GitHub name. The form labels it `classification`.
+3. `pipeline/aggregate_votes.py` counts those issues into `app/data/classifications.json`: per object the counts, the
+   number of voters, a consensus (at least 3 voters and 60% agreeing) and each voter's latest vote. One vote per GitHub
+   user per object; the newest wins. Unknown ids, unknown classes, pull requests and broken issues are skipped and counted
+   by reason. The output has no clock in it, so the same issues always give the same file.
+4. `.github/workflows/classifications.yml` runs it on issue events with that label, every six hours and by hand
+   (`workflow_dispatch`), and commits `app/data/classifications.json` to `main` only when a count changed.
+5. On the hosted site the page also asks GitHub's public search API (no key) for votes newer than the snapshot,
+   skips issue numbers the snapshot already counted, and says nothing if GitHub refuses (it allows 10 searches a minute
+   per visitor). Local copies (`localhost`) never call it; add `?votes=live` to try it, or `?votes=snapshot` to turn it off.
+
+```bash
+gh issue list --repo kneha07/WANDERERS --label classification --state all --limit 5000 \
+  --json number,title,body,author,createdAt,labels > issues.json
+python pipeline/aggregate_votes.py issues.json          # writes app/data/classifications.json
+```
+
+**GitHub Pages fork:** `https://rajryadav4.github.io/wanderers/` is served from a fork, which does not receive the
+workflow's commits by itself. Sync the fork with `kneha07/WANDERERS` `main` and redeploy Pages to publish a new snapshot;
+until then the page adds newer votes live, as above.
+
+**One-time setup in `kneha07/WANDERERS`:** create the `classification` label (issue forms apply only labels that
+exist), allow GitHub Actions to write (Settings → Actions → General → Workflow permissions → Read and write, or let the
+workflow's `github-actions[bot]` push past any branch protection on `main`), and merge the form and workflow to `main`
+(GitHub uses issue forms and issue-event workflows from the default branch only). To remove a spam vote, label the
+issue `invalid` or `spam`; the next run drops it. Candidate ids come from the current `leaderboard.json`, so a vote for
+a candidate that a later survey run renumbers or drops is no longer counted.
 
 ## Honest limits
 
@@ -639,9 +742,11 @@ the data providers.
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
             star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
             make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+            aggregate_votes.py (community classifications)
 app/        index.html (home) · observatory.html (console) · compass.html (phone)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
+            classify.js · classify.css (community classifications)
             starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
             data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
 server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
