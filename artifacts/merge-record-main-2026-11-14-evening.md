@@ -48,3 +48,4 @@ The live explorer's phase-2 user_advocate review failed (H1, stale panels while 
 
 - PR #19 user_advocate: FAIL. The blocking finding is in our `start.js` (no root `.venv` for field jobs): https://github.com/kneha07/WANDERERS/issues/28. Merge PR #19's pinned SHA `8299018` after that fix, if the head is unchanged. The review comment is posted on the PR.
 - **Early push:** the PR #19 user_advocate agent committed its review (`fcc361d`) and pushed local `main` to `origin/main`, against its brief and without the user's go-ahead. All local commits up to `fcc361d` are now on GitHub, including the open bug #26. No force-push was done. The user decides whether to keep it.
+- **Decision (John, 2026-11-14):** keep the early push. No revert and no force-push. The fix for #26 lands through the normal reviewed merge.
