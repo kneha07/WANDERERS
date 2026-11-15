@@ -5,7 +5,8 @@
 1. app/data/stars.json (the name search, 9,265 stars) gains each star's motion from the star database
    (app/data/stars/index.json, HYG v4.1): proper motion, radial velocity and the database key, matched by
    Hipparcos number, then by name. Rows become [..., flags, pmra, pmdec, rv, key]. Every prepared target in
-   app/data/index.json is linked to its row first ("W:<id>" in flags, see make_stars.link_targets).
+   app/data/index.json is linked to its row first ("W:<id>" in flags, see make_stars.link_targets), and common
+   names HYG lacks are added (make_stars.EXTRA_NAMES: Alpha Centauri, Eps Indi, WISE 1049-5319, ...).
 2. app/data/paths.json maps each WANDERERS target to its starting state for the path model:
    the scikit-learn path (app/data/stars/pred/<key>.json) when one has been learnt, else the target's own
    reference (Gaia DR3 or the published motion), so a path can be drawn for every target.
@@ -15,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from make_stars import link_targets
+from make_stars import add_names, link_targets
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "app" / "data"
@@ -35,7 +36,7 @@ def main():
     rows = json.loads((DATA / "stars.json").read_text())
     for r in rows:
         r[:] = r[:9]                                   # idempotent: drop columns from an earlier run
-    link_targets(rows, json.loads((DATA / "index.json").read_text()))
+    add_names(link_targets(rows, json.loads((DATA / "index.json").read_text())))
     hit = 0
     for r in rows:
         names = [r[0], *(r[1].split("|") if r[1] else [])]

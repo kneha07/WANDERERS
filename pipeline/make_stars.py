@@ -44,6 +44,25 @@ CON = {
 LY_PER_PC = 3.26156
 
 
+# Names people search for that HYG does not list (HYG writes "Alpha 1 Centauri", "Epsilon Indi"; Luhman 16 is not in HYG).
+EXTRA_NAMES = {
+    "Rigil Kentaurus": ["Alpha Centauri", "Alpha Centauri A", "Alf Cen A"],
+    "Toliman": ["Alpha Centauri B", "Alf Cen B"],
+    "Epsilon Indi": ["Epsilon Indi A", "Eps Indi", "Eps Indi A", "Eps Ind A"],
+    "Epsilon Indi B": ["Eps Indi B", "Eps Ind B", "Epsilon Indi Ba/Bb"],
+    "Luhman 16": ["Luhman 16AB", "WISE 1049-5319", "WISE J104915.57-531906.1"],
+}
+
+
+def add_names(out):
+    """Add EXTRA_NAMES to the rows with those main names (after the names already there). Safe to run again."""
+    for s in out:
+        extra = EXTRA_NAMES.get(s[0], [])
+        have = s[1].split("|") if s[1] else []
+        s[1] = "|".join(have + [n for n in extra if n not in have])
+    return out
+
+
 def link_targets(out, idx):
     """Link the WANDERERS prepared targets (app/data/index.json) to their rows (id in the flags column, "W:<id>"),
     adding a row for a target the list lacks, then sort by magnitude. A row matches when one of its names starts
@@ -103,7 +122,7 @@ def main(path):
             out.append([names[0], "|".join(names[1:]), round(float(r["ra"]) * 15, 5), round(float(r["dec"]), 5),
                         round(mag, 2), r["spect"], round(dist * LY_PER_PC, 2) if 0 < dist < 100000 else None,
                         CON.get(con, ("", ""))[0], flags])
-    link_targets(out, json.loads((ROOT / "app" / "data" / "index.json").read_text()))
+    add_names(link_targets(out, json.loads((ROOT / "app" / "data" / "index.json").read_text())))
     (ROOT / "app" / "data" / "stars.json").write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
     named = sum(1 for s in out if s[0] and not s[0].startswith(("HD ", "HIP ")))
     print(f"stars: {len(out)} ({named} with a common name); WANDERERS targets linked: "

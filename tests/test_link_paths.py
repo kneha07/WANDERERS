@@ -48,6 +48,15 @@ class LinkTargetTests(unittest.TestCase):
         out = make_stars.link_targets(rows(), [{"id": "r_dra", "name": "R Draconis A", "ra": 248.16734, "dec": 66.75501}])
         self.assertEqual(next(r for r in out if r[0] == "R Draconis")[1], "R Draconis A")
 
+    def test_common_names_are_added_once(self):
+        out = [["Rigil Kentaurus", "Alpha 1 Centauri|HIP 71683", 219.9, -60.8, -0.01, "G2V", 4.3, "Centaurus", "N"],
+               ["Luhman 16", "", 162.3, -53.3, None, "", None, "", "W:pos_162p3288_s53p3194"]]
+        once = make_stars.add_names(json.loads(json.dumps(out)))
+        self.assertEqual(once[0][1].split("|")[:2], ["Alpha 1 Centauri", "HIP 71683"])     # existing names stay first
+        self.assertIn("Alpha Centauri", once[0][1].split("|"))
+        self.assertIn("WISE 1049-5319", once[1][1].split("|"))
+        self.assertEqual(make_stars.add_names(json.loads(json.dumps(once))), once)
+
 
 @unittest.skipUnless((DATA / "stars.json").exists(), "no committed star list")
 class ShippedListTests(unittest.TestCase):
@@ -60,6 +69,13 @@ class ShippedListTests(unittest.TestCase):
         for t in json.loads((DATA / "index.json").read_text()):
             self.assertEqual(len(linked.get(t["id"], [])), 1, t["name"])
             self.assertEqual(linked[t["id"]][0].lower(), t["name"].lower())
+
+    def test_names_people_type_are_in_the_list(self):
+        # the page matches names that start with what was typed (app/search.js)
+        stars = json.loads((DATA / "stars.json").read_text(encoding="utf-8"))
+        names = [n.lower() for r in stars for n in [r[0], *(r[1].split("|") if r[1] else [])]]
+        for q in ("luhman", "luhman 16", "wise 1049", "alpha cen", "alpha centauri", "eps indi", "epsilon indi", "proxima"):
+            self.assertTrue(any(n.startswith(q) for n in names), q)
 
 
 if __name__ == "__main__":
