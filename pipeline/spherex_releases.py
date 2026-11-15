@@ -21,10 +21,17 @@ app/data/spherex_release.json:
   last_attempt, error
                     the latest try and, when it failed, why.
 
-IRSA is often down or answers 502. On any failure (network, timeout, an answer that is not a collection list)
-the last known file is kept and only `last_attempt` and `error` change; the script still exits 0. With no
-usable file yet, it writes one from what is known locally (fetch.py's built-in release list, dates from the
-target data) and says that the online check failed. Good data is never replaced by an empty or broken answer.
+IRSA is often down or answers 502. Then (from the command line) the check lists NASA IRSA's public SPHEREx bucket
+instead (s3://nasa-irsa-spherex, anonymous): its top-level release folders (dr1/, qr2/, qr3/, ...) and the newest
+level2 half-week folder of each (pipeline/spherex_s3.py). Releases another one replaced are left out (SUPERSEDED_BY:
+qr2 is the Quick Release that DR1 reprocessed); any other folder, such as a future dr2/ or qr4/, is a release. The
+file then says `checked_via: "S3 bucket"`, `checked` is the time of that listing, and each release entry gets its
+newest week (`newest_week`, e.g. 2026W40_2A, "2026 week 40"); `error` still says why IRSA could not be asked.
+
+When IRSA and the bucket both fail (network, timeout, an answer that is not a collection list) the last known file is
+kept and only `last_attempt` and `error` change; the script still exits 0. With no usable file yet, it writes one
+from what is known locally (fetch.py's built-in release list, dates from the target data) and says that the online
+check failed. Good data is never replaced by an empty or broken answer.
 
 Only the standard library is imported at module level, so pipeline/fetch.py can use load_release_names()
 cheaply; astroquery and astropy are imported when IRSA is asked.
@@ -67,8 +74,17 @@ NOTES = {
 SOURCE_ASTROQUERY = "IRSA SIA collection list (astroquery Irsa.list_collections, servicetype SIA, filter spherex)"
 SOURCE_TAP = "IRSA TAP (caom.observation: image collections whose name starts with spherex)"
 SOURCE_LOCAL = "pipeline/fetch.py built-in list (the online check failed: IRSA gave no usable answer)"
+SOURCE_S3 = ("NASA IRSA's SPHEREx S3 bucket (s3://nasa-irsa-spherex): top-level release folders and their newest "
+             "level2 week, listed because IRSA's SIA and TAP services did not answer")
+VIA_IRSA, VIA_S3 = "IRSA", "S3 bucket"
 SYNCED_FROM_GIT = "git: the last commit that changed app/data/<target>/target.json"
-SEARCHED_SOURCE = "data/cache/<target>/<release>_sia.xml: the IRSA answers fetch.py saved for each target"
+SEARCHED_SOURCE = ("data/cache/<target>/<release>_sia.xml: the IRSA answers fetch.py saved for each target, or "
+                   "<release>_s3.json when fetch.py searched the S3 bucket's image index instead (IRSA down)")
+
+# Bucket folders of releases that another release reprocessed and replaced. They are not searched and never count as
+# new data. IRSA: "DR1 = reprocessed QR2", and QR2 "is not searchable after DR1" (docs/research/spherex-data-access.md;
+# QR1 was retired in Feb 2026). A release is left out only when the release that replaced it is in the bucket too.
+SUPERSEDED_BY = {"spherex_qr1": "spherex_dr1", "spherex_qr2": "spherex_dr1"}
 
 TAP_SYNC = "https://irsa.ipac.caltech.edu/TAP/sync"
 # The query astroquery's list_collections(servicetype="SIA") runs, narrowed to SPHEREx so it stays small.
@@ -127,13 +143,20 @@ def sia_cache_name(release):
     return "spherex_sia.xml" if release == "spherex_dr1" else f"{release}_sia.xml"
 
 
+def s3_answer_name(release):
+    """File name of the search answer fetch.py writes in data/cache/<target>/ when it found a release's images in the
+    S3 bucket's image index instead of IRSA SIA (pipeline/spherex_s3.py)."""
+    return f"{release}_s3.json"
+
+
 def release_of_cache_file(name):
-    """The release a cached SIA answer belongs to (inverse of sia_cache_name), or None."""
+    """The release a cached search answer belongs to (inverse of sia_cache_name and s3_answer_name), or None."""
     if name == "spherex_sia.xml":
         return "spherex_dr1"
-    if name.endswith("_sia.xml"):
-        rel = name[: -len("_sia.xml")]
-        return rel if is_release(rel) else None
+    for end in ("_sia.xml", "_s3.json"):
+        if name.endswith(end):
+            rel = name[: -len(end)]
+            return rel if is_release(rel) else None
     return None
 
 
@@ -274,6 +297,61 @@ def discover(list_collections=_astroquery_list, tap_get=_tap_get, timeout=TIMEOU
     raise IrsaUnavailable("; ".join(errors) or "no way to ask IRSA")
 
 
+# ---------------------------------------------------------------- the S3 bucket ----------------------------------
+
+def releases_from_bucket(folders, newest=None):
+    """What the bucket's release folders say: (release entries oldest first, {superseded: replaced by}).
+
+    folders: top-level folder names ('dr1', 'qr2', 'qr3', ...; others are ignored). newest: {folder: newest level2
+    week folder}. A folder in SUPERSEDED_BY is left out when the release that replaced it is there too; every other
+    release folder counts, including ones we have never seen (a new dr2/ or qr4/ is new data). Raises IrsaAnswerError
+    when no release folder is left."""
+    newest = newest or {}
+    names = order_releases(f"spherex_{f}" for f in folders if isinstance(f, str))
+    superseded = {n: SUPERSEDED_BY[n] for n in names if n in SUPERSEDED_BY and SUPERSEDED_BY[n] in names}
+    keep = [n for n in names if n not in superseded]
+    if not keep:
+        raise IrsaAnswerError("the S3 bucket has no SPHEREx release folder")
+    entries = []
+    for n in keep:
+        e = release_entry(n)
+        week = newest.get(n[len("spherex_"):])
+        if week:
+            spherex_s3 = _s3_module()
+            e["newest_week"] = week
+            e["newest_week_label"] = spherex_s3.week_label(week)
+            e["newest_week_ends"] = spherex_s3.week_end(week)
+        entries.append(e)
+    return entries, superseded
+
+
+def _s3_module():
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import spherex_s3
+    return spherex_s3
+
+
+def discover_s3(reader=None, now=None):
+    """List NASA IRSA's SPHEREx bucket (anonymous S3). Returns a dict: releases (entries with newest weeks),
+    superseded, folders, newest_weeks, listed (UTC time the listing finished). Raises on any failure."""
+    spherex_s3 = _s3_module()
+    reader = reader or spherex_s3.S3Reader(tries=3, timeout=30)
+    folders = spherex_s3.release_folders(reader)
+    newest = spherex_s3.newest_weeks(reader, folders)
+    entries, superseded = releases_from_bucket(folders, newest)
+    return {"releases": entries, "superseded": superseded, "folders": folders, "newest_weeks": newest,
+            "listed": now() if callable(now) else (now or now_utc())}
+
+
+def bucket_summary(info):
+    """The `s3_listing` part of the status file."""
+    return {"bucket": "s3://nasa-irsa-spherex (us-east-1, anonymous)", "listed": info.get("listed"),
+            "folders": list(info.get("folders") or []), "superseded": dict(info.get("superseded") or {}),
+            "newest_weeks": dict(info.get("newest_weeks") or {})}
+
+
 # ---------------------------------------------------------------- local facts ------------------------------------
 
 def year_to_date(year):
@@ -326,27 +404,42 @@ def data_through(data_dir=DATA):
     return (max(by_target.values()) if by_target else None), by_target
 
 
+def s3_answer_complete(path):
+    """True when an S3 search answer (<release>_s3.json) says the image index covered every week folder of the
+    release in the bucket. A search of a partial index does not count as having searched the release."""
+    try:
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(d, dict) and d.get("index_complete") is True
+
+
 def searched_releases(cache_dir, targets):
-    """{target: [releases fetch.py searched]} from the SIA answers cached in data/cache/<target>/. Targets with no
-    cache folder are left out (nothing is known about them here)."""
+    """{target: [releases fetch.py searched]} from the search answers cached in data/cache/<target>/: IRSA SIA answers
+    (<release>_sia.xml) and complete S3-index answers (<release>_s3.json). Targets with no cache folder are left out
+    (nothing is known about them here)."""
     out = {}
     for tid in targets:
         d = Path(cache_dir) / tid
         if not d.is_dir():
             continue
-        out[tid] = order_releases(r for r in (release_of_cache_file(p.name) for p in d.glob("*_sia.xml")) if r)
+        files = list(d.glob("*_sia.xml")) + [p for p in d.glob("*_s3.json") if s3_answer_complete(p)]
+        out[tid] = order_releases(r for r in (release_of_cache_file(p.name) for p in files) if r)
     return out
 
 
 def releases_behind(known, searched, used, targets):
     """{target: [known releases newer than the newest one its data came from]}. A target with no record of its
-    own uses `used` (the releases of the last rebuild)."""
+    own uses `used` (the releases of the last rebuild). A data release numbered above the newest data release the
+    target was built from is new too (DR2 after DR1), although data releases sort before the quick releases."""
     rank = {n: i for i, n in enumerate(known)}
     behind = {}
     for tid in targets:
         mine = [r for r in (searched.get(tid) or used or []) if r in rank]
         top = max((rank[r] for r in mine), default=-1)
-        newer = [n for n in known if rank[n] > top]
+        top_dr = max((release_key(r)[1] for r in mine if release_key(r)[0] == 0), default=None)
+        newer = [n for n in known if rank[n] > top
+                 or (top_dr is not None and release_key(n)[0] == 0 and release_key(n)[1] > top_dr)]
         if newer:
             behind[tid] = newer
     return behind
@@ -426,9 +519,10 @@ def write_status(status, path=None):
 
 def build_status(release_names, *, releases=None, releases_source, other=(), previous=None, checked=None,
                  now=None, error=None, data_dir=DATA, cache_dir=None, synced=None, synced_source=None,
-                 git=git_last_commit):
+                 git=git_last_commit, checked_via=None, s3_listing=None):
     """The status dict. `previous` (the last file) supplies what this run cannot see: the sync time, and which
-    releases each target was built from when there is no cache here (as on a fresh CI runner)."""
+    releases each target was built from when there is no cache here (as on a fresh CI runner). checked_via says what
+    answered the check ("IRSA" or "S3 bucket"); s3_listing what the bucket listing found (S3 checks only)."""
     prev = previous or {}
     now = now or now_utc()
     names = order_releases(release_names)
@@ -470,12 +564,16 @@ def build_status(release_names, *, releases=None, releases_source, other=(), pre
         "synced": synced,
         "synced_source": synced_source,
         "checked": checked if checked is not None else prev.get("checked"),
+        "checked_via": checked_via if checked is not None else prev.get("checked_via"),
         "last_attempt": now,
         "error": error,
         "used_releases": used,
         "searched_releases": searched,
         "searched_source": SEARCHED_SOURCE,
     }
+    listing = s3_listing if checked is not None else prev.get("s3_listing")
+    if listing and status["checked_via"] == VIA_S3:
+        status["s3_listing"] = listing
     if "rebuilt_targets" in prev:
         status["rebuilt_targets"] = prev["rebuilt_targets"]
     if "not_rebuilt" in prev:
@@ -493,14 +591,34 @@ def meaningful_change(old, new):
     return bool(old.get("error")) and not new.get("error")
 
 
-def check(path=None, *, data_dir=DATA, cache_dir=None, now=None, ask=None, git=git_last_commit):
-    """One release check. Returns (status, changed, online). Never raises for an IRSA failure."""
+def check(path=None, *, data_dir=DATA, cache_dir=None, now=None, ask=None, s3=None, git=git_last_commit,
+          report=None):
+    """One release check. Returns (status, changed, online); online means IRSA answered. Never raises for an IRSA
+    failure. s3 (optional): a callable that lists the S3 bucket (discover_s3), tried when IRSA fails; the command
+    line passes it. report (optional dict) gets "via": "IRSA", "S3 bucket" or None (both failed)."""
     now = now or now_utc()
+    report = report if report is not None else {}
     previous = read_status(path)
     try:
         releases, other, source = (ask or discover)()
     except Exception as e:  # noqa: BLE001 - any failure: keep what we have
         err = f"IRSA release check failed on {now[:10]}: {_short(e)}"
+        if s3 is not None:
+            try:
+                info = s3()
+                prev = previous or {}
+                status = build_status([r["name"] for r in info["releases"]], releases=info["releases"],
+                                      releases_source=SOURCE_S3, other=prev.get("other_collections") or (),
+                                      previous=previous, checked=info.get("listed") or now, now=now, error=err,
+                                      data_dir=data_dir, cache_dir=cache_dir, git=git, checked_via=VIA_S3,
+                                      s3_listing=bucket_summary(info))
+                changed = meaningful_change(previous, status)
+                write_status(status, path)
+                report["via"] = VIA_S3
+                return status, changed, False
+            except Exception as e2:  # noqa: BLE001 - the bucket failed too: as before, keep what we have
+                err += f"; S3 bucket listing failed too: {_short(e2)}"
+        report["via"] = None
         if previous is not None:
             previous["last_attempt"], previous["error"] = now, err
             write_status(previous, path)
@@ -511,9 +629,10 @@ def check(path=None, *, data_dir=DATA, cache_dir=None, now=None, ask=None, git=g
         return status, True, False
     status = build_status([r["name"] for r in releases], releases=releases, releases_source=source, other=other,
                           previous=previous, checked=now, now=now, error=None, data_dir=data_dir,
-                          cache_dir=cache_dir, git=git)
+                          cache_dir=cache_dir, git=git, checked_via=VIA_IRSA)
     changed = meaningful_change(previous, status)
     write_status(status, path)
+    report["via"] = VIA_IRSA
     return status, changed, True
 
 
@@ -538,7 +657,8 @@ def mark_synced(path=None, *, since=None, data_dir=DATA, cache_dir=CACHE, now=No
                           releases_source=previous.get("releases_source") or SOURCE_LOCAL,
                           other=previous.get("other_collections") or (), previous=previous,
                           checked=previous.get("checked"), now=previous.get("last_attempt") or now,
-                          error=previous.get("error"), data_dir=data_dir, cache_dir=cache_dir, git=git, **kw)
+                          error=previous.get("error"), data_dir=data_dir, cache_dir=cache_dir, git=git,
+                          checked_via=previous.get("checked_via"), s3_listing=previous.get("s3_listing"), **kw)
     if rebuilt:
         status["rebuilt_targets"] = rebuilt
         status["not_rebuilt"] = [t for t in targets if t not in rebuilt]
@@ -604,7 +724,12 @@ def summary(status):
              f"known releases:  {', '.join(map(str, names))}  [{status.get('releases_source')}]",
              f"data through:    {status.get('data_through')}  ({status.get('targets')} prepared targets)",
              f"last synced:     {status.get('synced')}",
-             f"checked:         {status.get('checked')}"]
+             f"checked:         {status.get('checked')}"
+             + (f"  (via {status['checked_via']})" if status.get("checked_via") else "")]
+    for r in status.get("releases") or []:
+        if isinstance(r, dict) and r.get("newest_week_label"):
+            lines.append(f"{str(r.get('label') or r.get('name')).replace('SPHEREx ', '')} at IRSA has images "
+                         f"through {r['newest_week_label']} (S3 folder {r['newest_week']})")
     if status.get("new_release_available"):
         lines.append(f"NEW DATA: {', '.join(r.get('name', '?') for r in status.get('new_releases') or [])} not yet in "
                      f"{len(status.get('targets_behind') or {})} of {status.get('targets')} targets")
@@ -629,7 +754,9 @@ def main(argv=None):
     p.add_argument("--cache", default=None, help="fetch.py cache folder, to see which releases each target was "
                                                   "searched in (default data/cache when it exists)")
     p.add_argument("--github-output", default=None, help="append key=value lines for GitHub Actions")
-    p.add_argument("--require-online", action="store_true", help="check: exit 1 when IRSA could not be asked")
+    p.add_argument("--require-online", action="store_true", help="check: exit 1 when IRSA could not be asked "
+                                                                    "(an S3 bucket listing does not count)")
+    p.add_argument("--no-s3", action="store_true", help="check: do not list the S3 bucket when IRSA is down")
     p.add_argument("--since", default=None, help="synced: count targets whose target.json was written after this")
     p.add_argument("--write-defs", action="store_true", help="targets: restore missing target_def.json files")
     p.add_argument("--title", action="store_true", help="show: print a one-line title instead of the summary")
@@ -656,12 +783,16 @@ def main(argv=None):
         if a.github_output:
             _github_output(a.github_output, rebuilt=len(rebuilt))
         return 0
-    status, changed, online = check(a.file, data_dir=a.data, cache_dir=cache)
+    report = {}
+    status, changed, online = check(a.file, data_dir=a.data, cache_dir=cache, s3=None if a.no_s3 else discover_s3,
+                                    report=report)
     print(summary(status))
-    print(f"changed: {changed}  online: {online}")
+    print(f"changed: {changed}  online: {online}  answered by: {report.get('via') or 'nobody (IRSA and S3 failed)'}")
     if a.github_output:
         _github_output(a.github_output, new_release=bool(status.get("new_release_available")) and online,
-                       changed=changed and online, online="ok" if online else "failed", current=status["current"])
+                       changed=changed and online,
+                       online="ok" if online else ("s3" if report.get("via") == VIA_S3 else "failed"),
+                       current=status["current"])
     return 1 if a.require_online and not online else 0
 
 

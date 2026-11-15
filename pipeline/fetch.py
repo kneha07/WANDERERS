@@ -12,6 +12,12 @@ Sources (all public, no login):
 IRSA is busy during the hackathon and sometimes answers 502/503, so every request retries
 with backoff and every file is cached under data/cache/<target>/. Re-running only fetches
 what is missing.
+
+When IRSA's SIA or cutout service still fails after the retries, SPHEREx falls back to NASA IRSA's public S3 bucket
+(pipeline/spherex_s3.py), with a log line saying so: images are found in the bucket's footprint index
+(data/cache/spherex_s3_index/<release>.jsonl; build it with `python pipeline/spherex_s3.py index qr3`), and cutouts
+are read from the files on S3 with HTTP Range requests, into the same files and format as IRSA's cutouts. The S3
+search answer is saved as data/cache/<target>/<release>_s3.json (pipeline/spherex_releases.py reads it as "searched").
 """
 import io, json, sys, time, warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -29,7 +35,8 @@ from astropy.time import Time
 sys.path.insert(0, str(Path(__file__).parent))
 from targets import TARGETS
 from fov import DEFAULT_FOV, fov_of, clamp_fov, position_id
-from spherex_releases import load_release_names, sia_cache_name
+from spherex_releases import load_release_names, sia_cache_name, s3_answer_name
+import spherex_s3
 
 warnings.simplefilter("ignore")
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,6 +56,18 @@ RELEASES = load_release_names(fallback=FALLBACK_RELEASES)
 
 session = requests.Session()
 session.headers["User-Agent"] = "wanderers-spaceapps/0.1"
+# Set when an IRSA SPHEREx service failed after all retries in this run: later searches and cutouts go straight to the
+# S3 bucket instead of waiting minutes for IRSA again. An SIA answer already cached is still used.
+IRSA_DOWN = {"sia": False, "cutout": False}
+S3_WORKERS = 8                       # S3 Range reads at a time (IRSA cutouts stay at 3)
+_s3_reader = None
+
+
+def s3_reader():
+    global _s3_reader
+    if _s3_reader is None:
+        _s3_reader = spherex_s3.S3Reader(pool=32)
+    return _s3_reader
 
 
 def get(url, tries=6, timeout=120):
@@ -165,6 +184,138 @@ def sia(collection, c, out):
     return parse_single_table(str(out)).to_table(use_names_over_ids=True)
 
 
+SIA_COLUMNS = ("access_url", "t_min", "t_max", "energy_bandpassname", "obs_id", "dataproduct_subtype",
+               "dataproduct_type", "calib_level", "em_min", "em_max", "obs_collection", "cloud_access", "s_region")
+
+
+def s3_search(rel, ref, c25, d, reader=None, index_root=None, now=None):
+    """IRSA SIA's answer for one release, from the S3 bucket's footprint index instead: the images whose footprint
+    holds the target at that image's own time (predict() on the reference). Saves the answer as
+    data/cache/<target>/<release>_s3.json and returns a table with the SIA columns fetch() uses."""
+    from datetime import datetime, timezone
+    short = rel.removeprefix("spherex_")
+    if not spherex_s3.index_path(short, index_root).exists():
+        raise RuntimeError(f"no S3 image index for {short} yet (python pipeline/spherex_s3.py index {short})")
+    index = spherex_s3.load_index(short, index_root, near=(c25.ra.deg, c25.dec.deg, 3.0))
+    reader = reader or s3_reader()
+
+    def at(mjd):
+        c = predict(ref, Time(mjd, format="mjd").jyear)
+        return c.ra.deg, c.dec.deg
+
+    recs = spherex_s3.search(index, at, c25.ra.deg, c25.dec.deg, reader=reader, release=short, root=index_root)
+    weeks = spherex_s3.week_folders(reader, short)
+    answer = spherex_s3.search_answer(
+        short, recs, weeks, spherex_s3.index_coverage(short, index_root),
+        position={"ra_2025_9": round(c25.ra.deg, 6), "dec_2025_9": round(c25.dec.deg, 6),
+                  "rule": "target position at each image's MJD-BEG (fetch.py predict() on data/cache/<target>/gaia.json)"},
+        searched=now or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    if not answer["index_complete"]:
+        print(f"   {rel}: the S3 index misses {len(answer['missing_weeks'])} of {len(weeks)} week folders; "
+              f"this search is partial (run: python pipeline/spherex_s3.py index {short})", flush=True)
+    out = d / s3_answer_name(rel)
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(answer, indent=1) + "\n")
+    tmp.rename(out)
+    return sia_table(spherex_s3.sia_like_rows(recs, short))
+
+
+# Column types as astropy reads IRSA's SIA VOTable, so the two kinds of table stack (vstack) together.
+SIA_DTYPES = (object, "f8", "f8", object, object, object, object, "i2", "f8", "f8", object, object, object)
+
+
+def sia_table(rows):
+    """An astropy Table with the SIA_COLUMNS of SIA-like row dicts (spherex_s3.sia_like_rows)."""
+    from astropy.table import Table
+    t = Table(names=SIA_COLUMNS, dtype=SIA_DTYPES)
+    for r in rows:
+        t.add_row([r[c] for c in SIA_COLUMNS])
+    return t
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+def find_images(rel, ref, c25, d, log=say):
+    """One release's images that cover the target: IRSA SIA (or its cached answer); when IRSA fails, the S3 index."""
+    out = d / sia_cache_name(rel)
+    if out.exists() or not IRSA_DOWN["sia"]:
+        try:
+            return sia(rel, c25, out), "IRSA SIA"
+        except Exception as e:  # noqa: BLE001 - any IRSA failure: try the bucket
+            IRSA_DOWN["sia"] = True
+            log(f"   {rel}: IRSA SIA failed ({e}); falling back to the S3 bucket's image index")
+    else:
+        log(f"   {rel}: IRSA SIA failed earlier in this run; using the S3 bucket's image index")
+    return s3_search(rel, ref, c25, d), "S3 index"
+
+
+def s3_key(row):
+    """The S3 key of an SIA row's image (cloud_access), or None."""
+    try:
+        return json.loads(str(row["cloud_access"]))["aws"]["key"]
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def get_cutout(row, c, size_px, from_s3=False, log=say):
+    """FITS bytes of one SPHEREx cutout (the HDUs in KEEP_HDUS) centred on c: IRSA's cutout service, or the S3 bucket
+    when IRSA fails (or failed earlier in this run, or the row came from the S3 index). None when the cutout box
+    misses the image."""
+    if not from_s3 and not IRSA_DOWN["cutout"]:
+        try:   # SIA (same IRSA host) already failed in this run: two tries, not six minutes of them
+            return trim(get(f"{row['access_url']}?center={c.ra.deg},{c.dec.deg}&size={size_px}px",
+                            tries=2 if IRSA_DOWN["sia"] else 6))
+        except Exception as e:  # noqa: BLE001
+            if s3_key(row) is None:
+                raise
+            if not IRSA_DOWN["cutout"]:
+                log(f"   IRSA cutouts failed ({e}); reading the cutouts from the S3 bucket instead")
+            IRSA_DOWN["cutout"] = True
+    key = s3_key(row)
+    if key is None:
+        raise RuntimeError(f"no S3 copy listed for {str(row['access_url'])[:100]}")
+    return spherex_s3.cutout(s3_reader(), key, c.ra.deg, c.dec.deg, size_px, keep=KEEP_HDUS)
+
+
+def select_images(spx, cached, max_images=None):
+    """Indexes of the SPHEREx rows to use (spx sorted by detector, then time). Every cutout carries ~4 MB of PSF
+    tables, so the count is capped: an equal share per detector (each covers a different wavelength range), spread
+    evenly in time, so all 6 detectors and every survey pass are represented and spectral coverage stays complete.
+
+    Images already on disk (stems in `cached`) are free, so they are always kept, and an evenly spread pick that is
+    not on disk is replaced by an unused cached image of the same detector taken within 20 days of it (the same
+    survey pass; backend/spherex.py groups passes the same way). A pick with no such stand-in is downloaded. So a
+    target fetched before a new release keeps its cutouts, and the new release's passes still get their share."""
+    max_images = MAX_IMAGES if max_images is None else max_images
+    n_all = len(spx)
+    if n_all <= max_images:
+        return list(range(n_all))
+    stem = lambda r: Path(str(r["access_url"]).split("?")[0]).stem
+    quota = max_images // 6
+    pick = set()
+    for det in sorted(set(spx["energy_bandpassname"])):
+        idx = [i for i, r in enumerate(spx) if r["energy_bandpassname"] == det]
+        on_disk = [i for i in idx if stem(spx[i]) in cached]
+        chosen, used = set(), set()
+        for j in np.linspace(0, len(idx) - 1, min(quota, len(idx))).round().astype(int):
+            i = idx[j]
+            if i in chosen:
+                continue
+            if i not in on_disk:
+                t = float(spx[i]["t_min"])
+                near = [k for k in on_disk if k not in used and abs(float(spx[k]["t_min"]) - t) <= 20]
+                if near:
+                    i = min(near, key=lambda k: abs(float(spx[k]["t_min"]) - t))
+            chosen.add(i)
+            used.add(i)
+        pick |= chosen
+    # Anything already on disk is free to use, so keep it too.
+    pick |= {i for i, r in enumerate(spx) if stem(r) in cached}
+    return sorted(pick)
+
+
 def first_release_wins(rows, seen):
     """Indexes of one release's rows whose exposure (obs_id, detector) no earlier release had, then add them to
     `seen`. Called once per release in RELEASES order, so an exposure that two releases both list is kept from the
@@ -206,42 +357,26 @@ def fetch(tid):
     # --- SPHEREx (every release in RELEASES): one cutout per spectral image covering the target ---
     c25 = predict(ref, 2025.9)
     from astropy.table import vstack
-    tabs, seen = [], set()
+    tabs, seen, s3_rows = [], set(), set()
     for rel in RELEASES:
         try:
-            tb = sia(rel, c25, d / sia_cache_name(rel))
+            tb, how = find_images(rel, ref, c25, d)
         except Exception as e:
             print(f"   {rel}: not available ({e})"); continue
         if len(tb) == 0:
+            print(f"   {rel}: 0 images ({how})")
             continue
         tb = tb[tb["dataproduct_subtype"] == "science"]
         keep = first_release_wins(tb, seen)
         if keep:
-            tabs.append(tb[keep]); print(f"   {rel}: {len(keep)} images")
+            tabs.append(tb[keep]); print(f"   {rel}: {len(keep)} images ({how})")
+            if how == "S3 index":
+                s3_rows |= {str(tb[i]["access_url"]) for i in keep}
     spx = vstack(tabs, metadata_conflicts="silent")
     spx.sort(["energy_bandpassname", "t_min"])
     n_all = len(spx)
-    # Every cutout carries ~4 MB of PSF tables, so cap the count. Picking evenly through the list
-    # sorted by (detector, time) keeps all 6 detectors and both sky surveys represented, and each
-    # image samples a different wavelength at the target, so spectral coverage stays complete.
-    if n_all > MAX_IMAGES:
-        # Equal share per detector (each covers a different wavelength range), spread in time.
-        cached = {p.stem for p in (d / "spherex").glob("*.fits")}
-        stem = lambda r: Path(str(r["access_url"]).split("?")[0]).stem
-        quota = MAX_IMAGES // 6
-        pick = set()
-        for det in sorted(set(spx["energy_bandpassname"])):
-            idx = [i for i, r in enumerate(spx) if r["energy_bandpassname"] == det]
-            have = [i for i in idx if stem(spx[i]) in cached][:quota]
-            chosen = set(have)
-            for j in np.linspace(0, len(idx) - 1, min(quota, len(idx))).round().astype(int):
-                if len(chosen) >= quota:
-                    break
-                chosen.add(idx[j])
-            pick |= chosen
-        # Anything already on disk is free to use, so keep it too.
-        pick |= {i for i, r in enumerate(spx) if stem(r) in cached}
-        spx = spx[sorted(pick)]
+    cached = {p.stem for p in (d / "spherex").glob("*.fits")}
+    spx = spx[select_images(spx, cached)]
     print(f"   SPHEREx ({', '.join(RELEASES)}): {n_all} images, using {len(spx)}", flush=True)
     fov = fov_of(t)
     size_px = int(fov / SPX_PIX) + 4
@@ -252,13 +387,18 @@ def fetch(tid):
             return "cached"
         yr = Time(row["t_min"], format="mjd").jyear
         c = predict(ref, yr)
+        content = get_cutout(row, c, size_px, from_s3=str(row["access_url"]) in s3_rows)
+        if content is None:
+            print(f"   {f.stem}: the cutout box misses the image; skipped", flush=True)
+            return "missed"
         f.parent.mkdir(exist_ok=True)
         tmp = f.with_suffix(".part")
-        tmp.write_bytes(trim(get(f"{row['access_url']}?center={c.ra.deg},{c.dec.deg}&size={size_px}px")))
+        tmp.write_bytes(content)
         tmp.rename(f)            # atomic: a killed run never leaves a half-written .fits
         return "new"
 
-    with ThreadPoolExecutor(3) as ex:   # gentle on IRSA during the hackathon
+    # gentle on IRSA during the hackathon (3 at a time); the S3 bucket takes more
+    with ThreadPoolExecutor(S3_WORKERS if (s3_rows or IRSA_DOWN["cutout"]) else 3) as ex:
         done = 0
         for status in ex.map(one, spx):
             done += 1

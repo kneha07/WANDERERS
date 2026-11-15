@@ -186,6 +186,18 @@ TESTED results:
 - Bucket: `nasa-irsa-spherex`, region `us-east-1`. Key = `cloud_access.aws.key` from SIA. The bucket allows anonymous access with no egress charge ([IRSA cloud access](https://irsa.ipac.caltech.edu/cloud_access/)). HTTPS form: `https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/<key>`.
 - The IRSA `/ibe/data/` URL also supports Range (206), but it has no CORS header.
 
+### The bucket without IRSA (TESTED 2026-11-15, while IRSA SIA, TAP and cutouts answered 502)
+
+Used by `pipeline/spherex_s3.py` and the fallbacks in `pipeline/fetch.py` and `pipeline/spherex_releases.py`.
+
+- Top level: `dr1/`, `qr2/`, `qr3/` (plus `index.html`). Each has `level2/` and calibration folders (`sip/`, `epsf/`, ...); `dr1/` also `hips5_cube/`.
+- `level2/` holds half-week folders named by ISO year and week: `qr3/level2/2026W20_2A/` ... `2026W40_2A/` (41 folders; a file in `2026W40_2A` has `MJD-OBS` 2026-10-01). `dr1/level2/` runs `2025W17_4B` ... `2026W20_1A` (110 folders) and `qr2/level2/` `2025W17_4B` ... `2026W29_2A` (129).
+- In a week folder: `l2b-v27-<date>/<detector>/level2_<obs_id>D<det>_spx_l2b-v27-<date>.fits`, about 1,700-1,800 files per detector, and sometimes an `l2b_retry-v27-<date>/` folder with a few dozen images reprocessed after a failure (none of them repeats a main-folder image in `2026W40_2A`).
+- HDU layout of a QR3 file (65,131,200 bytes): primary header 2,880 B; IMAGE header 25,920 B then 2040 x 2040 float32; **FLAGS is a RICE_1 tile-compressed table with one tile per row** (`ZTILE1=2040`, `ZTILE2=1`; 2040 row descriptors, then the heap); VARIANCE and ZODI uncompressed float32; EPSF table; WCS-WAVE (720-byte table) last. So the first 10 blocks (28,800 B) hold everything needed to place an image on the sky.
+- The IMAGE header's `SPS_FLAGS` (a HIERARCH card) is `all_sky`, `deep_north` or `deep_south` (with modifiers such as `,downlink`). 120 sampled images that IRSA SIA listed in `spherex_dr1` / `spherex_qr3` (R Dra and two other targets) all say `all_sky`: the deep-field images belong to the `_deep` collections.
+- Dichroic pairs: in 9 exposures (27 pairs) of three QR3 weeks, D1/D4, D2/D5 and D3/D6 have identical `MJD-BEG` and footprints that differ by 69-77" on average and 105" at most (12-17 px); neighbouring detectors D1/D2 are 3.86 deg apart.
+- An IRSA cutout (`?center=..&size=Npx`) equals the full-file section `[y0:y0+N, x0:x0+N]` with `x0 = floor(px) - (N/2 - 1)` (px: the SIP-aware 0-based pixel of the centre), header cards unchanged except `NAXISn`, `CRPIXn`, `CRPIXnA` and `CRPIXnW` (shifted by the origin). Reading that section from S3 (IMAGE and VARIANCE rows, the FLAGS rows' compressed bytes, WCS-WAVE from the file end) reproduced 21 cached IRSA cutouts of six targets byte for byte in header and pixels, about 1.1 MB and 7 Range requests per cutout instead of about 4 MB.
+
 ## 5. CORS
 
 TESTED with `curl -H "Origin: https://example.com"` and with `fetch()` from a page on `https://www.spaceappschallenge.org`:

@@ -103,6 +103,59 @@ test("a later failed check keeps the last good check date", () => {
   assert.match(R.describe(st).title, /2026-11-22/);
 });
 
+// ---------------------------------------------------------------- IRSA down, S3 bucket listed
+
+// As pipeline/spherex_releases.py writes it when IRSA's services fail and the S3 bucket listing answers.
+const VIA_S3 = { ...OK, checked: "2026-11-15T13:52:21Z", checked_via: "S3 bucket", last_attempt: "2026-11-15T13:52:19Z",
+  error: "IRSA release check failed on 2026-11-15: astroquery: 502 Server Error; TAP: IRSA TAP answered HTTP 502",
+  releases: [{ name: "spherex_dr1", label: "SPHEREx Data Release 1", newest_week: "2026W20_1A", newest_week_label: "2026 week 20" },
+    { name: "spherex_qr3", label: "SPHEREx Quick Release 3", newest_week: "2026W40_2A", newest_week_label: "2026 week 40" }] };
+
+test("IRSA down but the S3 bucket listed: checked, with where the answer came from", () => {
+  assert.equal(text(R.render(VIA_S3)),
+    "SPHEREx Quick Release 3 · data through Oct 2026 · last synced 15 Nov 2026 · checked 15 Nov 2026 (S3 listing; IRSA services down)");
+  assert.doesNotMatch(R.render(VIA_S3), /spx-fail|failed/);
+  assert.equal(R.describe(VIA_S3).fresh, true);
+});
+
+test("an S3 listing without an IRSA error says only where the answer came from", () => {
+  assert.match(text(R.render({ ...VIA_S3, error: null })), /checked 15 Nov 2026 \(S3 listing\)$/);
+});
+
+test("the S3 note sits after the date, outside the <time> element", () => {
+  assert.match(R.render(VIA_S3), /<time datetime="2026-11-15">15 Nov 2026<\/time> \(S3 listing; IRSA services down\)<\/span>/);
+});
+
+test("both IRSA and the bucket failed: still 'IRSA release check failed'", () => {
+  const st = { ...FAILED, checked_via: null, error: FAILED.error + "; S3 bucket listing failed too: timeout" };
+  assert.match(text(R.render(st)), /IRSA release check failed 15 Nov 2026$/);
+  assert.doesNotMatch(text(R.render(st)), /S3 listing/);
+});
+
+test("a check answered by IRSA has no S3 note", () => {
+  assert.match(text(R.render({ ...OK, checked_via: "IRSA" })), /checked 15 Nov 2026$/);
+});
+
+test("the title gives the newest week of each release and the IRSA error", () => {
+  const title = R.describe(VIA_S3).title;
+  assert.match(title, /Quick Release 3 at IRSA has images through 2026 week 40/);
+  assert.match(title, /Data Release 1 at IRSA has images through 2026 week 20/);
+  assert.match(title, /Last check: IRSA release check failed on 2026-11-15/);
+  assert.doesNotMatch(R.describe(OK).title, /has images through/);
+});
+
+test("an S3-listed status with new data still shows the note", () => {
+  const st = { ...VIA_S3, new_release_available: true, new_releases: [{ name: "spherex_qr4", label: "SPHEREx Quick Release 4" }],
+    targets_behind: { barnard: ["spherex_qr4"] } };
+  assert.equal(R.describe(st).note, "New data available at IRSA: Quick Release 4 is not yet in 1 of 11 targets.");
+});
+
+test("week labels from the file are escaped in the title source too", () => {
+  const st = { ...VIA_S3, releases: [{ name: "spherex_qr3", label: "SPHEREx Quick Release 3", newest_week_label: "<b>x</b>" }] };
+  assert.match(R.describe(st).title, /<b>x<\/b>/);                        // a title attribute: set with setAttribute
+  assert.doesNotMatch(R.render(st), /<b>x/);                              // never in the HTML
+});
+
 test("missing parts are left out, not shown as blanks", () => {
   assert.equal(text(R.render({ current_label: "SPHEREx Quick Release 3" })), "SPHEREx Quick Release 3");
   assert.equal(text(R.render({ ...OK, synced: null, data_through: "garbage" })), "SPHEREx Quick Release 3 · checked 15 Nov 2026");
