@@ -140,6 +140,37 @@ def read_tile_year(k5: int, year: str, fs=None, columns=COLUMNS, part: int = 0, 
     return None
 
 
+def iter_tile_year(k5: int, year: str, fs=None, columns=COLUMNS, part: int = 0, retries: int = 3):
+    """Like read_tile_year but yields the file one row group at a time (all-nullable tables), so a caller can
+    reduce each piece before the next is read (ecliptic-pole files have 6 M rows in 3 row groups). Yields
+    nothing when the file is missing."""
+    fs = fs or s3()
+    path = tile_path(k5, year, part)
+    pf = None
+    for attempt in range(retries):
+        try:
+            pf = pq.ParquetFile(path, filesystem=fs)
+            break
+        except FileNotFoundError:
+            return
+        except OSError as e:
+            msg = str(e).lower()
+            if "not found" in msg or "does not exist" in msg or "nosuchkey" in msg:
+                return
+            if attempt == retries - 1:
+                raise
+            time.sleep(1.5 * (attempt + 1))
+    for rg in range(pf.metadata.num_row_groups):
+        for attempt in range(retries):
+            try:
+                yield nullable(pf.read_row_group(rg, columns=list(columns)))
+                break
+            except OSError:
+                if attempt == retries - 1:
+                    raise
+                time.sleep(1.5 * (attempt + 1))
+
+
 def tile_year_parts(k5: int, year: str, fs=None) -> int:
     """How many partN files a tile-year has (0 when missing; >1 only for the 57 ecliptic-pole tiles)."""
     fs = fs or s3()

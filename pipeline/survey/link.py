@@ -50,6 +50,8 @@ FAST_VMAX = 12.0         # arcsec/yr, fastest motion searched for
 FAST_TOL = 1.5           # arcsec, max distance of a row from the fitted straight line in the velocity search
 FAST_MIN_VISITS = 5      # distinct visits needed to accept a velocity-search track
 MAG_TOL = 1.0            # mag, rows of one velocity-search track must agree in brightness to this level
+FAST_SIG = 3.0           # extra -log10 probability margin for a velocity-search track to count as significant
+DENSITY_RADIUS = 60.0    # arcsec, radius for the local density of pool rows in that significance test
 SATURATION = {"w1": 8.0, "w2": 6.7}   # NEOWISE single-exposure saturation (Vega mag)
 ECL_POLE = (270.0, 66.560708)          # north ecliptic pole (ICRS ra, dec): NEOWISE scans along ecliptic meridians
 
@@ -175,11 +177,32 @@ def _dup_labels(labels, key):
     return np.unique(lab[1:][dup])
 
 
+def _kmeans_split(x, y, t, iters=6):
+    """Split one cluster that holds k detections in a single exposure into k sources: seeds are that exposure's
+    detections, then a few Lloyd iterations. Returns sub-labels 0..k-1."""
+    _, inv, cnt = np.unique(t, return_inverse=True, return_counts=True)
+    seed_exp = int(np.argmax(cnt))
+    seeds = np.flatnonzero(inv == seed_exp)
+    cx, cy = x[seeds].astype(float), y[seeds].astype(float)
+    lab = np.zeros(len(x), np.int64)
+    for _ in range(iters):
+        d = (x[:, None] - cx[None, :]) ** 2 + (y[:, None] - cy[None, :]) ** 2
+        new = np.argmin(d, 1)
+        if _ > 0 and (new == lab).all():
+            break
+        lab = new
+        for j in range(len(cx)):
+            m = lab == j
+            if m.any():
+                cx[j], cy[j] = x[m].mean(), y[m].mean()
+    return lab
+
+
 def _cluster_visit(x, y, t, r=LINK_RADIUS, k=16):
     """Friends-of-friends clusters of one visit's detections (x, y arcsec; t = exposure MJD). A source is seen at
     most once per exposure, so a cluster holding two detections with the same MJD is two blended sources: it is
-    re-clustered with half the linking length, and any exposure still doubled keeps only its detection nearest
-    the cluster centre (the other gets label -1)."""
+    re-clustered with half the linking length, then (if still doubled) split by k-means seeded with the doubled
+    exposure's detections; any exposure still doubled keeps only its detection nearest the centre (others -1)."""
     n = len(x)
     xy = np.column_stack([x, y])
     lab = _components(n, *_edges(xy, r, k))
@@ -189,6 +212,15 @@ def _cluster_visit(x, y, t, r=LINK_RADIUS, k=16):
         sub = _components(len(sel), *_edges(xy[sel], r / 2, k))
         lab[sel] = lab.max() + 1 + sub
         bad = _dup_labels(lab[sel], t[sel])
+        if len(bad):
+            nxt = int(lab.max()) + 1
+            s1 = sel[np.isin(lab[sel], bad)]
+            o = s1[np.argsort(lab[s1], kind="stable")]
+            for comp in np.split(o, np.flatnonzero(np.diff(lab[o])) + 1):
+                sub = _kmeans_split(x[comp], y[comp], t[comp])
+                lab[comp] = nxt + sub
+                nxt += int(sub.max()) + 1
+            bad = _dup_labels(lab[sel], t[sel])
         if len(bad):
             s2 = sel[np.isin(lab[sel], bad)]
             l2 = lab[s2]
@@ -426,20 +458,24 @@ def _nanmean2(a, b):
 
 
 def _velocity_search(x, y, t, vis, sig, m1, m2, pool, vmax=FAST_VMAX, tol=FAST_TOL, min_visits=FAST_MIN_VISITS,
-                     dt_range=(0.25, 1.3), max_gate=4.0, rounds=8, chunk_cells=4_000_000):
-    """Fast movers among the `pool` rows: every pair of rows in two visits 0.25-1.3 yr apart that moved at most
-    vmax*dt (and agree in brightness) seeds a straight-line hypothesis; hypotheses grow by adding the nearest
-    pool row at each other visit whose predicted position is known to better than ~1" (gate = tol + 3 sigma of
-    the prediction, at most max_gate), refitting after each round, rows more than tol off the line are dropped,
-    and hypotheses with >= min_visits visits are accepted, best first, each row used once.
-    Returns a list of arrays of row indices (into x/y/...)."""
+                     dt_range=(0.25, 1.3), max_gate=3.0, rounds=8, chunk_cells=4_000_000, sig_margin=FAST_SIG):
+    """Fast movers among the `pool` rows (x, y arcsec on one tangent plane; t epochs; vis visit ids).
+
+    Seeds: every pair of rows in two visits 0.25-1.3 yr apart (the visits nearest 0.5 and 1 yr after each visit)
+    that moved at most vmax*dt and agree in brightness (MAG_TOL) is a straight-line hypothesis. Growth: in rounds,
+    each hypothesis takes the nearest pool row at every visit where its predicted position is known well enough
+    (gate = tol + 2.5 sigma of the prediction <= max_gate), is refitted, and loses rows more than tol off the line.
+    Acceptance: >= min_visits distinct visits, every row within tol of the line, span >= 0.5 yr, and the alignment
+    must be significant given the local density of pool rows: the sum over members of -log10(chance of a pool
+    row that close to the line), leaving out the two best (the seed), must exceed log10(number of hypotheses) +
+    log10(ways to pick the extra visits) + sig_margin. Best hypotheses (most visits, then smallest scatter) are
+    taken first and each row is used once. Returns a list of arrays of row indices (into x/y/...)."""
     pool = np.asarray(pool, np.int64)
     if len(pool) < min_visits:
         return []
     px, py, pt, psig = x[pool], y[pool], t[pool], sig[pool]
     pm1, pm2 = m1[pool], m2[pool]
-    pv_raw = vis[pool]
-    uv, pv = np.unique(pv_raw, return_inverse=True)
+    uv, pv = np.unique(vis[pool], return_inverse=True)
     V = len(uv)
     if V < min_visits:
         return []
@@ -453,47 +489,57 @@ def _velocity_search(x, y, t, vis, sig, m1, m2, pool, vmax=FAST_VMAX, tol=FAST_T
     by_visit = [np.flatnonzero(pv == v) for v in range(V)]
     trees = [cKDTree(np.column_stack([px[b], py[b]])) if len(b) else None for b in by_visit]
     claimed = np.zeros(len(pool), bool)
+    local = np.full(len(pool), -1.0)        # pool rows within DENSITY_RADIUS in the same visit (lazy)
     accepted = []
 
-    def mag_ok(a, b_ref1, b_ref2):
-        d1 = np.abs(pm1[a] - b_ref1)
-        d2 = np.abs(pm2[a] - b_ref2)
-        return ~(d1 > MAG_TOL) & ~(d2 > MAG_TOL)
+    def mag_ok(a, ref1, ref2):
+        return ~(np.abs(pm1[a] - ref1) > MAG_TOL) & ~(np.abs(pm2[a] - ref2) > MAG_TOL)
 
+    def density(rows):
+        need = rows[local[rows] < 0]
+        for v in np.unique(pv[need]):
+            r = need[pv[need] == v]
+            local[r] = trees[v].query_ball_point(np.column_stack([px[r], py[r]]), DENSITY_RADIUS,
+                                                 return_length=True) - 1
+        return np.maximum(local[rows], 1.0) / (math.pi * DENSITY_RADIUS ** 2)
+
+    # ---- seeds
+    seeds = []
     for a in range(V):
         if trees[a] is None:
             continue
-        # partner visits: closest to 0.5 and 1.0 yr later (within dt_range)
         dts = Tv - Tv[a]
         partners = set()
+        cand = np.flatnonzero((dts >= dt_range[0]) & (dts <= dt_range[1]))
         for target in (0.5, 1.0):
-            cand = np.flatnonzero((dts >= dt_range[0]) & (dts <= dt_range[1]))
             if len(cand):
                 partners.add(int(cand[np.argmin(np.abs(dts[cand] - target))]))
-        seeds_i, seeds_j = [], []
         for b in sorted(partners):
             if trees[b] is None:
                 continue
-            rmax = vmax * dts[b] + 3.0 * math.sqrt(2.0) * 0.5
-            pairs = trees[a].sparse_distance_matrix(trees[b], rmax, output_type="ndarray")
+            pairs = trees[a].sparse_distance_matrix(trees[b], vmax * dts[b] + 2.0, output_type="ndarray")
             if len(pairs) == 0:
                 continue
             ii = by_visit[a][pairs["i"]]
             jj = by_visit[b][pairs["j"]]
-            keep = ~claimed[ii] & ~claimed[jj]
-            keep &= mag_ok(ii, pm1[jj], pm2[jj])
-            seeds_i.append(ii[keep])
-            seeds_j.append(jj[keep])
-        if not seeds_i:
-            continue
-        si = np.concatenate(seeds_i)
-        sj = np.concatenate(seeds_j)
-        if len(si) == 0:
-            continue
-        step = max(1, chunk_cells // V)
-        for c0 in range(0, len(si), step):
-            ci, cj = si[c0:c0 + step], sj[c0:c0 + step]
+            keep = mag_ok(ii, pm1[jj], pm2[jj])
+            if keep.any():
+                seeds.append((ii[keep], jj[keep]))
+    if not seeds:
+        return []
+    n_hyp = sum(len(s[0]) for s in seeds)
+    log_trials = math.log10(n_hyp + 1.0)
+
+    # ---- grow and accept, chunk by chunk
+    step = max(1, chunk_cells // V)
+    for si_all, sj_all in seeds:
+        for c0 in range(0, len(si_all), step):
+            ci, cj = si_all[c0:c0 + step], sj_all[c0:c0 + step]
+            keep = ~claimed[ci] & ~claimed[cj]
+            ci, cj = ci[keep], cj[keep]
             H = len(ci)
+            if H == 0:
+                continue
             mem = np.full((H, V), -1, np.int64)
             mem[np.arange(H), pv[ci]] = ci
             mem[np.arange(H), pv[cj]] = cj
@@ -505,10 +551,10 @@ def _velocity_search(x, y, t, vis, sig, m1, m2, pool, vmax=FAST_VMAX, tol=FAST_T
                 if len(idx) == 0:
                     break
                 tref, x0, y0, vx, vy, S, D, cnt = _wfit(mem[idx], px, py, pt, w)
-                # prediction error at each visit (formal, inflated a little for unmodelled parallax)
+                # prediction error at each visit (formal, plus 0.15" for unmodelled parallax)
                 dT = Tv[None, :] - tref[:, None]
                 sp = np.sqrt(1.0 / S[:, None] + dT ** 2 / np.maximum(D[:, None], 1e-300) + 0.15 ** 2)
-                gate = tol + 3.0 * sp
+                gate = tol + 2.5 * sp
                 elig = (mem[idx] < 0) & (gate <= max_gate)
                 added = 0
                 for v in np.flatnonzero(elig.any(0)):
@@ -526,7 +572,7 @@ def _velocity_search(x, y, t, vis, sig, m1, m2, pool, vmax=FAST_VMAX, tol=FAST_T
                     hit[hit] &= mag_ok(rows[hit], ref1[idx[hs[hit]]], ref2[idx[hs[hit]]])
                     mem[idx[hs[hit]], v] = rows[hit]
                     added += int(hit.sum())
-                # refit and drop rows far from the line (keep >= 2)
+                # refit and drop the worst row that is far from the line (keep >= 2)
                 tref, x0, y0, vx, vy, S, D, cnt = _wfit(mem[idx], px, py, pt, w)
                 mi = mem[idx]
                 okm = mi >= 0
@@ -537,24 +583,19 @@ def _velocity_search(x, y, t, vis, sig, m1, m2, pool, vmax=FAST_VMAX, tol=FAST_T
                 bad = okm & (res > lim)
                 if bad.any():
                     nb = bad.sum(1)
-                    can = (cnt - nb) >= 2
-                    # drop only the worst row per hypothesis per round
                     worst = np.argmax(np.where(bad, res / lim, -1), 1)
-                    hs = np.flatnonzero(can & (nb > 0))
+                    hs = np.flatnonzero(((cnt - nb) >= 2) & (nb > 0))
                     mi[hs, worst[hs]] = -1
                     mem[idx] = mi
-                # prune hopeless hypotheses
                 cnt = (mem[idx] >= 0).sum(1)
                 if rnd == 0:
                     alive[idx[cnt < 3]] = False
                 if added == 0 and not bad.any():
                     break
-            # accept, best first (more visits, then smaller scatter), each row once
             idx = np.flatnonzero(alive)
             if len(idx) == 0:
                 continue
-            cnt = (mem[idx] >= 0).sum(1)
-            idx = idx[cnt >= min_visits]
+            idx = idx[(mem[idx] >= 0).sum(1) >= min_visits]
             if len(idx) == 0:
                 continue
             tref, x0, y0, vx, vy, S, D, cnt = _wfit(mem[idx], px, py, pt, w)
@@ -565,12 +606,20 @@ def _velocity_search(x, y, t, vis, sig, m1, m2, pool, vmax=FAST_VMAX, tol=FAST_T
                            py[mm] - (y0[:, None] + vy[:, None] * (pt[mm] - tref[:, None])))
             rms = np.sqrt(np.where(okm, res ** 2, 0).sum(1) / np.maximum(cnt, 1))
             span = np.where(okm, pt[mm], -np.inf).max(1) - np.where(okm, pt[mm], np.inf).min(1)
-            good = (np.where(okm, res, 0).max(1) <= tol + 1e-9) & (span >= 0.5) & \
-                   (np.hypot(vx, vy) <= vmax * 1.1)
-            for h in np.argsort(-cnt * 10.0 + rms)[good[np.argsort(-cnt * 10.0 + rms)]]:
-                rows = mi[h][okm[h]]
-                rows = rows[~claimed[rows]]
-                if len(np.unique(pv[rows])) < min_visits:
+            good = (np.where(okm, res, 0).max(1) <= tol + 1e-9) & (span >= 0.5) & (np.hypot(vx, vy) <= vmax * 1.1)
+            order = np.argsort(-cnt * 10.0 + rms)
+            for h in order[good[order]]:
+                sel = okm[h]
+                rows = mi[h][sel]
+                if claimed[rows].any() or len(np.unique(pv[rows])) < min_visits:
+                    continue
+                # significance of the alignment given the local density of pool rows
+                r_eff = np.maximum(np.maximum(res[h][sel], 2.0 * psig[rows]), 0.3)
+                p = -np.expm1(-density(rows) * math.pi * r_eff ** 2)
+                score = np.sort(-np.log10(np.maximum(p, 1e-300)))[:-2].sum()
+                k = len(rows)
+                need = log_trials + math.log10(max(math.comb(V - 2, k - 2), 1)) + sig_margin
+                if score < need:
                     continue
                 claimed[rows] = True
                 accepted.append(pool[rows[np.argsort(pt[rows])]])
@@ -855,19 +904,32 @@ def tile_sources(k5, reader=read_tile_year, years=YEARS, prefetch: bool = True, 
     t_start = time.perf_counter()
     k5 = int(k5)
     years = list(years)
-    rd = reader
     multipart = {}
-    if reader is read_tile_year:
-        rd = functools.partial(read_tile_year, columns=_tiles.CORE_COLUMNS)
 
     def fetch(year):
-        tab = rd(k5, year)
-        if reader is read_tile_year and tab is not None:
+        """(reduced good detections or None if the year is missing, number of raw rows). Runs in the prefetch
+        thread, so the raw table never outlives its reduction; the default S3 reader goes row group by row
+        group to bound memory on the huge ecliptic-pole files."""
+        if reader is read_tile_year:
+            reds, n_rows = [], 0
+            for tab in _tiles.iter_tile_year(k5, year, columns=_tiles.CORE_COLUMNS):
+                n_rows += tab.num_rows
+                reds.append(_reduce(tab)[0])
+                del tab
+            if not reds:
+                return None, 0
             try:
                 multipart[year] = _tiles.tile_year_parts(k5, year)
             except Exception:  # noqa: BLE001 - informational only
                 pass
-        return tab
+            red = reds[0]
+            for r in reds[1:]:
+                red = _cat(red, r)
+            return red, n_rows
+        tab = reader(k5, year)
+        if tab is None:
+            return None, 0
+        return _reduce(tab)[0], tab.num_rows
 
     n_det = 0
     n_good = 0
@@ -883,17 +945,14 @@ def tile_sources(k5, reader=read_tile_year, years=YEARS, prefetch: bool = True, 
             fut = ex.submit(fetch, years[0])
         for i, year in enumerate(years):
             t0 = time.perf_counter()
-            table = fut.result() if ex else fetch(year)
+            red, n_rows = fut.result() if ex else fetch(year)
             t_io += time.perf_counter() - t0
-            if table is None:
+            if red is None:
                 years_missing.append(year)
-                red = None
             else:
                 years_read.append(year)
-                n_det += table.num_rows
-                red, ng = _reduce(table)
-                n_good += ng
-            del table
+                n_det += n_rows
+                n_good += len(red["mjd"])
             if ex and i + 1 < len(years):
                 fut = ex.submit(fetch, years[i + 1])
             if red is not None:
@@ -939,10 +998,11 @@ def process_tile(k5, reader=read_tile_year, years=YEARS, min_visits=6, min_pm=15
     with >= min_visits visits, pm >= min_pm mas/yr and pm_snr >= min_pm_snr, after rejecting fits with
     chi2r > max_chi2r. Every mover gets `flags` for the ranking step: "saturated" (W1 < 8 or W2 < 6.7, positions
     less reliable), "high_chi2r" (> 5), "along_scan" (motion within 10 deg of the scan direction), "tile_edge"
-    (would cross the tile boundary during 2014-2024, track may be truncated), "fast_search" (linked by the
-    velocity search), "w1_limit"/"w2_limit" (band undetected; value is a faint limit), "crowded" (another source
-    within 6" in >= 30% of the visits), "clipped" (outlying visits dropped from the fit). Candidates explained by
-    stationary sources or with inconsistent halves are rejected (see select_movers)."""
+    (would cross the tile boundary during 2014-2024, track may be truncated), "fast_search" (moves more than the
+    2.5" linking length between visits, so only the velocity search can link it), "w1_limit"/"w2_limit" (band
+    undetected; value is a faint limit), "crowded" (another source within 8" in >= 30% of the visits), "clipped"
+    (outlying visits dropped from the fit). Candidates explained by stationary sources, with inconsistent halves,
+    marginal detections, poor coverage or a blend are rejected (see select_movers)."""
     t_start = time.perf_counter()
     k5 = int(k5)
     vs, stats = tile_sources(k5, reader, years, prefetch=prefetch, log=log)
@@ -1115,7 +1175,8 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
             return (float(np.median(m[fin])), True) if fin.any() else (None, False)
         m1, lim1 = band(w1, l1)
         m2, lim2 = band(w2, l2)
-        if (m1 is not None and not lim1 and m1 < _SAT["w1"]) or (m2 is not None and not lim2 and m2 < _SAT["w2"]):
+        if (m1 is not None and not lim1 and m1 < SATURATION["w1"]) or \
+                (m2 is not None and not lim2 and m2 < SATURATION["w2"]):
             flags.append("saturated")
         if f["chi2r"] > 5:
             flags.append("high_chi2r")
@@ -1148,9 +1209,6 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
     return [{"id": m.pop("id"), **m} for m in movers]
 
 
-_SAT = SATURATION
-
-
 def _leaves_tile(k5, f):
     """True if the fitted motion would carry the source across the tile boundary between 2014.0 and 2024.7."""
     try:
@@ -1167,7 +1225,7 @@ def _leaves_tile(k5, f):
 
 
 def _is_fast(rows, vs, x, y):
-    """A track found by the velocity search: consecutive rows further apart than the FoF linking length."""
+    """A velocity-search kind of track: consecutive rows (median) further apart than the FoF linking length."""
     if len(rows) < 2:
         return False
     o = np.argsort(vs["epoch"][rows])
