@@ -132,6 +132,10 @@ const post = (base, p, body) => fetch(base + p, { method: "POST", headers: { "co
 test("HTTP: /api/field rejects bad input without starting work", async () => {
   await withServer(async (base) => {
     assert.equal((await post(base, "/api/field", "{")).status, 400);
+    for (const body of ["null", "[]", "5"]) {                       // valid JSON, but not an object: a client error, not a 500
+      const r = await post(base, "/api/field", body);
+      assert.equal(r.status, 400, body); assert.match((await r.json()).error, /ra and dec must be numbers/, body);
+    }
     assert.equal((await post(base, "/api/field", { ra: "10", dec: 5 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 400, dec: 5 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 10, dec: -100 })).status, 400);
