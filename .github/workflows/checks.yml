@@ -1,0 +1,60 @@
+# Runs the repository's checks on every pull request and on main.
+# The four jobs are independent, so one failure does not hide the others.
+name: checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: Node unit tests (test/*.test.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --test test/*.test.js
+      - run: for f in app/*.js server.js fields.js start.js; do node --check "$f" || exit 1; done
+
+  python:
+    name: Python tests (pipeline and backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: "pipeline/requirements.txt\nbackend/requirements.txt" }
+      - run: pip install -r pipeline/requirements.txt -r backend/requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python test/test_fov.py
+      - run: python -m pytest backend -q
+
+  web:
+    name: Live explorer (web/) build and tests
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  sky-browser:
+    name: Sky Compass browser check (headless Chrome, needs the network)
+    runs-on: ubuntu-latest
+    # It talks to NASA/IPAC IRSA and two CDNs. When one of them is down this job fails for reasons outside the
+    # code, so it does not block a merge; read its log and the artifact before you merge a Sky Compass change.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node test/browser/realsky.mjs
+        env: { BROWSER: /usr/bin/google-chrome }
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: sky-compass-browser-check, path: "artifacts/real-sky/*.png\nartifacts/real-sky/browser-checks.json", if-no-files-found: ignore }

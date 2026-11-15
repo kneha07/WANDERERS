@@ -186,8 +186,10 @@ projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMas
 and served by NASA/IPAC IRSA. They are decades old, not a live view. Tap a planet for a card, or a star to open its
 star sheet. "Drag the sky" in the Sight check sheet moves the sky onto something you can see. The page opens with no
 signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days, and "Save the sky for a place" in
-the ⓘ sheet keeps them for a latitude before a trip. Checks: `node --test test/sky.test.js test/hips.test.js
-test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network).
+the ⓘ sheet keeps them for a latitude before a trip (each saved place has its own Remove). Checks: `node --test test/sky.test.js test/hips.test.js
+test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network; `SHARP=1` also
+saves and removes the 34 MB Sharp level). GitHub Actions (`.github/workflows/checks.yml`) runs the Node, Python and
+`web/` tests on every pull request, plus this browser check, which is allowed to fail when an archive is down.
 Spec: `docs/specs/sky-compass-real-sky.md`.
 
 **No more 2010 → 2025 jump.** Between WISE 2010 and SPHEREx 2025 the time-lapse now shows one NEOWISE image per sky

@@ -95,3 +95,35 @@ test("evict drops the oldest entries until both limits hold", () => {
   assert.deepEqual(Hips.evict(e, 99, 25), ["u1", "u2", "u3"]);
   assert.deepEqual(Hips.evict([], 1, 1), []);
 });
+
+test("saved places: removing one deletes only the files no other place needs", () => {
+  // Basic (orders 0-1) covers the whole sky from both cities, so compare Standard (order 2) saves.
+  const seattle = { urls: Hips.plan("B", 47.6, 2).urls }, sydney = { urls: Hips.plan("B", -33.9, 2).urls };
+  const gone = Hips.orphans(seattle, [sydney]);
+  assert.ok(gone.length > 0 && gone.length < seattle.urls.length, String(gone.length));
+  for (const u of gone) assert.ok(!sydney.urls.includes(u));
+  assert.ok(!gone.includes("B/properties"));                     // both places need the survey files
+  assert.deepEqual(Hips.orphans(seattle, []), seattle.urls);     // the last place takes everything with it
+  assert.deepEqual(Hips.orphans(seattle, [seattle]), []);
+  const sharp = { urls: Hips.plan("B", 47.6, 3).urls };          // a finer save of the same latitude holds every coarser file
+  assert.deepEqual(Hips.orphans(seattle, [sharp]), []);
+});
+
+test("manifest addresses are recognisable and one per survey, latitude and detail", () => {
+  const u = Hips.manifestUrl("B", 47.6, 2);
+  assert.equal(u, "B/__saved__/visible_lat48_order2.json");
+  assert.notEqual(Hips.manifestUrl("B", 47.6, 2, "infrared"), u);
+  assert.ok(Hips.isManifest(u) && Hips.isManifest(Hips.manifestUrl("B", -33.9, 1, "infrared")));
+  assert.ok(!Hips.isManifest("B/Norder2/Dir0/Npix7.jpg") && !Hips.isManifest("B/properties"));
+});
+
+test("the page and the service worker read one set of settings", () => {
+  const c = Hips.CONFIG;
+  for (const v of Object.values(c.surveys)) {
+    assert.ok(c.tileRoots.some((r) => v.hosts[0].startsWith(r)) && c.tileRoots.some((r) => v.hosts[1].startsWith(r)));
+    assert.ok(v.tile > 0 && v.allsky > 0);
+  }
+  assert.equal(new Set(Object.values(c.caches)).size, 4);
+  const sw = require("node:fs").readFileSync(require("node:path").join(__dirname, "../app/sw.js"), "utf8");
+  assert.ok(!/irsa\.ipac|wanderers-sky-v1|aladin-lite@/.test(sw), "sw.js repeats a setting that belongs in Hips.CONFIG");
+});

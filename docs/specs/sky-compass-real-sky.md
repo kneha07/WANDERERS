@@ -50,7 +50,9 @@ Left to do, in order:
 
 1. Test on a real Android phone and a real iPhone: sensors, camera blend slider, frame rate with Deep on, and whether Safari keeps the service worker's pictures. None of this can run in headless Edge.
 2. ~~"Drag the sky" calibration (step 6).~~ Done: the drag grabs the sky point under the finger and solves for the pointing that keeps it there.
-3. Save: check Standard and Sharp in the browser; make Remove work per place (today it removes every saved place).
+3. ~~Save: check Standard and Sharp; make Remove work per place.~~ Done. Each saved place writes a manifest into the saved cache (`Hips.manifestUrl`), written last so a half-finished save is never listed; the list on screen is read from the manifests; Remove deletes only the files no other place lists (`Hips.orphans`). Measured in headless Edge: Basic 48° N 60 tiles in 2–3 s; Standard 34° S 248 tiles in 8 s; Sharp 48° N 924 tiles (orders 0–3, about 34 MB) in 28 s. Removing Standard 34° S, or Sharp 48° N, left every Basic 48° N file in place (`SHARP=1 node test/browser/realsky.mjs`).
+6. Settings: survey hosts, tile sizes, cache names, recent-cache limits and the Aladin address are in `Hips.CONFIG`, read by both `realsky.js` and `sw.js` (a unit test fails if `sw.js` repeats one).
+7. Aladin Lite stays on the jsDelivr CDN on purpose: it is GPL-3.0 and this repository is MIT, so it is not copied in. The service worker keeps the pinned file, and a saved place stores it too, so it is a one-time download.
 4. ~~Exercise the service worker's trim and 7-day expiry in `test/browser/realsky.mjs`.~~ Done.
 5. ~~An "Infrared" background (`CDS/2MASS/Color` at IRSA).~~ Done, with the ESA host as the second host. A save stores the background chosen under Deep.
 
