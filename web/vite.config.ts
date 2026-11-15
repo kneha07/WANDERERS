@@ -6,5 +6,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: '/explore/',
   plugins: [react()],
-  server: { proxy: { '/api': 'http://127.0.0.1:8001' } },
+  // VITE_API_TARGET points the dev proxy at another backend (for example a second checkout on port 8011).
+  server: { proxy: { '/api': process.env.VITE_API_TARGET || 'http://127.0.0.1:8001' } },
+  // aladin-lite is one 2.4 MB chunk (its WASM is inside), loaded only by the Sky context panel.
+  build: { chunkSizeWarningLimit: 2500 },
 })
