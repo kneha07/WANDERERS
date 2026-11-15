@@ -169,6 +169,18 @@ quarter turns. The gyroscope measures the turns, so if the compass disagrees the
 (magnetic cases, laptops, metal), and averaging four directions cancels the phone's own bias. A sight check on a
 landmark (drawn in the camera view), the Sun, the Moon or a star sets north exactly and stops using the compass.
 
+**The real sky behind the Sky Compass** (`app/realsky.js`), so clouds and city lights do not matter. A switch under the
+buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (HYG via the star database, with a City /
+Suburb / Dark choice), constellation lines (d3-celestial) and the planets (JPL elements); it is drawn, not
+photographed, and works with no connection. **Deep** shows survey photographs under the AR view, in the camera's own
+projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMass and IPAC/Caltech), both tiled by CDS
+and served by NASA/IPAC IRSA. They are decades old, not a live view. Tap a planet for a card, or a star to open its
+star sheet. "Drag the sky" in the Sight check sheet moves the sky onto something you can see. The page opens with no
+signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days, and "Save the sky for a place" in
+the ⓘ sheet keeps them for a latitude before a trip. Checks: `node --test test/sky.test.js test/hips.test.js
+test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network).
+Spec: `docs/specs/sky-compass-real-sky.md`.
+
 **No more 2010 → 2025 jump.** Between WISE 2010 and SPHEREx 2025 the time-lapse now shows one NEOWISE image per sky
 visit (about every 6 months, Dec 2013 to 2024, same 3.4 and 4.6 µm bands), so you watch a fast star walk year by
 year. `pipeline/neowise.py` finds the exposures covering a target in the NEOWISE single-exposure source table
@@ -587,12 +599,12 @@ photometry with local background, and per-pixel solid angle from each image's WC
 ```
 pipeline/   fetch.py · analyze.py · evidence.py · vet.py · explain.py · targets.py · fov.py · gaia_facts.py
             star_trajectory.py · stardb.py · star_ml.py · starquake.py · link_paths.py
-            make_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
+            make_stars.py · make_sky_stars.py · make_webb.py · make_webb_previews.py · make_declination.py · describe_extras.py
 app/        index.html (home) · observatory.html (console) · compass.html (phone)
             brand.css · theme.js · home.css · home.js · style.css · app.js · search.js · telescope.js
             starpath.js · pathview.js · stardb.js · stars.js · starcore.js · longrange.js
-            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js
-            data/<target>/ · data/stars/ · data/starquake/ · stars.json · webb.json · declination.json
+            starquake.js · starquake-ui.js · compass.js · orient.js · sky.js · intro.js · realsky.js · skyview.js · hips.js · sw.js
+            data/<target>/ · data/stars/ · data/starquake/ · stars.json · skystars.json · constellations.json · webb.json · declination.json
 server.js   local demo server (live answers, any coordinates, learning a star, /explore/)
 fields.js   the any-coordinates job service used by server.js
 start.js    one-click start for everything (also start.cmd, start.command)
