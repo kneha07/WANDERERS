@@ -11,6 +11,16 @@ You need Node.js and Python 3.11 or newer. The first run creates `backend/.venv`
 <http://localhost:8000>. If our servers already run, it uses them. If another program holds port 8000 or 8001, it
 stops with a message. Press Ctrl+C (or close the window) to stop both servers.
 
+The first run also creates the root `.venv` with `pipeline/requirements.txt`. The missions page needs it for a field
+at new coordinates (`fields.js` runs `pipeline/fetch.py`; without it the job fails with `No module named 'pyvo'`).
+`start.js` checks it at each start (`import pyvo`) and repairs it when it is broken. On Windows it tells `server.js`
+where that Python is (`WANDERERS_PYTHON`), because `fields.js` looks only for `.venv/bin/python`. If
+`pipeline/requirements.txt` is missing, the step is skipped with a note. A failed install does not stop the live
+explorer.
+
+Options: `--precompute` (cache the challenge targets), `--no-open` (do not open the browser). `PORT` and `LIVE_PORT`
+(default 8000 and 8001) run a second copy next to the first one, for example `PORT=8041 LIVE_PORT=8042 node start.js`.
+
 ## What this mode is
 
 SPHEREx Blink is the "Explore any patch" mode of WANDERERS. Type a star name or a sky position. The tool gets
