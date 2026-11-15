@@ -100,10 +100,11 @@ function bodyBytes(req, limit) {
 // ---- Star Fix: one photo (raw bytes) -> pipeline/star_fix.py on stdin -> its one JSON line. One at a time, 60 s. ----
 // The photo is never written to disk or logged. Errors never show paths or stack traces.
 const STAR_FIX_MAX = 30 * 1024 * 1024, STAR_FIX_DOWN = "Star Fix could not run. Start the app with start.cmd.";
+const STAR_FIX_CRASH = "Could not read this photo.";   // Python started, then failed on this photo
 let starFixBusy = false;
 function starFix(buf, reply) {
   const p = spawn(PY, ["pipeline/star_fix.py"], { cwd: __dirname });
-  let out = "";
+  let out = "", err = "";
   const free = () => { clearTimeout(timer); starFixBusy = false; };
   const timer = setTimeout(() => {
     // /T: the venv python.exe on Windows is a launcher with a child interpreter; kill the whole tree (as start.js does).
@@ -112,14 +113,14 @@ function starFix(buf, reply) {
     reply(504, { error: "timed out" });
   }, 60000);
   p.stdout.on("data", (d) => (out += d));
-  p.stderr.on("data", () => {});   // the solver logs here
+  p.stderr.on("data", (d) => { if (err.length < 1e5) err += d; });   // the solver logs here; read only to tell the two 500s apart
   p.stdin.on("error", () => {});   // Python may exit before it has read everything
   p.on("error", () => { free(); reply(500, { error: STAR_FIX_DOWN }); });   // no Python
   p.on("close", (code) => {
     free();
     const line = out.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{")).pop();
     try { if (code === 0 && JSON.parse(line).status) return reply(200, line); } catch { /* no JSON line */ }
-    reply(500, { error: STAR_FIX_DOWN });
+    reply(500, { error: /No module named/.test(err) ? STAR_FIX_DOWN : STAR_FIX_CRASH });   // setup missing, or this photo
   });
   p.stdin.end(buf);
 }

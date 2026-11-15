@@ -3,11 +3,11 @@
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn, spawnSync } = require("node:child_process");
-const fs = require("node:fs"), http = require("node:http"), net = require("node:net"), path = require("node:path");
+const fs = require("node:fs"), http = require("node:http"), net = require("node:net"), os = require("node:os"), path = require("node:path");
 const { pickPython } = require("../fields");
 
 const ROOT = path.join(__dirname, "..");
-const DOWN = "Star Fix could not run. Start the app with start.cmd.";
+const DOWN = "Star Fix could not run. Start the app with start.cmd.", CRASH = "Could not read this photo.";
 const PATHLIKE = /[A-Za-z]:\\|\/Users\/|\/home\/|\\\\|Traceback|\.py\b/;   // no response may show a server path
 const kids = [];
 
@@ -27,12 +27,16 @@ async function answer(r) { const text = await r.text(); assert.doesNotMatch(text
 
 const env = { ...process.env }; delete env.WANDERERS_PY;
 const hasPackages = spawnSync(pickPython(ROOT), ["-c", "import pillow_heif, PIL, astropy"], { cwd: ROOT }).status === 0;
-let real, broken;
+let real, broken, crashing, noPackage;
+const shadow = fs.mkdtempSync(path.join(os.tmpdir(), "starfix-"));   // a pillow_heif that fails to import, first on PYTHONPATH
+fs.writeFileSync(path.join(shadow, "pillow_heif.py"), "import no_such_module_for_star_fix\n");
 before(async () => {
   real = await startServer(env);
   broken = await startServer({ ...env, WANDERERS_PY: path.join(ROOT, "no-such-python.exe") });
+  crashing = await startServer({ ...env, WANDERERS_PY: process.execPath });   // node runs star_fix.py: a crash after start
+  noPackage = await startServer({ ...env, PYTHONPATH: shadow });
 });
-after(() => kids.forEach((k) => k.kill()));
+after(() => { kids.forEach((k) => k.kill()); fs.rmSync(shadow, { recursive: true, force: true }); });
 
 test("an empty body is 400 'no photo'", async () => {
   assert.deepEqual(await answer(await post(real, "")), { status: 400, text: '{"error":"no photo"}', json: { error: "no photo" } });
@@ -56,6 +60,13 @@ test("random bytes come back as 200 bad_file", { skip: !hasPackages && "the Pyth
 test("without Python the answer is 500 with the fixed message and no path", async () => {
   const r = await answer(await post(broken, Buffer.from("bytes")));
   assert.deepEqual([r.status, r.json], [500, { error: DOWN }]);
+});
+
+test("a crash after the start is 500 'Could not read this photo.'; a missing package is the start message", async () => {
+  const r = await answer(await post(crashing, Buffer.from("bytes")));
+  assert.deepEqual([r.status, r.json], [500, { error: CRASH }]);
+  const m = await answer(await post(noPackage, Buffer.from("bytes")));
+  assert.deepEqual([m.status, m.json], [500, { error: DOWN }]);
 });
 
 test("a second photo while one is being read is 409 'busy'", async () => {

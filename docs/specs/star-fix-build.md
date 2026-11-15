@@ -104,7 +104,8 @@ Request: the body is the raw bytes of one photo file. No JSON, no multipart. `co
 | Body larger than 30 MB | `413 {"error":"photo too large"}`. Stop reading; do not keep the bytes. |
 | Another solve is running | `409 {"error":"busy"}` |
 | No answer after 60 s | Kill the process tree, then `504 {"error":"timed out"}` |
-| Python missing, crash, or no JSON line | `500 {"error":"Star Fix could not run. Start the app with start.cmd."}`. Never send paths or stack traces. |
+| Python missing (spawn error, or "No module named" on stderr) | `500 {"error":"Star Fix could not run. Start the app with start.cmd."}`. Never send paths or stack traces. |
+| Python started, then crashed or printed no JSON line | `500 {"error":"Could not read this photo."}` (fix round 1, review TL L3) |
 
 Result JSON (Python prints exactly one line; the server relays the last stdout line that starts with `{`):
 
@@ -126,12 +127,13 @@ Result JSON (Python prints exactly one line; the server relays the last stdout l
 |---|---|---|
 | `fix` | Position found | all |
 | `sky_only` | Stars solved, but an input is missing | `sky`, `model`, `utc` if known, `missing`: list of `"gravity"`, `"time"`, `"rear_camera"` |
-| `no_solve` | Fewer than 8 matched stars | `stars`: number of star-like spots found |
-| `bad_file` | Not a readable image | none |
+| `no_solve` | No solve passed the gate in 10.5 | `stars`: number of star-like spots found in the last try |
+| `bad_file` | Not a readable image, or more than 60 MP (a decompression bomb is refused before decoding) | none |
 
 - `gps` is the position in the file's own EXIF, rounded to 0.01 degree, or `null`. It is for the comparison only. It never feeds the estimate.
-- `warnings`: `"zone_mismatch"` when `abs(lon - 15 * offset_hours) > 45` degrees (the photo time or the file is suspect);
-  `"untested_lens"` when `FocalLengthIn35mmFilm` is not between 20 and 30 (only the main camera is tested).
+- `warnings` (in `fix`, `sky_only` and `no_solve`): `"zone_mismatch"` when the longitude differs from `15 * offset_hours` by more
+  than 45 degrees, measured across 180 degrees (the photo time or the file is suspect); `"untested_lens"` when
+  `FocalLengthIn35mmFilm` is not between 20 and 30 (only the main camera is tested); `"small_photo"` (10.5).
 - `local` is the photo's own clock time with its offset. The page shows its date.
 - Round `lat`, `lon` to 0.01 and the angles to 0.1.
 
@@ -139,7 +141,7 @@ Server notes:
 
 - Add a `bodyBytes(req, limit)` helper next to `body()`. `body()` returns a string and has a 20 kB limit.
 - Spawn `PY` with `["pipeline/star_fix.py"]`, `cwd: __dirname`, no shell. Write the buffer with `p.stdin.end(buf)` and add an empty `error` handler on `p.stdin`.
-- Ignore stderr (the solver logs there).
+- Do not relay stderr (the solver logs there). Read it only to find "No module named", which separates the two 500 answers.
 - Timeout kill: on `win32` run `taskkill /pid <pid> /T /F`, as `start.js` does. The venv `python.exe` is a launcher with a child process, so `p.kill()` alone leaves the child alive.
 - Use one `starFixBusy` flag. Clear it on `close` and on `error`.
 
