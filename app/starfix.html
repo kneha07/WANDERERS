@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WANDERERS · Star Fix</title>
+<meta name="description" content="Find where you were, from the stars in your photo.">
+<meta name="theme-color" content="#F6F8FB">
+<script>(function () { var t; try { t = localStorage.getItem("wanderers-theme"); } catch (e) {}
+  if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.dataset.theme = t; })();</script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="starfix.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head">
+  <div class="bar">
+    <a class="logo" href="./" aria-label="WANDERERS, home">
+      <svg viewBox="2 2 36 36" aria-hidden="true"><path class="ink" d="M35.35 17.84A15.5 15.5 0 1 1 30.37 8.48" stroke-width="3.2"/><ellipse class="acc" cx="20" cy="20" rx="13.2" ry="6.2" transform="rotate(-28 20 20)" stroke-width="1.7"/><circle class="ink-dot" cx="30.29" cy="14.53" r="1.5"/><circle class="ring" cx="17.71" cy="27.58" r="1.8" stroke-width="1.5"/><circle class="ring" cx="8.21" cy="23.3" r="1.8" stroke-width="1.5"/><circle class="dot" cx="21.67" cy="12.6" r="2.9"/><path class="acc" d="M25.97 12.6L27.77 12.6M17.37 12.6L15.57 12.6M21.67 16.9L21.67 18.7M21.67 8.3L21.67 6.5" stroke-width="1.4"/></svg>
+      <span class="wordmark">WANDERERS</span>
+    </a>
+    <div class="head-tools">
+      <button class="theme-toggle" type="button" aria-label="Switch theme">
+        <span class="knob" aria-hidden="true"></span>
+        <svg class="sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9 13 13M3 13l1.1-1.1M11.9 4.1 13 3"/></svg>
+        <svg class="moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1Z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="sf">
+  <h1>Star Fix</h1>
+  <p class="sf-lede">Find where you were, from the stars in your photo.</p>
+
+  <div class="sf-upload" id="upload">
+    <label class="btn btn-primary sf-pick" id="pick">
+      <input type="file" id="files" multiple accept=".heic,.heif,.jpg,.jpeg,image/heic,image/jpeg">
+      <span id="pickFirst">Choose star photos</span><span id="pickMore" hidden>Add more photos</span>
+    </label>
+    <span class="sf-drop" id="dropHint">or drop them here</span>
+    <span class="sf-drop sf-drop-now" id="dropNow" hidden>Drop to add</span>
+    <p class="sf-offline" id="offline" hidden>To use your own photos, start WANDERERS on a computer (start.cmd).</p>
+  </div>
+  <p class="sf-note">Your photos stay on this computer.</p>
+  <details class="sf-more">
+    <summary>Which photos work?</summary>
+    <p>Night-sky photos from an iPhone, with many stars. Use the original file (AirDrop, cable or iCloud). Chat apps remove the data that this needs.</p>
+  </details>
+
+  <div class="sf-progress" aria-live="polite">
+    <p id="progressText"></p>
+    <progress id="progressBar" hidden></progress>
+  </div>
+  <p class="sf-undo" role="status"><span id="undoBox" hidden>Photos removed. <button type="button" class="sf-text-btn" id="undo">Undo</button></span></p>
+
+  <div id="blocks"></div>
+  <div id="example" class="sf-reserve"></div>
+
+  <details class="sf-more sf-how">
+    <summary>How does this work?</summary>
+    <ol>
+      <li>The app recognises the stars in your photo.</li>
+      <li>Your phone stored which way was down and the exact time.</li>
+      <li>Together they give the one place on Earth where those stars were overhead.</li>
+    </ol>
+    <p>Stars give the place to about 50 to 150 km. GPS is 10 000 times better. Navigators worked like this before GPS.</p>
+  </details>
+  <button type="button" class="sf-text-btn" id="remove" hidden>Remove my photos</button>
+</main>
+
+<!-- One answer block per night, and one row per photo (filled by starfix.js) -->
+<template id="blockTpl">
+  <section class="sf-block">
+    <p class="sf-date"><span class="sf-ex" hidden>Example · </span><span class="sf-day"></span></p>
+    <h2 class="sf-headline"></h2>
+    <p class="sf-pos mono"></p>
+    <p class="sf-radius"></p>
+    <p class="sf-check"></p>
+    <div class="sf-map" hidden>
+      <canvas role="img"></canvas>
+      <p class="sf-legend" aria-hidden="true">
+        <span><svg class="sf-key-stars" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.4"/><path d="M8 .8v3.4M8 11.8v3.4M.8 8h3.4M11.8 8h3.4"/></svg>stars</span>
+        <span class="sf-key-gps-row"><svg class="sf-key-gps" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.2"/></svg>phone GPS</span>
+      </p>
+    </div>
+    <p class="sf-osm" hidden><a target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a></p>
+    <details class="sf-photos"><summary></summary><ul></ul></details>
+    <p class="sf-hint"></p>
+  </section>
+</template>
+<template id="rowTpl">
+  <li tabindex="-1"><span class="sf-mark" aria-hidden="true"></span><span class="sf-name mono"></span><span class="sf-text"></span><button type="button" class="sf-text-btn sf-retry" hidden>Try again</button></li>
+</template>
+
+<script src="theme.js"></script>
+<script src="starfixcore.js"></script>
+<script src="starfix.js"></script>
+</body>
+</html>

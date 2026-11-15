@@ -1,0 +1,71 @@
+/* Star Fix page: one left-aligned column, the answer is the one strong element. brand.css tokens only. */
+.sf [hidden] { display: none !important; }   /* starfix.js shows and hides parts with the hidden attribute */
+.sf { max-width: var(--maxw); margin: 0 auto; padding: clamp(24px, 5vw, 48px) var(--gutter) 64px; }
+.sf > * { max-width: 38rem; }
+.sf h1 { font: 700 clamp(1.9rem, 5vw, 2.6rem)/1.1 var(--f-display); letter-spacing: -.02em; margin: 0 0 6px; }
+.sf-lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 22px; }
+
+/* Upload: the page is the drop target; this box shows it */
+.sf-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+.sf-upload.is-drag { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+.sf-pick { position: relative; min-height: 44px; }
+.sf-pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }   /* keeps the native control, keyboard included */
+.sf-pick:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sf-pick.is-off { opacity: .5; cursor: not-allowed; }
+.sf-pick.is-off input { cursor: not-allowed; }
+.sf-drop { color: var(--muted); }
+.sf-drop-now { color: var(--accent); font-weight: 600; }
+.sf-offline { flex-basis: 100%; margin: 0; }
+.sf-note { color: var(--muted); font-size: .9rem; margin: 10px 0 6px; }
+
+/* Closed help texts */
+.sf-more summary, .sf-photos summary { cursor: pointer; font-weight: 500; padding: 6px 0; min-height: 32px; }
+.sf-more p, .sf-more ol { color: var(--muted); margin: 4px 0 10px; }
+.sf-more ol { padding-left: 1.3em; }
+.sf-how { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 10px; }
+
+/* Progress (only while photos are read) and the Undo line */
+.sf-progress p { margin: 18px 0 6px; font-weight: 500; }
+.sf-progress p:empty { margin: 0; }
+.sf-progress progress { display: block; width: 100%; accent-color: var(--accent); }
+.sf-undo { margin: 12px 0 0; }
+.sf-undo:has(> [hidden]) { margin: 0; }
+.sf-text-btn { background: none; border: 0; padding: 6px 0; min-height: 32px; color: var(--accent); font: 500 .95rem var(--f-ui);
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+/* Answer block: a rule and the date, then the sentence, then the map. No boxes, no shadows. */
+.sf-block { border-top: 1px solid var(--line); margin-top: 28px; padding-top: 12px; }
+.sf-example { border-top-style: dashed; border-top-color: var(--line-strong); }
+.sf-reserve { min-height: calc(min(38rem, 100vw - 2 * var(--gutter)) / 2 + 21rem); }   /* the example's height (map + text), held until its data arrives */
+.sf-block p { margin: 0 0 4px; }
+.sf-block p:empty { display: none; }
+.sf-date { font: 500 .8rem/1.4 var(--f-mono); color: var(--muted); }
+.sf-block .sf-date { margin-bottom: 8px; }
+.sf-headline { font: 700 clamp(1.6rem, 4vw, 2.4rem)/1.15 var(--f-display); letter-spacing: -.015em; margin: 0 0 8px; }
+.sf-headline:empty { display: none; }
+.sf-pos { font-size: .85rem; color: var(--muted); }
+.sf-radius, .sf-check { font-size: 1rem; }
+.sf-hint { color: var(--muted); font-size: .9rem; }
+
+/* Map: imagery on the viewer colour in both themes. The viewer is always dark, so its marks use the accent of the
+   Night Observatory (BRAND.md) in both themes, as the observatory overlays keep one colour on imagery. */
+.sf-map { --map-accent: #8AB6EF; position: relative; margin: 14px 0 6px; background: var(--viewer); border-radius: 4px; overflow: hidden; }
+.sf-map canvas { display: block; width: 100%; aspect-ratio: 2 / 1; }
+.sf-legend { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 14px; padding: 4px 9px; border-radius: 3px;
+  font: 500 .74rem var(--f-mono); color: var(--viewer-ink); background: rgba(5, 11, 20, .72); }
+.sf-block .sf-legend { margin: 0; }
+.sf-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sf-legend svg { width: 14px; height: 14px; stroke-width: 1.5; }
+.sf-key-stars { fill: var(--map-accent); stroke: var(--map-accent); }
+.sf-key-gps { fill: none; stroke: var(--viewer-ink); }
+.sf-osm a { font-size: .9rem; }
+
+/* Photo rows: a plain list with hairlines; every status has a mark and words */
+.sf-photos { margin-top: 10px; }
+.sf-photos ul { list-style: none; margin: 4px 0 0; padding: 0; }
+.sf-photos li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 0 6px; padding: 8px 0; border-top: 1px solid var(--line); }
+.sf-photos li:focus-visible { outline-offset: -2px; }
+.sf-mark { grid-row: span 3; font-weight: 600; text-align: center; }
+.sf-name { font-size: .8rem; overflow-wrap: anywhere; }
+.sf-text { color: var(--muted); font-size: .92rem; }
+.sf-retry { justify-self: start; }

@@ -251,3 +251,36 @@ test("photoQueue: restore() right after clear() drops the old answer and reads t
   s.calls[1].resolve(fix()); await tick();
   assert.equal(q.rows[0].result.status, "fix");
 });
+
+// ---- the page: app/starfix.html words and controls (behaviour is checked in a browser, see the build report) ----
+const fs = require("node:fs"), path = require("node:path");
+const page = (f) => fs.readFileSync(path.join(__dirname, "..", "app", f), "utf8");
+function visibleText(html) {   // text between tags, plus what screen readers read from attributes; no head, scripts, comments
+  const body = html.replace(/<head>[\s\S]*?<\/head>/, "").replace(/<script[\s\S]*?<\/script>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+  const attrs = [...body.matchAll(/\b(?:aria-label|title|alt|placeholder)="([^"]*)"/g)].map((m) => m[1]);
+  return (body.replace(/<[^>]+>/g, " ") + " " + attrs.join(" ")).replace(/\s+/g, " ");
+}
+
+test("starfix.html: the exact words of the design, and no technical word (A14)", () => {
+  const text = visibleText(page("starfix.html"));
+  for (const s of ["Star Fix", "Find where you were, from the stars in your photo.", "Choose star photos", "Add more photos", "or drop them here",
+    "Your photos stay on this computer.", "Which photos work?",
+    "Night-sky photos from an iPhone, with many stars. Use the original file (AirDrop, cable or iCloud). Chat apps remove the data that this needs.",
+    "To use your own photos, start WANDERERS on a computer (start.cmd).", "How does this work?",
+    "The app recognises the stars in your photo.", "Your phone stored which way was down and the exact time.",
+    "Together they give the one place on Earth where those stars were overhead.",
+    "Stars give the place to about 50 to 150 km. GPS is 10 000 times better. Navigators worked like this before GPS.",
+    "Remove my photos", "Example ·", "stars", "phone GPS", "Open in OpenStreetMap", "Drop to add", "Photos removed.", "Undo", "Try again"])
+    assert.ok(text.includes(s), s);
+  assert.ok(clean(text), text.match(new RegExp(`.{0,40}(${FORBIDDEN.source}).{0,40}`, "i"))?.[0]);
+});
+
+test("starfix.html: one primary button, native controls, no confirm dialog and no history entries (A16, U7)", () => {
+  const html = page("starfix.html"), js = page("starfix.js");
+  assert.equal((html.match(/btn-primary/g) || []).length, 1);
+  assert.match(html, /<input type="file" id="files" multiple accept="\.heic,\.heif,\.jpg,\.jpeg,image\/heic,image\/jpeg">/);
+  assert.match(html, /<progress /);
+  assert.match(html, /aria-live="polite"/);
+  assert.doesNotMatch(js, /confirm\(|alert\(|pushState|location\.hash/);
+  assert.doesNotMatch(page("sw.js"), /starfix/, "the offline list is for the Sky Compass only");
+});
