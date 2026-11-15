@@ -141,6 +141,11 @@ class Files(unittest.TestCase):
         self.assertEqual(sf.star_fix(noise), {"status": "bad_file"})
         self.assertEqual(sf.star_fix(b""), {"status": "bad_file"})
 
+    def test_picture_with_too_many_pixels_is_refused_at_once(self):   # a decompression bomb is not decoded
+        big = io.BytesIO()
+        Image.new("1", (8000, 8000)).save(big, "PNG")   # 64 MP; the largest iPhone photo is 48 MP
+        self.assertEqual(sf.star_fix(big.getvalue()), {"status": "bad_file"})
+
     def test_command_reads_stdin_and_prints_one_json_line(self):   # the way server.js calls it
         p = subprocess.run([sys.executable, str(ROOT / "pipeline" / "star_fix.py")], input=b"not a photo",
                            capture_output=True, cwd=ROOT, timeout=120)

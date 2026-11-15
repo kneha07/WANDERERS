@@ -34,6 +34,7 @@ _t3 = None                                   # the solver with its star database
 # and Prob 2.3e-7 or 5.2e-6; one (15 matches) put a JPEG copy of 20260614_081100956 2800 km off.
 MIN_MATCHES, MAX_RMSE_ARCSEC, MAX_FALSE_PROB = 8, 300, 1e-8
 SMALL_PX = 1600   # long side below this: 8-16 matches at 1280 px and one false solve before the gate (measured)
+MAX_PIXELS = 60_000_000   # the largest iPhone photo is 48 MP; a bigger picture (a decompression bomb) is refused, not decoded
 
 # Gravity (device axes: x right of the screen, y top of the phone, z out of the screen) -> (picture right, picture down)
 # of the upright picture, for each EXIF orientation of the rear camera.
@@ -167,7 +168,9 @@ def position(R, g, orient, utc):
 def star_fix(data):
     """Photo file bytes -> result dict (section 6 of the design)."""
     try:
-        im = Image.open(io.BytesIO(data))
+        im = Image.open(io.BytesIO(data))   # reads the header only; Pillow's DecompressionBombError lands in the except
+        if im.width * im.height > MAX_PIXELS:
+            return {"status": "bad_file"}
         im.load()
     except Exception:   # not an image Pillow (or pillow-heif) can decode
         return {"status": "bad_file"}
