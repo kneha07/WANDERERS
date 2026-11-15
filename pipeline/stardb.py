@@ -65,7 +65,7 @@ def download():
         print(f"downloading {HYG_URL}", flush=True)
         tmp = HYG_CSV.with_suffix(".part")
         tmp.write_bytes(urllib.request.urlopen(HYG_URL, timeout=300).read())
-        tmp.rename(HYG_CSV)
+        tmp.replace(HYG_CSV)
     return HYG_CSV
 
 

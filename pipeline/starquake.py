@@ -57,7 +57,7 @@ def fetch(kic, months=2, skip=4):
             f.parent.mkdir(parents=True, exist_ok=True)
             print(f"   downloading {n}", flush=True)
             data = urllib.request.urlopen(kic_dir(kic) + n, timeout=300).read()
-            f.with_suffix(".part").write_bytes(data); f.with_suffix(".part").rename(f)
+            f.with_suffix(".part").write_bytes(data); f.with_suffix(".part").replace(f)
         paths.append(f)
     return paths
 

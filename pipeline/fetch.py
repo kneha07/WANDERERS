@@ -216,7 +216,7 @@ def s3_search(rel, ref, c25, d, reader=None, index_root=None, now=None):
     out = d / s3_answer_name(rel)
     tmp = out.with_suffix(".tmp")
     tmp.write_text(json.dumps(answer, indent=1) + "\n")
-    tmp.rename(out)
+    tmp.replace(out)
     return sia_table(spherex_s3.sia_like_rows(recs, short))
 
 
@@ -394,7 +394,7 @@ def fetch(tid):
         f.parent.mkdir(exist_ok=True)
         tmp = f.with_suffix(".part")
         tmp.write_bytes(content)
-        tmp.rename(f)            # atomic: a killed run never leaves a half-written .fits
+        tmp.replace(f)            # atomic: a killed run never leaves a half-written .fits
         return "new"
 
     # gentle on IRSA during the hackathon (3 at a time); the S3 bucket takes more
