@@ -335,10 +335,9 @@ function draw() {
     return [cx + f * dot(v, P.right) / z, cy - f * dot(v, P.up) / z];
   };
 
-  // virtual sky when there is no camera: sky above the horizon, ground below (the Deep photographs replace the dark sky)
-  const deepShows = RealSky.R.sky === "deep" && RealSky.DEEP.state === "ready";
+  // virtual sky when there is no camera: sky above the horizon, ground below (the photographs fade out the dark sky)
   if (!S.camOn) {
-    if (!deepShows) { g.fillStyle = "#040914"; g.fillRect(0, 0, W, H); }
+    g.globalAlpha = 1 - RealSky.cover(); g.fillStyle = "#040914"; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
     const a = proj(vec(P.az - 30, 0)), b = proj(vec(P.az + 30, 0));
     if (a && b) {
       const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy) || 1, nx = -dy / n, ny = dx / n;  // normal pointing to ground

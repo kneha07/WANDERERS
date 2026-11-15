@@ -85,7 +85,7 @@
     const key = `${R.limit}|${L.lat.toFixed(2)}|${L.lon.toFixed(2)}|${Math.floor(now.getTime() / 1000)}`;
     if (key !== EYE.key) { EYE.key = key; EYE.vecs = starsUp(now, L, SkyView.limitMag(R.limit)); }
     const zoom = Math.max(0.6, Math.min(1.6, f / 700));             // dots grow a little with a longer lens
-    const fade = C.camOn() ? 0.35 + 0.65 * R.mix : 1;
+    const fade = (C.camOn() ? 0.35 + 0.65 * R.mix : 1) * (1 - cover());   // the photographs fade the drawn stars out
     for (const s of EYE.vecs) {
       const q = proj(s); if (!q) continue;
       g.globalAlpha = SkyView.starAlpha(s[3]) * fade; g.fillStyle = SkyView.starColour(s[4]);
@@ -123,7 +123,9 @@
   }
 
   // ---------- Deep: survey photographs under the canvas ----------
-  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null };
+  // retryAt: no new start before this time (30 s after a failed one). failed: the last start failed (for the note).
+  // op: the opacity last written to #skyDeep, or "hidden".
+  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null, retryAt: 0, failed: false, op: null };
   async function pickHost(name) {
     for (const h of surveyOf(name).hosts) {
       if (await fetch(h + "/properties", { signal: AbortSignal.timeout(6000) }).then((r) => r.ok).catch(() => false)) return h;
@@ -131,7 +133,7 @@
     throw new Error("archive");
   }
   async function startDeep() {
-    if (DEEP.state !== "idle") return;
+    if (DEEP.state !== "idle" || Date.now() < DEEP.retryAt) return;
     DEEP.state = "loading"; note();
     try {
       const base = await pickHost(R.survey);
@@ -143,9 +145,10 @@
         showSimbadPointerControl: false, showProjectionControl: false, showFrame: false, showZoomControl: false, showCooLocation: false,
         showFov: false, showStatusBar: false, showShareControl: false, showContextMenu: false, showSettingsControl: false });
       DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: R.survey, imgFormat: "jpeg" }));
-      DEEP.state = "ready"; DEEP.last = null; note();
+      DEEP.state = "ready"; DEEP.last = null; DEEP.failed = false; note();
     } catch {
-      DEEP.state = "idle";
+      // Wait 30 s before the next start, so a failure while zoomed in does not retry every frame.
+      DEEP.state = "idle"; DEEP.retryAt = Date.now() + 30000; DEEP.failed = true;
       if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
     }
   }
@@ -177,19 +180,32 @@
     DEEP.aladin.setFoV(fov); DEEP.aladin.gotoRaDec(c.ra, c.dec); DEEP.aladin.setRotation(-rot);
   }
 
+  // ---------- the telescope view: zooming in fades the photographs in, in every sky mode ----------
+  // The amount t is 0 at 3x and 1 at 6x. It never changes the user's own choice (R.sky, R.mix, R.survey).
+  const scope = () => Math.max(0, Math.min(1, (C.S.zoom - 3) / 3));
+  // How much of the view the photographs cover: compass.js fades its dark backdrop by it, drawEye its stars.
+  const cover = () => (DEEP.state === "ready" ? (R.sky === "deep" ? 1 : scope()) : 0);
+  // The photographs are wanted in Deep, and from 2x (started early, so they are ready by 3x). Their opacity is set
+  // here every frame, written to the page only when it changes. Aladin must not start in a hidden box, so the box
+  // stays shown (at opacity 0 below 3x) while wanted or loading.
+  function deepFrame(P, f, W, H, now, L) {
+    const want = R.sky === "deep" || C.S.zoom >= 2, t = scope();
+    const op = R.sky === "deep" ? (C.camOn() ? R.mix + (1 - R.mix) * t : 1) : t;
+    const key = want || DEEP.state === "loading" ? op : "hidden";
+    if (key !== DEEP.op) { DEEP.op = key; $("skyDeep").hidden = key === "hidden"; $("skyDeep").style.opacity = op; }
+    if (want) syncDeep(P, f, W, H, now, L);
+  }
+
   // ---------- one frame, called by compass.js before its own markers ----------
-  // Returns true when the photographs are showing, so compass.js leaves out its dark backdrop.
   function draw(g, P, f, W, H, now, L) {
     LAST = { P, f, W, H, now, L };
-    const deepShows = R.sky === "deep" && DEEP.state === "ready";
-    if (R.sky === "deep") syncDeep(P, f, W, H, now, L);
-    if (R.sky === "off") { note(); return false; }
+    deepFrame(P, f, W, H, now, L);
+    note();
+    if (R.sky === "off") return;
     const proj = projector(P, f, W, H);
     if (R.lines) drawLines(g, proj, now, L);
     if (R.sky === "eye") drawEye(g, proj, now, L, f);
     drawPlanets(g, proj, now, L);
-    note();
-    return deepShows;
   }
 
   // ---------- controls ----------
@@ -200,11 +216,10 @@
     $("limitSeg").hidden = mode !== "eye"; $("surveySeg").hidden = mode !== "deep";
     $("linesBtn").hidden = mode === "off"; $("linesBtn").classList.toggle("on", R.lines); $("linesBtn").setAttribute("aria-pressed", R.lines);
     if (mode !== "off") { loadStars(); if (R.lines) loadLines(); }   // Deep needs the star list too, for taps
-    $("skyDeep").hidden = mode !== "deep";
+    if (mode === "deep") DEEP.retryAt = 0;                           // choosing Deep tries the archive again at once
     $("mixWrap").hidden = !C.camOn() || mode === "off";
     $("mix").value = Math.round(R.mix * 100);
-    $("skyDeep").style.opacity = C.camOn() ? R.mix : 1;
-    DEEP.last = null; NOTE = ""; note();
+    DEEP.last = null; DEEP.op = null; NOTE = ""; note();              // the next frame sets the photographs' opacity
   }
   let NOTE = "";
   function note() {
@@ -439,7 +454,7 @@
     $("limitSeg").querySelectorAll("button").forEach((b) => (b.onclick = () => { R.limit = b.dataset.limit; store("wanderers.skyLimit", R.limit); EYE.key = ""; setSky(R.sky); }));
     $("surveySeg").querySelectorAll("button").forEach((b) => (b.onclick = () => setSurvey(b.dataset.survey)));
     $("linesBtn").onclick = () => { R.lines = !R.lines; store("wanderers.skyLines", R.lines); setSky(R.sky); };
-    $("mix").oninput = (e) => { R.mix = e.target.value / 100; store("wanderers.skyMix", R.mix); $("skyDeep").style.opacity = R.mix; };
+    $("mix").oninput = (e) => { R.mix = e.target.value / 100; store("wanderers.skyMix", R.mix); };   // the next frame applies it
     $("skyCardClose").onclick = () => showCard(null);
     $("dragSky").onclick = startDrag;
     $("dragDone").onclick = () => endDrag(true);
@@ -472,6 +487,6 @@
     setSky(R.sky);
   }
 
-  const api = { init, draw, cancelGesture, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
+  const api = { init, draw, cover, cancelGesture, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
   root.RealSky = api;
 })(window);
