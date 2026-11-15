@@ -650,7 +650,8 @@ def test_summary_schema_matches_contract(env):
     do_publish(env, runs=[{"wall_seconds": 60, "tiles": 2, "detections": 2_000_000}])
     s = strict_load(env.out / "summary.json")
     assert list(s) == R.SUMMARY_KEYS + R.SUMMARY_EXTRA_KEYS            # contract keys, then the page's additions
-    assert R.SUMMARY_EXTRA_KEYS == ["status", "tiles_planned", "min_pm", "unique_sources", "gaia_unchecked"]
+    assert R.SUMMARY_EXTRA_KEYS == ["status", "tiles_planned", "min_pm", "unique_sources", "gaia_unchecked",
+                                    "spherex_checked", "spherex_confirmed"]
     assert s["status"] in ("running", "done") and type(s["tiles_planned"]) is int
     assert type(s["min_pm"]) is float and type(s["unique_sources"]) is int and s["tiles_planned"] >= s["tiles_done"]
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", s["generated"])
@@ -818,7 +819,7 @@ def test_rank_only_rebuilds_from_tile_files(env):
     manifest = {"done": {}, "failed": {}, "runs": [{"run": 1, "wall_seconds": 600, "tiles": 3, "detections": 3e6}]}
     R.atomic_write_json(env.out / "manifest.json", manifest)
     before = (env.out / "tiles" / "1.json").read_bytes()
-    code = R.main(["--rank-only", "--out", str(env.out), "--cache", str(env.cache), "--log-file", "",
+    code = R.main(["--rank-only", "--no-spherex", "--out", str(env.out), "--cache", str(env.cache), "--log-file", "",
                    "--process-fn", "no.such.core:process_tile", "--rank-fn", "test_survey_run_fakes:rank",
                    "--xmatch-fn", "test_survey_run_fakes:crossmatch_gaia"])
     assert code == 0
@@ -834,7 +835,7 @@ def test_docstring_smoke_command_runs(env):
     """The no-network smoke command from the module docstring, as a real subprocess."""
     out = env.tmp / "smoke"
     cmd = [sys.executable, str(ROOT / "pipeline" / "survey" / "run.py"), "--tiles", "list:1-6", "--workers", "2",
-           "--no-gaia", "--publish-every", "0", "--out", str(out), "--cache", str(out / "cache"),
+           "--no-gaia", "--no-spherex", "--publish-every", "0", "--out", str(out), "--cache", str(out / "cache"),
            "--log-file", str(out / "run.log"), "--process-fn", "test_survey_run_fakes:process_tile",
            "--rank-fn", "test_survey_run_fakes:rank"]
     assert "--process-fn test_survey_run_fakes:process_tile" in R.__doc__

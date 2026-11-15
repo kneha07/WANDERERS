@@ -38,7 +38,7 @@ def env(tmp_path, monkeypatch):
 
 
 def make_cfg(env, tiles="list:1-6", **kw):
-    base = dict(tiles=tiles, workers=2, out=env.out, cache=env.cache, no_gaia=True, publish_every=0,
+    base = dict(tiles=tiles, workers=2, out=env.out, cache=env.cache, no_gaia=True, no_spherex=True, publish_every=0,
                 process_fn=fakes.process_tile, rank_fn=fakes.rank, xmatch_fn=fakes.crossmatch_gaia, log_file=None,
                 backoff=0.01, read_backoff=0.01, heartbeat=3600, min_free_mem_gb=0, rss_check=0.1, disk_check=3600,
                 manifest_every=0.2)
@@ -393,7 +393,8 @@ def test_run_with_gaia_crossmatches_at_the_end(env):
 # ------------------------------------------------------------------------------------------------ kill -9, SIGTERM, Ctrl-C
 def cli(env, *extra, tiles="list:0-11", workers=2):
     return [sys.executable, str(RUN_PY), "--tiles", tiles, "--workers", str(workers), "--out", str(env.out),
-            "--cache", str(env.cache), "--log-file", str(env.tmp / "run.log"), "--no-gaia", "--publish-every", "0",
+            "--cache", str(env.cache), "--log-file", str(env.tmp / "run.log"), "--no-gaia", "--no-spherex",
+            "--publish-every", "0",
             "--min-free-mem-gb", "0", "--min-free-disk-gb", "0.01", "--process-fn",
             "test_survey_run_fakes:process_tile", "--rank-fn", "test_survey_run_fakes:rank", *extra]
 
