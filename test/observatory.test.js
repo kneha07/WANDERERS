@@ -35,6 +35,25 @@ test("switching targets quickly shows the last one picked, even if an earlier on
   p.close();
 });
 
+test("six missions clicked 0 ms apart, answers in any order: the last click wins, pixels included", async (t) => {
+  const order = ["barnard", "wise0855", "r_dra", "eps_indi_b", "pos_217p4398_s62p6795", "rw_aur"];
+  const slow = { barnard: 40, wise0855: 220, r_dra: 90, eps_indi_b: 250, pos_217p4398_s62p6795: 180, rw_aur: 60 };
+  const delays = Object.fromEntries(order.map((id) => [`data/${id}/`, (url, n) => (n ? slow[id] : 0)]));   // first page load is quick
+  const p = open("?target=barnard", { delays });
+  t.after(p.close);
+  await p.settle(200);
+  for (const id of order) p.window.WANDERERS.openTarget(id);
+  await p.settle(900);
+  assert.equal(p.$("tName").textContent, nameOf("rw_aur"));
+  assert.equal(search(p).get("target"), "rw_aur");
+  assert.match(p.$("verdict").innerHTML, new RegExp(require("../app/data/rw_aur/target.json").evidence.classification.slice(0, 20).replace(/[()]/g, ".")));
+  let used = null;
+  p.$("sky").getContext("2d").drawImage = (im) => { used = used || im; };
+  p.fire(p.$("zoom"), "input");
+  assert.match(used.src, /data\/rw_aur\/w2_wise2010\.png$/);
+  assert.deepEqual(p.errors, []);
+});
+
 test("a slow image from the previous target is never used for the new one", async () => {
   // both targets name their first frame w2_wise2010.png: the late r_dra image must not land in wise0855's cache
   const p = open("?target=barnard", { delays: { "data/r_dra/w2_wise2010.png": 200 } });
@@ -173,13 +192,14 @@ test("coordinates: hours, degrees and the Star database's own format all read th
     [["08h 55m 10.83s", "−07° 14′ 42.5″"], /Matched WISE 0855/],      // copied from the Star database card (Unicode minus and primes)
     [["17h 57m 48.50s", "+04° 41′ 36.2″"], /Matched Barnard/],
     [["17 57 48.5", "+04 41 36"], /Matched Barnard/],                  // sexagesimal RA without letters is hours
-    [["12:30:00", "-45:00:00"], /--ra 187\.50000 --dec -45\.00000/],
-    [["12 30 00", "-45 00 00"], /--ra 187\.50000 --dec -45\.00000/],
-    [["24h00m00s", "0"], /--ra 0\.00000 --dec 0\.00000/],              // 24h is 0h
-    [["0", "-90"], /--ra 0\.00000 --dec -90\.00000/],
-    [["359.9999", "89.9"], /--ra 359\.99990 --dec 89\.90000/],
+    [["12:30:00", "-45:00:00"], /RA 187\.5000°, Dec -45\.0000°/],      // not prepared: the heading names the position
+    [["12 30 00", "-45 00 00"], /RA 187\.5000°, Dec -45\.0000°/],
+    [["4h 41m 36s", "4°41′36″"], /RA 70\.4000°, Dec 4\.6933°/],        // primes without spaces
+    [["24h00m00s", "0"], /RA 0\.0000°, Dec 0\.0000°/],                // 24h is 0h
+    [["0", "-90"], /RA 0\.0000°, Dec -90\.0000°/],
+    [["359.9999", "89.9"], /RA 359\.9999°, Dec 89\.9000°/],
   ];
-  for (const [[ra, dec], want] of cases) assert.match(typeCoords(p, ra, dec), want, `${ra} ${dec}`);
+  for (const [[ra, dec], want] of cases) assert.match(`${typeCoords(p, ra, dec)} | ${p.$("tName").textContent}`, want, `${ra} ${dec}`);
   p.close();
 });
 
@@ -216,6 +236,115 @@ test("typed coordinates hide the previous star's path card on every tab", async 
   await p.settle(200);
   assert.equal(p.$("pathCard").hidden, false);
   assert.match(p.$("pathBody").innerHTML, /wanderers_wise0855/);
+});
+
+// ---------- what the page is about: heading, evidence, path and URL follow the current subject ----------
+const nameSearch = async (p, q) => {
+  p.$("nameIn").value = q;
+  p.$("nameIn").dispatchEvent({ type: "input" }); await p.settle(30);
+  p.$("nameIn").dispatchEvent({ type: "keydown", key: "Enter", preventDefault() {} }); await p.settle(200);
+};
+
+test("uncached coordinates in the link: the heading names the position and the evidence says it is not analysed", async (t) => {
+  const p = open("?ra=279.2347&dec=38.7837");
+  t.after(p.close);
+  await p.settle(200);
+  assert.equal(p.$("tName").textContent, "RA 279.2347°, Dec 38.7837°");
+  assert.match(p.$("verdict").innerHTML, /NOT ANALYSED/);
+  assert.doesNotMatch(p.$("coordMsg").textContent, /python|pipeline|node server/);
+  p.$("tabFlip").onclick();                                    // the time-lapse belongs to a mission
+  await p.settle(200);
+  assert.equal(p.$("tName").textContent, INDEX[0].name);
+});
+
+test("a star found by name: heading, evidence, Webb and the path follow it; Time-lapse returns to the mission", async (t) => {
+  const p = open("?target=barnard");
+  t.after(p.close);
+  await p.settle(200);
+  await nameSearch(p, "Vega");
+  assert.equal(p.$("tName").textContent, "Vega");
+  assert.match(p.$("verdict").innerHTML, /NOT ANALYSED/);
+  assert.equal(p.$("checks").innerHTML, "");
+  assert.equal(p.$("changes").hidden, true);
+  assert.equal(p.$("starCard").hidden, false);
+  p.$("tabFlip").onclick();                                    // back to the time-lapse: Barnard's Star again, with its own path
+  await p.settle(300);
+  assert.equal(p.$("tName").textContent, nameOf("barnard"));
+  assert.match(p.$("verdict").innerHTML, /KNOWN OBJECT|CANDIDATE/);
+  assert.match(p.$("pathBody").innerHTML, /hip87937/);
+  await nameSearch(p, "Vega");
+  p.window.WANDERERS.openTarget("wise0855");                    // picking a mission puts the Vega card away
+  await p.settle(200);
+  assert.equal(p.$("starCard").hidden, true);
+  assert.equal(p.$("tName").textContent, nameOf("wise0855"));
+});
+
+test("after a name search, typed coordinates drop the star's path everywhere", async (t) => {
+  const p = open("?target=barnard");
+  t.after(p.close);
+  await p.settle(200);
+  await nameSearch(p, "Vega");
+  typeCoords(p, "10", "20");
+  await p.settle(50);
+  for (const tab of ["webb", "map"]) { p.window.WANDERERS.selectTab(tab); assert.equal(p.$("pathCard").hidden, true, tab); }
+  assert.equal(p.$("starCard").hidden, true);
+  assert.equal(p.$("tName").textContent, "RA 10.0000°, Dec 20.0000°");
+});
+
+test("Through Webb looks where the star is now, not at the field centre (Wolf 359)", async (t) => {
+  const p = open("?target=pos_164p1223_n7p0153");
+  t.after(p.close);
+  await p.settle(200);
+  p.window.WANDERERS.selectTab("webb");
+  await p.settle(400);
+  assert.match(p.$("webbHead").innerHTML, /Webb has imaged Wolf 359/);
+});
+
+test("URL: a channel or star from before does not stick to the next target", async (t) => {
+  const p = open("?target=barnard&ch=d2");
+  t.after(p.close);
+  await p.settle(200);
+  assert.equal(search(p).get("ch"), "d2");
+  p.window.WANDERERS.openTarget("wise0855");
+  await p.settle(200);
+  assert.equal(search(p).get("ch"), null);
+  p.window.WANDERERS.selectTab("stars");
+  p.window.StarsTab.open("hip87937");
+  await p.settle(300);
+  assert.equal(search(p).get("star"), "hip87937");
+  p.window.WANDERERS.openTarget("barnard");
+  await p.settle(200);
+  assert.equal(search(p).get("star"), null);
+});
+
+test("What else moved shows with the time-lapse only", async (t) => {
+  const p = open("?target=wise0855");
+  t.after(p.close);
+  await p.settle(200);
+  assert.equal(p.$("changes").hidden, false);
+  for (const tab of ["stars", "map", "webb"]) { p.window.WANDERERS.selectTab(tab); assert.equal(p.$("changes").hidden, true, tab); }
+  p.window.WANDERERS.selectTab("flip");
+  assert.equal(p.$("changes").hidden, false);
+});
+
+test("a channel with one frame: no blink, compare, stack or difference", async (t) => {
+  const p = open("?target=eps_indi_b&ch=d2");
+  t.after(p.close);
+  await p.settle(200);
+  assert.equal(require("../app/data/eps_indi_b/target.json").frames.d2.length, 1);
+  for (const id of ["play", "frame", "mOp", "mA", "mB", "mixMode", "stackAll", "tDiff"]) assert.equal(p.$(id).disabled, true, id);
+  assert.match(p.$("frameLbl").textContent, /only one frame/);
+  p.key(p.document.body, " ");
+  assert.equal(p.$("play").textContent, "▶ Blink");
+  p.$("channels").dispatchEvent({ type: "click", target: { closest: () => ({ dataset: { ch: "w2" } }) } });
+  for (const id of ["play", "frame", "mOp", "stackAll", "tDiff"]) assert.equal(p.$(id).disabled, false, id);
+});
+
+test("an unknown ?target says so", async (t) => {
+  const p = open("?target=nope");
+  t.after(p.close);
+  await p.settle(200);
+  assert.match(p.$("coordMsg").textContent, /No mission called “nope”/);
 });
 
 test("coordinates: a target just across RA 0h is still matched", async () => {
