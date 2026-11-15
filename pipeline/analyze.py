@@ -94,6 +94,17 @@ def year_of(mjd):
     return float(Time(mjd, format="mjd").jyear)
 
 
+def last_visit(visits):
+    """Visit to compare with the first one for a brightness change: the latest big one (30+ images), else the
+    latest. Never the first visit itself, which would compare a visit with itself and always read as 'steady'."""
+    return max(range(1, len(visits)), key=lambda i: (len(visits[i]) >= 30, i)) if len(visits) >= 2 else None
+
+
+def east_arcsec(ca, cb, dec_deg):
+    """Eastward offset from ca to cb in arcsec on the sky (RA difference x cos dec), the short way across RA 0h."""
+    return float((cb.ra - ca.ra).wrap_at(180 * u.deg).to(u.arcsec).value * np.cos(np.radians(dec_deg)))
+
+
 def load_spherex(tid, ref):
     """Read every cached SPHEREx cutout: epoch, detector, target pixel, wavelength there."""
     out = []
@@ -286,7 +297,7 @@ def find_movers(img_old, img_new, y_old, y_new, gw, stars, npix, middles=()):
         movers.append({"x0": a[0], "y0": a[1], "x1": b[0], "y1": b[1], "snr": round(min(a[2], b[2]), 1),
                        "arcsec_per_yr": float(ca.separation(cb).arcsec / dt),
                        "ra": float(cb.ra.deg), "dec": float(cb.dec.deg), "year": y_new,
-                       "pmra": float((cb.ra - ca.ra).to(u.mas).value * np.cos(np.radians(cb.dec.deg)) / dt),
+                       "pmra": east_arcsec(ca, cb, cb.dec.deg) * 1000 / dt,
                        "pmdec": float((cb.dec - ca.dec).to(u.mas).value / dt),
                        "gaia_source_id": gid, "explained_by_gaia": gid is not None})
     return movers
@@ -462,7 +473,7 @@ def analyze(tid):
         a, b = first[0], max(last, key=lambda p: p["year"])
         ca, cb = SkyCoord(a["ra"] * u.deg, a["dec"] * u.deg), SkyCoord(b["ra"] * u.deg, b["dec"] * u.deg)
         dt = b["year"] - a["year"]
-        dra = (cb.ra - ca.ra).to(u.arcsec).value * np.cos(np.radians(ca.dec.deg))
+        dra = east_arcsec(ca, cb, ca.dec.deg)
         ddec = (cb.dec - ca.dec).to(u.arcsec).value
         expected = np.hypot(ref["pmra"] or 0, ref["pmdec"] or 0) / 1000
         motion = {"from_year": a["year"], "to_year": b["year"], "shift_arcsec": float(np.hypot(dra, ddec)),
@@ -499,7 +510,7 @@ def analyze(tid):
         # to PSF-wing photometry. Compare the first and the last big visit, wavelength bin by bin.
         saturated = len(good) < 0.3 * max(len(pts), 1)
         key, use = ("wing", [p for p in pts if np.isfinite(p["wing"])]) if saturated else ("flux_mjy", good)
-        last = max(range(len(visits)), key=lambda i: (len(visits[i]) >= 30, i))
+        last = last_visit(visits)
         ratios = []
         for lo, hi in zip(edges[:-1], edges[1:]):
             a = [p[key] for p in use if lo <= p["lam"] < hi and p["visit"] == 0]

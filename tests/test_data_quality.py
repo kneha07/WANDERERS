@@ -96,6 +96,38 @@ class TestDataQuality(unittest.TestCase):
         result = self.analyze.stretch(np.full((4, 4), np.nan))
         np.testing.assert_array_equal(result, np.zeros((4, 4)))
 
+    def test_brightness_change_never_compares_a_visit_with_itself(self):
+        last = self.analyze.last_visit
+        self.assertEqual(last([[0] * 40, [0] * 10]), 1)               # only the first visit is big: still compare with the later one
+        self.assertEqual(last([[0] * 40, [0] * 35, [0] * 10]), 1)     # latest big visit preferred
+        self.assertEqual(last([[0] * 20, [0] * 18, [0] * 22]), 2)
+        self.assertIsNone(last([[0] * 40]))
+
+    def test_east_offset_takes_the_short_way_across_ra_zero(self):
+        from astropy.coordinates import SkyCoord
+        import astropy.units as u
+        a, b = SkyCoord(359.999 * u.deg, 10 * u.deg), SkyCoord(0.001 * u.deg, 10 * u.deg)
+        self.assertAlmostEqual(self.analyze.east_arcsec(a, b, 10.0), 7.2 * np.cos(np.radians(10)), places=6)
+        self.assertAlmostEqual(self.analyze.east_arcsec(b, a, 10.0), -7.2 * np.cos(np.radians(10)), places=6)
+
+    def test_mover_crossing_ra_zero_has_a_sane_proper_motion(self):
+        from astropy.coordinates import SkyCoord
+        import astropy.units as u
+        A = self.analyze
+        npix = 150
+        gw = A.grid_wcs(SkyCoord(0.0 * u.deg, 10.0 * u.deg), npix)
+        yy, xx = np.indices((npix, npix))
+        rng = np.random.default_rng(1)
+        blob = lambda x, y: 60 * np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2 * 1.5 ** 2))
+        old = rng.normal(0, 1, (npix, npix)) + blob(85, 75)            # west of RA 0h in 2010
+        new = rng.normal(0, 1, (npix, npix)) + blob(65, 75)            # 40" east, past RA 0h, 15 years later
+        movers = A.find_movers(old, new, 2010.5, 2025.5, gw, [], npix)
+        self.assertEqual(len(movers), 1)
+        m = movers[0]
+        self.assertAlmostEqual(m['arcsec_per_yr'], 40 / 15, delta=0.1)
+        self.assertAlmostEqual(m['pmra'], 40 / 15 * 1000, delta=100)      # mas/yr, not ~ -8.6e7
+        self.assertAlmostEqual(m['pmdec'], 0, delta=100)
+
 
 if __name__ == '__main__':
     unittest.main()
