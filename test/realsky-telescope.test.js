@@ -197,12 +197,16 @@ test("the note zoomed in names the survey and says 'archive photograph'; 'approx
   assert.match(c.note(), /^Telescope view: Digitized Sky Survey 2 \(visible light\)\. Archive photograph, not live\./);
   const approx = /Your compass is good to a few degrees, so this is near where you point, not exactly it\./;
   assert.doesNotMatch(c.note(), approx, "drag mode, no sensors");
+  const claim = /Direction good to about/;
   c.S.sensors = true; c.frame();
   assert.match(c.note(), approx);
+  assert.doesNotMatch(c.note(), claim, "one accuracy claim only: not also 'Direction good to about ...'");
   c.S.snapped = true; c.frame();
   assert.doesNotMatch(c.note(), approx, "snapped to a target");
+  assert.match(c.note(), claim, "then the usual direction text is back");
   c.S.snapped = false; c.F.compassFrozen = true; c.frame();
   assert.doesNotMatch(c.note(), approx, "after a sight check");
+  assert.match(c.note(), claim);
 });
 
 test("at 150x and 300x the photographs follow every move of a quarter pixel or more: small steps and a pinch", async () => {

@@ -247,14 +247,14 @@
     const F = C.F, S = C.S, t = scope(), pt = SkyView.pointing({ haveSensor: S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
     const loading = DEEP.state === "loading" && (S.zoom >= 3 ? "Loading telescope photographs… " : R.sky === "deep" ? "Loading sky photographs… " : "");
     const state = loading || (R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "");
-    const scoped = t > 0 && DEEP.state === "ready";
+    const scoped = t > 0 && DEEP.state === "ready", approx = scoped && S.sensors && !F.compassFrozen && !S.snapped;
     const text = [R.msg,
       scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
         : (state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky]).trim(),
-      scoped && S.sensors && !F.compassFrozen && !S.snapped && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
+      approx && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
       // one message per problem: with no connection, that is the reason
       t > 0 && (navigator.onLine === false ? "No connection: no finer photographs." : DEEP.failed && "Telescope photographs are not reachable now."),
-      pt.text].filter(Boolean).join(" · ");
+      !approx && pt.text].filter(Boolean).join(" · ");                 // one accuracy claim only
     const pill = cover() > 0;                        // on the photographs: a dark pill keeps the note readable
     if (pill !== PILL) { PILL = pill; $("skyNote").classList.toggle("on-photo", pill); }
     const key = text + pt.needsCal;
