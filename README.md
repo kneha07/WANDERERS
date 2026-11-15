@@ -435,6 +435,51 @@ node --test test/starquake.test.js                   # Sun calibration, 126 Hz, 
 Not done yet: playing the Sun's own measured Doppler data (SOHO/MDI, SDO/HMI or BiSON). JSOC data exports need a
 registered account, so the Sun currently uses its measured ν<sub>max</sub> and Δν with the model pattern.
 
+### Star profile: compared with the Sun, what it is made of, its real light
+
+Under every star in the Star database, a **Star profile** shows:
+
+- **Size next to the Sun, to scale.** The colours are true blackbody colours computed from each surface
+  temperature (Planck spectrum through the CIE 1931 colour-matching functions to sRGB). For giants such as Polaris,
+  Earth's orbit is drawn in.
+- **The star on the Hertzsprung–Russell diagram,** among every star in the database.
+- **Facts:** weight in kg, diameter in km, surface temperature, power output, distance and light-travel time, the
+  habitable zone, age, and metal content.
+- **"Compared with the Sun" bars** on a log scale (0.01× to 100×) for mass, diameter, power, temperature, density,
+  gravity and age.
+- **What it is made of:**
+  - hydrogen, helium and metals by mass, plus what the metals are (Asplund et al. 2009 solar mix);
+  - a periodic table coloured by each measured element relative to the Sun, the view the Hypatia Catalog uses
+    (blue = less than the Sun, orange = more).
+- **Its real light spread into a rainbow:** the Gaia DR3 XP spectrum, 380–1000 nm, with the broad hydrogen,
+  calcium, sodium, magnesium and titanium-oxide features labelled.
+- **Known planets** with the habitable zone.
+
+Each value comes from the best available source, and the page names it:
+
+1. literature values;
+2. Gaia DR3 FLAME and GSP-Phot (`gaiadr3.astrophysical_parameters`);
+3. the Hypatia Catalog (Hinkel et al. 2014): element abundances and planets for about 14,000 nearby stars;
+4. estimates from the catalogue, labelled as such.
+
+`pipeline/star_profile.py` builds the profiles. The default stars ship ready-made. For any other star, the page
+shows catalogue estimates at once and, with `node server.js` running, fetches Gaia and Hypatia data in about 20 s
+(`POST /api/star-profile`).
+
+**Starquake sounds** are pre-made for every default star (`node scripts/starquake_defaults.js` writes
+`app/data/starquake/model/`). Any other star's sound is generated in the browser the moment it is opened (about
+50 ms), with its waveform shown. The model uses the star's measured radius and temperature from its profile when
+there is no literature value.
+
+Tested in the iOS Simulator (iPhone 17 Pro, iPhone 16e, iPad Pro 13) as well as desktop browsers. Links can jump to
+a section once it has been drawn: `?star=hip8102#starProfile`, `#starQuake`, `#starLong`.
+
+```bash
+.venv/bin/python pipeline/star_profile.py --defaults     # profiles for the default stars
+node scripts/starquake_defaults.js                       # their starquake sounds
+node --test test/starprofile.test.js                     # colours, Sun ratios = 1, composition, shipped profiles
+```
+
 ### Frame details and data flags
 
 Under the sky viewer, **Frame details and data flags** lists each frame of the chosen wavelength (year, source,
