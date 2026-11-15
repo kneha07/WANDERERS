@@ -274,6 +274,35 @@ with optional `th=0.6` and `sm=0`. Frame numbers count from 0 in the order of th
 node --test test/framemath.test.js   # includes checks on the real WISE 0855 and Barnard's Star frames
 ```
 
+### Sky Survey: from the ranked list to a person investigating
+
+The Sky Survey page (`app/survey.html`) ranks the movers found in the NEOWISE archive. To work through them:
+
+- **Filter and sort** the table: unexplained only, minimum motion, minimum visits, minimum motion S/N, red only
+  (W1−W2 ≥ 0.5 or no W1: a cold brown dwarf's colour, a hint and not proof), and hide rows flagged at a tile edge,
+  crowded, saturated or classed as likely artefacts. **High-confidence** sets ≥ 12 visits, S/N ≥ 10 and hides all four.
+  The address keeps every filter and the sort, so a shared link shows the same list (`?preset=high` works in a link too).
+- **Download** the filtered, sorted list (every page) as CSV or JSON: id, position and epoch, motion and its error,
+  W1/W2, visits, class, Gaia result, score, flags and merged duplicates.
+- **Open a candidate** for links to other archives at the right date: IRSA Finder Chart, Aladin Lite and the Legacy
+  Surveys viewer where it should be today, SIMBAD and VizieR at its J2000 position, Gaia DR3 at 2016.0, plus where
+  it is in 2000, 2016, today and 2030.
+- **Promote it** to a full WANDERERS target with the WISE → NEOWISE → SPHEREx time-lapse in the explorer:
+
+```bash
+.venv/bin/python pipeline/survey/promote.py --id 10226-0001          # prints the commands (dry run)
+.venv/bin/python pipeline/survey/promote.py --top 5 --unexplained    # the five best unexplained candidates
+.venv/bin/python pipeline/survey/promote.py --id 10226-0001 --run    # runs fetch.py, analyze.py, evidence.py
+```
+
+It moves the candidate to 2018.5 with its own motion (midway between AllWISE and SPHEREx), picks a field wide enough
+for its 2010–2026 path, and runs the same `fetch.py --ra --dec`, `analyze.py` and `evidence.py` steps as typed
+coordinates; then open `observatory.html?target=<id it prints>`. `--run` needs the network and a few minutes.
+
+A source sitting on a tile boundary can be found in both tiles. Publishing merges such pairs (same position and
+motion near the edge; the longer track is kept, the other id is listed under "Also found") and counts them once.
+`python pipeline/survey/dedupe.py app/data/survey/tiles` reports how many the tile files hold.
+
 ### Any coordinates, on demand (needs `server.js`)
 
 With `server.js` running, typing coordinates that are not cached starts `fetch.py`, `analyze.py` and
