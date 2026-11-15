@@ -117,6 +117,14 @@ test("manifest addresses are recognisable and one per survey, latitude and detai
   assert.ok(!Hips.isManifest("B/Norder2/Dir0/Npix7.jpg") && !Hips.isManifest("B/properties"));
 });
 
+test("a survey's issue date is read from its properties file", () => {
+  const text = "creator_did          = ivo://CDS/P/DSS2/color\nhips_creation_date   = 2010-05-01T19:05Z\nhips_release_date    = 2019-05-07T10:55Z\nhips_order           = 9\n";
+  assert.equal(Hips.releaseDate(text), "2019-05-07T10:55Z");
+  assert.equal(Hips.releaseDate("hips_order = 9\n"), "");
+  assert.equal(Hips.releaseDate(""), "");
+  assert.ok(!Hips.isManifest(Hips.releaseUrl("https://x/y")) && !/\.jpg$/.test(Hips.releaseUrl("https://x/y")));
+});
+
 test("the page and the service worker read one set of settings", () => {
   const c = Hips.CONFIG;
   for (const v of Object.values(c.surveys)) {

@@ -24,7 +24,7 @@
     survey: pick("survey", (v) => SURVEYS[v], load("wanderers.skySurvey", "visible")),
     lines: load("wanderers.skyLines", true), mix: load("wanderers.skyMix", 0.8), msg: "", calDrag: null,
   };
-  let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), F, S, onStar(key), openSight()
+  let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), phoneSteers(), F, S, onStar(key), openSight()
   let LAST = null;         // the latest frame: pose, focal, size, time, place (for taps, the drag and the self-check)
 
   // ---------- the camera's projection (the same formula as compass.js) ----------
@@ -85,7 +85,7 @@
     const key = `${R.limit}|${L.lat.toFixed(2)}|${L.lon.toFixed(2)}|${Math.floor(now.getTime() / 1000)}`;
     if (key !== EYE.key) { EYE.key = key; EYE.vecs = starsUp(now, L, SkyView.limitMag(R.limit)); }
     const zoom = Math.max(0.6, Math.min(1.6, f / 700));             // dots grow a little with a longer lens
-    const fade = C.camOn() ? 0.35 + 0.65 * R.mix : 1;
+    const fade = (C.camOn() ? 0.35 + 0.65 * R.mix : 1) * (1 - cover());   // the photographs fade the drawn stars out
     for (const s of EYE.vecs) {
       const q = proj(s); if (!q) continue;
       g.globalAlpha = SkyView.starAlpha(s[3]) * fade; g.fillStyle = SkyView.starColour(s[4]);
@@ -123,43 +123,61 @@
   }
 
   // ---------- Deep: survey photographs under the canvas ----------
-  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null };
+  // retryAt: no new start before this time (30 s after a failed one). failed: the last start failed (for the note).
+  // op: the opacity last written to #skyDeep, or "hidden".
+  const DEEP = { state: "idle", aladin: null, last: null, base: null, survey: null, A: null, retryAt: 0, failed: false, op: null };
   async function pickHost(name) {
     for (const h of surveyOf(name).hosts) {
       if (await fetch(h + "/properties", { signal: AbortSignal.timeout(6000) }).then((r) => r.ok).catch(() => false)) return h;
     }
     throw new Error("archive");
   }
+  // Every survey start goes through loadSurvey: the first start and every switch of survey. It finds a host that
+  // answers, then runs `more` (the first start loads the Aladin script), and resolves to [host, more's result]. A start
+  // that fails, or hangs for 20 s, rejects, and no automatic start comes for 30 s, so a failure while zoomed in does not
+  // retry every frame. A hung start that answers late is ignored: the race is already over.
+  async function loadSurvey(name, more = async () => null) {
+    let late;
+    try {
+      return await Promise.race([(async () => [await pickHost(name), await more()])(),
+        new Promise((ok, no) => { late = setTimeout(() => no(new Error("timeout")), 20000); })]);
+    } catch (e) { DEEP.retryAt = Date.now() + 30000; throw e; }
+    finally { clearTimeout(late); }
+  }
   async function startDeep() {
-    if (DEEP.state !== "idle") return;
+    if (DEEP.state !== "idle" || Date.now() < DEEP.retryAt) return;
+    const survey = R.survey;
     DEEP.state = "loading"; note();
     try {
-      const base = await pickHost(R.survey);
-      DEEP.base = base; DEEP.survey = R.survey;
-      const A = (await import(ALADIN_URL)).default; await A.init; DEEP.A = A;
+      const [base, A] = await loadSurvey(survey, async () => { const A = (await import(ALADIN_URL)).default; await A.init; return A; });
+      DEEP.base = base; DEEP.survey = survey; DEEP.A = A;
       // log: false. By default Aladin Lite reports this page's full address to a CDS logging server on start.
       DEEP.aladin = A.aladin("#skyDeep", { survey: base, projection: "TAN", fov: 60, cooFrame: "ICRSd", log: false,
         showReticle: false, showLayersControl: false, showGotoControl: false, showFullscreenControl: false, showCooGridControl: false,
         showSimbadPointerControl: false, showProjectionControl: false, showFrame: false, showZoomControl: false, showCooLocation: false,
         showFov: false, showStatusBar: false, showShareControl: false, showContextMenu: false, showSettingsControl: false });
-      DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: R.survey, imgFormat: "jpeg" }));
-      DEEP.state = "ready"; DEEP.last = null; note();
+      DEEP.aladin.setBaseImageLayer(A.imageHiPS(base, { name: survey, imgFormat: "jpeg" }));
+      DEEP.state = "ready"; DEEP.last = null; DEEP.failed = false; note();
     } catch {
-      DEEP.state = "idle";
+      // Any failure on the way (the probe, the script, Aladin itself, the first layer) waits 30 s, so a browser
+      // without WebGL2 does not build Aladin every frame. A half-built Aladin is removed: the next try starts fresh.
+      DEEP.state = "idle"; DEEP.failed = true; DEEP.retryAt = Date.now() + 30000;
+      DEEP.aladin = null; $("skyDeep").replaceChildren();
       if (R.sky === "deep") setSky("eye", "Sky photographs are not reachable. Showing the Eye view.");
     }
   }
   async function setSurvey(name) {
     R.survey = SURVEYS[name] ? name : "visible"; store("wanderers.skySurvey", R.survey); setSky(R.sky);
     if (DEEP.state !== "ready" || DEEP.survey === R.survey) return;
+    const want = R.survey;
     DEEP.state = "loading"; note();
     try {
-      const base = await pickHost(R.survey);
-      DEEP.aladin.setBaseImageLayer(DEEP.A.imageHiPS(base, { name: R.survey, imgFormat: "jpeg" }));
-      DEEP.base = base; DEEP.survey = R.survey; DEEP.state = "ready"; DEEP.last = null; note();
+      const [base] = await loadSurvey(want);
+      DEEP.aladin.setBaseImageLayer(DEEP.A.imageHiPS(base, { name: want, imgFormat: "jpeg" }));
+      DEEP.base = base; DEEP.survey = want; DEEP.state = "ready"; DEEP.last = null; note();
     } catch {
       DEEP.state = "ready";                          // the old photographs are still on screen
-      const want = R.survey; R.survey = DEEP.survey; store("wanderers.skySurvey", R.survey);
+      R.survey = DEEP.survey; store("wanderers.skySurvey", R.survey);
       setSky(R.sky, `The ${want} photographs are not reachable. Kept the ${DEEP.survey} ones.`);
     }
   }
@@ -171,25 +189,45 @@
     if (DEEP.survey !== R.survey) { setSurvey(R.survey); return; }
     const c = Sky.unobserve(P.az, P.alt, now, L.lat, L.lon), rot = Sky.zenithAngle(P.az, P.alt, now, L.lat, L.lon) - rollOf(P);
     const fov = (2 * Math.atan(W / 2 / f)) / D2R, last = DEEP.last;
-    if (last && Math.abs(last.fov - fov) < 0.01 && Math.abs(((rot - last.rot + 540) % 360) - 180) < 0.05 &&
-        Math.hypot((c.ra - last.c.ra) * Math.cos(c.dec * D2R), c.dec - last.c.dec) < 0.01) return;
+    // Skip only a change too small to see: the centre moves under 0.25 px, the scale under 1e-4, and the turn moves
+    // a screen corner under 0.25 px. Limits in pixels, not degrees, so they hold at every zoom (300x: 1 deg = 3827 px).
+    if (last && Math.abs(last.fov - fov) < 1e-4 * fov && Math.abs(((rot - last.rot + 540) % 360) - 180) < 0.25 / Math.hypot(W / 2, H / 2) / D2R &&
+        Math.hypot((c.ra - last.c.ra) * Math.cos(c.dec * D2R), c.dec - last.c.dec) < 0.25 / (f * Math.tan(D2R))) return;
     DEEP.last = { c, rot, fov };
     DEEP.aladin.setFoV(fov); DEEP.aladin.gotoRaDec(c.ra, c.dec); DEEP.aladin.setRotation(-rot);
   }
 
+  // ---------- the telescope view: zooming in fades the photographs in, in every sky mode ----------
+  // The amount t is 0 at 3x and 1 at 6x. It never changes the user's own choice (R.sky, R.mix, R.survey).
+  const scope = () => Math.max(0, Math.min(1, (C.S.zoom - 3) / 3));
+  // Offline the telescope photographs are not shown (only the few saved orders would load, so the view went black):
+  // the dark backdrop and the drawn stars stay. Deep keeps its photographs: they can come from a saved place.
+  const online = () => navigator.onLine !== false;
+  // How much of the view the photographs cover: compass.js fades its dark backdrop by it, drawEye its stars.
+  const cover = () => (DEEP.state === "ready" ? (R.sky === "deep" ? 1 : online() ? scope() : 0) : 0);
+  // The photographs are wanted in Deep, and from 2x (started early, so they are ready by 3x; on mobile data or with
+  // Save-Data on, from 3x, so nothing unseen is fetched). Their opacity is set here every frame, written to the page
+  // only when it changes. Aladin must not start in a hidden box, so the box stays shown (at opacity 0 below 3x) while
+  // wanted or loading.
+  function deepFrame(P, f, W, H, now, L) {
+    const net = navigator.connection, from = net && (net.saveData || net.type === "cellular") ? 3 : 2;
+    const want = R.sky === "deep" || (online() && C.S.zoom >= from), t = scope();
+    const op = R.sky === "deep" ? (C.camOn() ? R.mix + (1 - R.mix) * t : 1) : online() ? t : 0;
+    const key = want || DEEP.state === "loading" ? op : "hidden";
+    if (key !== DEEP.op) { DEEP.op = key; $("skyDeep").hidden = key === "hidden"; $("skyDeep").style.opacity = op; }
+    if (want) syncDeep(P, f, W, H, now, L);
+  }
+
   // ---------- one frame, called by compass.js before its own markers ----------
-  // Returns true when the photographs are showing, so compass.js leaves out its dark backdrop.
   function draw(g, P, f, W, H, now, L) {
     LAST = { P, f, W, H, now, L };
-    const deepShows = R.sky === "deep" && DEEP.state === "ready";
-    if (R.sky === "deep") syncDeep(P, f, W, H, now, L);
-    if (R.sky === "off") { note(); return false; }
+    deepFrame(P, f, W, H, now, L);
+    note();
+    if (R.sky === "off") return;
     const proj = projector(P, f, W, H);
     if (R.lines) drawLines(g, proj, now, L);
     if (R.sky === "eye") drawEye(g, proj, now, L, f);
     drawPlanets(g, proj, now, L);
-    note();
-    return deepShows;
   }
 
   // ---------- controls ----------
@@ -200,17 +238,29 @@
     $("limitSeg").hidden = mode !== "eye"; $("surveySeg").hidden = mode !== "deep";
     $("linesBtn").hidden = mode === "off"; $("linesBtn").classList.toggle("on", R.lines); $("linesBtn").setAttribute("aria-pressed", R.lines);
     if (mode !== "off") { loadStars(); if (R.lines) loadLines(); }   // Deep needs the star list too, for taps
-    $("skyDeep").hidden = mode !== "deep";
+    if (mode === "deep") DEEP.retryAt = 0;                           // choosing Deep tries the archive again at once
     $("mixWrap").hidden = !C.camOn() || mode === "off";
     $("mix").value = Math.round(R.mix * 100);
-    $("skyDeep").style.opacity = C.camOn() ? R.mix : 1;
-    DEEP.last = null; NOTE = ""; note();
+    DEEP.last = null; DEEP.op = null; NOTE = ""; note();              // the next frame sets the photographs' opacity
   }
-  let NOTE = "";
+  let NOTE = "", PILL = null;
+  // The note always names what is on screen. Zoomed in, it names the survey, says it is an archive photograph,
+  // and says when the direction is only approximate (no sight check, no snap to a target).
   function note() {
-    const F = C.F, pt = SkyView.pointing({ haveSensor: C.S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
-    const state = R.sky === "deep" && DEEP.state === "loading" ? "Loading sky photographs… " : R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "";
-    const text = [R.msg, state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky], pt.text].filter(Boolean).join(" · ");
+    const F = C.F, S = C.S, t = scope(), pt = SkyView.pointing({ haveSensor: S.sensors, accuracy: F.compassAccuracy, calibrated: !!F.compassFrozen });
+    const loading = DEEP.state === "loading" && (S.zoom >= 3 ? "Loading telescope photographs… " : R.sky === "deep" ? "Loading sky photographs… " : "");
+    const state = loading || (R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "");
+    const scoped = t > 0 && DEEP.state === "ready" && (R.sky === "deep" || online()), approx = scoped && S.sensors && !F.compassFrozen && !S.snapped;
+    const text = [R.msg,
+      scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
+        : (state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky]).trim(),
+      approx && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
+      // one message per problem: with no connection, that is the reason
+      t > 0 && (!online() ? (R.sky === "deep" ? "No connection: no finer photographs." : "No connection: telescope photographs are not available.")
+        : DEEP.failed && "Telescope photographs are not reachable now."),
+      !approx && pt.text].filter(Boolean).join(" · ");                 // one accuracy claim only
+    const pill = cover() > 0;                        // on the photographs: a dark pill keeps the note readable
+    if (pill !== PILL) { PILL = pill; $("skyNote").classList.toggle("on-photo", pill); }
     const key = text + pt.needsCal;
     if (key === NOTE) return;
     NOTE = key;
@@ -250,7 +300,8 @@
 
   // ---------- drag the sky: the sky point under the finger stays under the finger ----------
   // With motion sensors it moves the sight-check offsets (F.fineAz, F.fineAlt), like tapping a landmark does;
-  // without them it aims the view. A small 2-by-2 Newton solve, so it is exact whatever the phone's roll.
+  // without them, or while the view is held (zoomed in), it aims the view. A small 2-by-2 Newton solve, so it is
+  // exact whatever the phone's roll.
   // The pose after turning by A degrees of azimuth (about the vertical) and then tilting by T degrees about the
   // camera's right axis: what F.fineAz and F.fineAlt do in orient.js, and what a change of S.manual does.
   function turned(P, A, T) {
@@ -276,7 +327,7 @@
       A += lim((d * ex - b * ey) / det); T += lim((a * ey - c * ex) / det);
     }
     g.A = A; g.T = T;
-    if (C.S.sensors) { C.F.fineAz = Orient.wrap180(g.fine[0] + A); C.F.fineAlt = Math.max(-30, Math.min(30, g.fine[1] + T)); }
+    if (C.phoneSteers()) { C.F.fineAz = Orient.wrap180(g.fine[0] + A); C.F.fineAlt = Math.max(-30, Math.min(30, g.fine[1] + T)); }
     else { const m = C.S.manual; m.az = (g.manual.az + A + 720) % 360; m.alt = Math.max(-85, Math.min(85, g.manual.alt + T)); }
   }
   function startDrag() {
@@ -288,7 +339,7 @@
     const b = R.calDrag; R.calDrag = null; $("dragBar").hidden = true;
     if (!b) return;
     if (!keep) { C.F.fineAz = b.az; C.F.fineAlt = b.alt; C.F.compassFrozen = b.frozen; Object.assign(C.S.manual, b.manual); return; }
-    if (C.S.sensors) C.F.compassFrozen = true;      // the sky the user sees is the truth now, as after a sight check
+    if (C.phoneSteers()) C.F.compassFrozen = true;      // the sky the user sees is the truth now, as after a sight check
   }
 
   // ---------- pictures kept on the phone, and "Save the sky for a place" ----------
@@ -299,6 +350,16 @@
     let bytes = 0;
     for (const k of keys) { const r = await c.match(k); bytes += +(r && r.headers.get("content-length")) || TILE_BYTES; }
     return { n: keys.length, bytes };
+  }
+  // What sw.js recorded for the survey on screen: { release, at } (its issue date, and when that was last checked).
+  async function surveyVersion() {
+    if (!cacheOk || !(await caches.has(Hips.CONFIG.caches.pinned))) return null;
+    const c = await caches.open(Hips.CONFIG.caches.pinned);
+    for (const h of [DEEP.survey === R.survey && DEEP.base, ...surveyOf(R.survey).hosts].filter(Boolean)) {
+      const r = await c.match(Hips.releaseUrl(h)), v = r ? await r.json() : null;
+      if (v && v.release) return v;
+    }
+    return null;
   }
   const DETAIL = { 1: "Basic", 2: "Standard", 3: "Sharp" };
   const planFor = (lat, order, survey) => { const v = surveyOf(survey); return Hips.plan(v.hosts[0], lat, order, v); };
@@ -327,10 +388,11 @@
   }
   async function renderSaved() {
     if (!cacheOk) { $("savedRow").textContent = "This browser cannot keep pictures on the device."; $("saveGo").disabled = true; return; }
-    const [auto, saved, mine] = await Promise.all([cacheStats(CACHE_AUTO), cacheStats(CACHE_SAVED), savedPlaces()]);
-    const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const [auto, saved, mine, ver] = await Promise.all([cacheStats(CACHE_AUTO), cacheStats(CACHE_SAVED), savedPlaces(), surveyVersion()]);
+    const day = (iso, year) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year });
     $("savedRow").textContent = `Recent: ${auto.n ? `${auto.n} pictures, ${SkyView.fmtBytes(auto.bytes)} (cleared after 7 days)` : "none"}. ` +
-      `Saved: ${saved.n ? `${saved.n} pictures, ${SkyView.fmtBytes(saved.bytes)}` : "none"}.`;
+      `Saved: ${saved.n ? `${saved.n} pictures, ${SkyView.fmtBytes(saved.bytes)}` : "none"}.` +
+      (ver ? ` The archive last updated its ${R.survey} photographs on ${day(ver.release, "numeric")}. Checked for newer ones on ${day(ver.at)}, at most once a day.` : "");
     const rows = mine.places.map((p, i) => [i, `Latitude ${SkyView.fmtLat(p.lat)}, ${DETAIL[p.order]}${p.survey === "infrared" ? ", infrared" : ""}, ` +
       `${p.tiles} pictures, saved ${day(p.savedAt)}`]);
     if (mine.loose.n) rows.push(["loose", `${mine.loose.n} pictures from a save that did not finish (${SkyView.fmtBytes(mine.loose.bytes)})`]);
@@ -415,18 +477,22 @@
       const ax = a[0] + box.left, ay = a[1] + box.top;
       rows.push({ name: o.name, canvas: [Math.round(q[0]), Math.round(q[1])], aladin: [Math.round(ax), Math.round(ay)], off: +Math.hypot(ax - q[0], ay - q[1]).toFixed(1) });
     }
-    return { worst: Math.max(0, ...rows.map((r) => r.off)), stars: rows, roll: +rollOf(P).toFixed(1), fov: DEEP.aladin.getFov(), base: DEEP.base,
+    // compared: how many stars were measured. worst is 0 when none was, so every check must also ask for compared >= 1.
+    return { worst: Math.max(0, ...rows.map((r) => r.off)), compared: rows.length, stars: rows, roll: +rollOf(P).toFixed(1), fov: DEEP.aladin.getFov(), base: DEEP.base,
       pxPerDeg: +(f * Math.tan(D2R)).toFixed(1) };
   }
 
   // ---------- wiring ----------
+  let grab = null, tap = null;                       // the finger dragging the sky, and the press that may be a tap
+  const cancelGesture = () => { grab = null; tap = null; };   // compass.js: a second finger came down (pinch to zoom)
+  const cancelDrag = () => { grab = null; endDrag(false); };   // compass.js: hold mode starts or ends during Drag the sky
   function init(ctx) {
     C = ctx;
     $("skySeg").querySelectorAll("button").forEach((b) => (b.onclick = () => setSky(b.dataset.sky)));
     $("limitSeg").querySelectorAll("button").forEach((b) => (b.onclick = () => { R.limit = b.dataset.limit; store("wanderers.skyLimit", R.limit); EYE.key = ""; setSky(R.sky); }));
     $("surveySeg").querySelectorAll("button").forEach((b) => (b.onclick = () => setSurvey(b.dataset.survey)));
     $("linesBtn").onclick = () => { R.lines = !R.lines; store("wanderers.skyLines", R.lines); setSky(R.sky); };
-    $("mix").oninput = (e) => { R.mix = e.target.value / 100; store("wanderers.skyMix", R.mix); $("skyDeep").style.opacity = R.mix; };
+    $("mix").oninput = (e) => { R.mix = e.target.value / 100; store("wanderers.skyMix", R.mix); };   // the next frame applies it
     $("skyCardClose").onclick = () => showCard(null);
     $("dragSky").onclick = startDrag;
     $("dragDone").onclick = () => endDrag(true);
@@ -440,7 +506,6 @@
     $("skyCredit").textContent = [SkyView.CREDITS.eye, SkyView.CREDITS.deep, SkyView.CREDITS.infrared].join(" ");
 
     // Gestures on the AR canvas. Registered before compass.js's own drag-to-look, so "drag the sky" can take them.
-    let grab = null, tap = null;
     const hud = $("hud");
     hud.addEventListener("pointerdown", (e) => {
       tap = { x: e.clientX, y: e.clientY, t: Date.now() };
@@ -460,6 +525,6 @@
     setSky(R.sky);
   }
 
-  const api = { init, draw, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
+  const api = { init, draw, cover, cancelGesture, cancelDrag, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
   root.RealSky = api;
 })(window);

@@ -1,0 +1,402 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WANDERERS Explained</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (about 920px) with a live "blink" sky panel in the hero; sections follow the reader's questions. */
+:root{
+  --bg:#F6F8FB; --surface:#FFFFFF; --ink:#172B45; --ink2:#52677D; --accent:#2864C5;
+  --line:#DCE3EC; --soft:#EAF0F8; --warn:#B4530A; --good:#1C7A4A;
+  --sky:#0B1422; --skyInk:#B5C9DE;
+  --display:"Sora", "Segoe UI", system-ui, sans-serif;
+  --body:"Inter", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1422; --surface:#152438; --ink:#F1F5FA; --ink2:#B5C9DE; --accent:#8AB6EF;
+    --line:#24384F; --soft:#1A2C43; --warn:#F2A766; --good:#6FD39C; --sky:#060C16; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1422; --surface:#152438; --ink:#F1F5FA; --ink2:#B5C9DE; --accent:#8AB6EF;
+  --line:#24384F; --soft:#1A2C43; --warn:#F2A766; --good:#6FD39C; --sky:#060C16; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 15.5px/1.6 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:920px;margin:0 auto;padding-block:40px 80px;display:grid;gap:64px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-weight:800;font-size:clamp(34px,6vw,52px);letter-spacing:-.025em;line-height:1.05}
+h2{font-weight:800;font-size:26px;letter-spacing:-.015em}
+h3{font-weight:600;font-size:16px}
+p{margin:0;max-width:65ch}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.sec{display:grid;gap:20px}
+.sec>header{display:grid;gap:8px}
+.lede{color:var(--ink2)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+
+/* hero */
+.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:center}
+.hero .txt{display:grid;gap:16px}
+.rule{display:inline-flex;gap:8px;align-items:center;font:500 13px var(--mono);color:var(--warn);
+  border:1px solid currentColor;border-radius:4px;padding:4px 10px;width:fit-content}
+.skybox{background:var(--sky);border-radius:10px;overflow:hidden;position:relative}
+.skybox canvas{display:block;width:100%;aspect-ratio:1/1}
+.skybox .cap{position:absolute;left:12px;right:12px;bottom:10px;display:flex;justify-content:space-between;
+  font:500 12px var(--mono);color:var(--skyInk)}
+.skybox .yr{color:#fff;font-size:15px}
+.links{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:14px}
+
+/* objective list */
+.goals{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;list-style:none;padding:0;margin:0}
+.goals li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:grid;gap:6px}
+.goals li p{color:var(--ink2);font-size:14.5px}
+
+/* audience */
+.aud{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.aud div{border-top:3px solid var(--accent);background:var(--surface);padding:14px 16px;display:grid;gap:6px;align-content:start}
+.aud .need{font-size:14px;color:var(--ink2)}
+.aud .gets{font:500 12.5px var(--mono);color:var(--accent)}
+
+/* use cases */
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:500 13.5px var(--body);color:var(--ink);background:var(--soft);border:1px solid var(--line);
+  border-radius:20px;padding:6px 14px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.case{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px;display:grid;gap:14px}
+.steps{display:grid;gap:0;counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;display:grid;grid-template-columns:28px 1fr;gap:12px;padding:8px 0;border-top:1px dashed var(--line)}
+.steps li:first-child{border-top:0}
+.steps li::before{content:counter(s);font:600 13px var(--mono);color:var(--accent);
+  width:24px;height:24px;border:1.5px solid var(--accent);border-radius:50%;display:grid;place-items:center}
+.where{font:500 12.5px var(--mono);color:var(--ink2)}
+
+/* diagram */
+.diag{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px}
+.diag svg{display:block;min-width:720px;width:100%;height:auto}
+.diag text{font-family:var(--body);fill:var(--ink)}
+.diag .sub{fill:var(--ink2);font-size:11px}
+.diag .box{fill:var(--soft);stroke:var(--line)}
+.diag .key{fill:var(--surface);stroke:var(--accent);stroke-width:1.5}
+.diag .ar{stroke:var(--ink2);stroke-width:1.4;fill:none}
+.diag .dash{stroke-dasharray:4 4}
+.diag .lbl{font:500 10.5px var(--mono);fill:var(--accent)}
+
+/* tables */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+th,td{text-align:left;padding:10px 14px;border-top:1px solid var(--line);vertical-align:top}
+thead th{border-top:0;font:500 11.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);background:var(--soft)}
+td:first-child{font-weight:600;white-space:nowrap}
+td .mono{color:var(--ink2)}
+.n{font-variant-numeric:tabular-nums;font-family:var(--mono)}
+
+/* evidence ladder */
+.ladder{display:grid;gap:6px}
+.ladder div{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:center;
+  padding:8px 14px;background:var(--surface);border:1px solid var(--line);border-radius:6px;font-size:14px}
+.ladder .q{color:var(--ink2)}
+.ladder .a{font-weight:600}
+.ladder .cand{color:var(--warn)}
+
+/* numbers */
+.nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.nums div{display:grid;gap:2px}
+.nums b{font:800 28px var(--display);letter-spacing:-.02em;color:var(--accent);font-variant-numeric:tabular-nums}
+.nums span{font-size:13px;color:var(--ink2)}
+
+.limits{display:grid;gap:8px;padding-left:18px;margin:0;color:var(--ink2)}
+footer{font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding-top:16px}
+
+@media (max-width:720px){ .hero{grid-template-columns:1fr} .ladder div{grid-template-columns:1fr;gap:2px} }
+</style>
+
+<div class="wrap">
+
+<!-- HERO -->
+<section class="hero" aria-labelledby="t">
+  <div class="txt">
+    <span class="eyebrow">NASA Space Apps 2026 · Planet X and SPHEREx · Team Hello Universe</span>
+    <h1 id="t">WANDERERS</h1>
+    <p><strong>WANDERERS finds objects that move or change in the infrared sky.</strong> It then uses the 102 colours of NASA SPHEREx to show what each object is likely to be.</p>
+    <p class="lede">It flips through real images from 2010 to 2026, the way Pluto was found by flipping two photos. Every claim shows its evidence on screen.</p>
+    <span class="rule">Rule: candidate, never discovery</span>
+    <div class="links">
+      <a href="https://rajryadav4.github.io/wanderers/">Live site</a>
+      <a href="https://rajryadav4.github.io/wanderers/observatory.html?target=wise0855">Explorer: WISE 0855</a>
+      <a href="https://rajryadav4.github.io/wanderers/survey.html">Sky Survey</a>
+      <a href="https://github.com/kneha07/WANDERERS">Repo</a>
+    </div>
+  </div>
+  <figure class="skybox" style="margin:0" aria-label="Animation: a star field. Circles mark where Gaia expects each known star. One dot moves across the field from 2010 to 2026 and leaves hollow rings at past epochs.">
+    <canvas id="sky" width="440" height="440"></canvas>
+    <figcaption class="cap"><span>○ Gaia "ghost" = expected star</span><span class="yr" id="yr">2026</span></figcaption>
+  </figure>
+</section>
+
+<!-- OBJECTIVES -->
+<section class="sec" aria-labelledby="obj">
+  <header><span class="eyebrow">Why it exists</span><h2 id="obj">Objectives</h2></header>
+  <ul class="goals">
+    <li><h3>Meet all six challenge requirements</h3><p>Data sync, detector switch, quality flags, citizen votes, candidate ranking and a billion-object search. Each one is live and tested.</p></li>
+    <li><h3>See motion, then read composition</h3><p>A flipbook shows <em>that</em> it moved. The 0.75–5.0 µm spectrum shows <em>what</em> it is: water, methane, CO and CO₂ bands. A usable spectrum exists for 5 of the 11 shipped targets.</p></li>
+    <li><h3>Show the evidence, not a score</h3><p>Stated rules turn measurements into a class and a confidence, for example "3 of 3 key checks support it". The full list of checks prints under the headline. No black box.</p></li>
+    <li><h3>Never over-claim</h3><p>Anything that Gaia or a catalogue does not explain is a <em>candidate</em>. Each card has a "What this view cannot show" box.</p></li>
+    <li><h3>Use only real, public data</h3><p>SPHEREx, WISE, NEOWISE, Gaia DR3, JWST, Kepler. Nothing is simulated. AI writes text only, never measurements.</p></li>
+    <li><h3>Open with no install</h3><p>The site is static and the data is committed. A clone or the live link just works, also on a phone.</p></li>
+  </ul>
+</section>
+
+<!-- AUDIENCE -->
+<section class="sec" aria-labelledby="aud">
+  <header><span class="eyebrow">Who it is for</span><h2 id="aud">Target audience</h2>
+  <p class="lede">Four groups. Each group enters at a different page.</p></header>
+  <div class="aud">
+    <div><h3>Challenge judges</h3><p class="need">Need proof that each requirement works.</p><span class="gets">→ README table, live links</span></div>
+    <div><h3>Citizen scientists</h3><p class="need">Backyard Worlds volunteers who blink images to find brown dwarfs.</p><span class="gets">→ Explorer, Classify card, Survey</span></div>
+    <div><h3>Astronomers</h3><p class="need">Need a ranked, filterable candidate list with archive links at the right epoch.</p><span class="gets">→ Survey CSV/JSON, promote.py</span></div>
+    <div><h3>Students and public</h3><p class="need">Want to point a phone at the sky, hear a star, see what Webb saw, or find where a photo was taken from its stars.</p><span class="gets">→ Sky Compass, Starquakes, Star database, Star Fix</span></div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section class="sec" aria-labelledby="uc">
+  <header><span class="eyebrow">What people do with it</span><h2 id="uc">Use cases</h2>
+  <p class="lede">Pick a use case to see the steps.</p></header>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="case" id="case" role="tabpanel" aria-live="polite"></div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section class="sec" aria-labelledby="arch">
+  <header><span class="eyebrow">How it fits together</span><h2 id="arch">Architecture</h2>
+  <p class="lede">The Python pipeline writes data. The static site reads it. Two optional servers add live features. Dashed lines need <code>node server.js</code>.</p></header>
+  <div class="diag">
+    <svg viewBox="0 0 760 330" role="img" aria-label="Architecture diagram">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink2)"/></marker></defs>
+      <!-- archives -->
+      <rect class="box" x="10" y="20" width="170" height="92" rx="6"/>
+      <text x="22" y="44" font-weight="600" font-size="13">Public archives</text>
+      <text class="sub" x="22" y="62">NASA IRSA (SPHEREx, WISE,</text>
+      <text class="sub" x="22" y="76">NEOWISE on AWS) · MAST</text>
+      <text class="sub" x="22" y="90">ESA Gaia DR3 · SIMBAD · CDS</text>
+      <!-- pipeline -->
+      <rect class="key" x="260" y="20" width="220" height="92" rx="6"/>
+      <text x="272" y="44" font-weight="600" font-size="13">pipeline/ (Python)</text>
+      <text class="sub" x="272" y="62">fetch → analyze → gaia_facts</text>
+      <text class="sub" x="272" y="76">→ evidence → vet → explain</text>
+      <text class="sub" x="272" y="90">survey/: tiles, link, rank, run</text>
+      <!-- data -->
+      <rect class="key" x="560" y="20" width="190" height="92" rx="6"/>
+      <text x="572" y="44" font-weight="600" font-size="13">app/data/</text>
+      <text class="sub" x="572" y="62">target.json, frames (PNG),</text>
+      <text class="sub" x="572" y="76">evidence, survey tiles</text>
+      <text class="sub" x="572" y="90">committed to git</text>
+      <!-- site -->
+      <rect class="key" x="560" y="200" width="190" height="104" rx="6"/>
+      <text x="572" y="224" font-weight="600" font-size="13">app/ static site</text>
+      <text class="sub" x="572" y="242">home · observatory · survey</text>
+      <text class="sub" x="572" y="256">compass (phone) · Starquakes</text>
+      <text class="sub" x="572" y="270">plain JS + canvas, Aladin Lite</text>
+      <text class="sub" x="572" y="284">GitHub Pages</text>
+      <!-- server -->
+      <rect class="box" x="260" y="200" width="220" height="104" rx="6"/>
+      <text x="272" y="224" font-weight="600" font-size="13">server.js :8000 (Node)</text>
+      <text class="sub" x="272" y="242">any coordinates (fields.js)</text>
+      <text class="sub" x="272" y="256">Ask WANDERERS (claude -p)</text>
+      <text class="sub" x="272" y="270">learn a star · /explore/</text>
+      <text class="sub" x="272" y="284">Star Fix: POST /api/star-fix</text>
+      <!-- backend -->
+      <rect class="box" x="10" y="200" width="170" height="104" rx="6"/>
+      <text x="22" y="224" font-weight="600" font-size="13">backend/ :8001</text>
+      <text class="sub" x="22" y="242">FastAPI live API</text>
+      <text class="sub" x="22" y="256">web/: React + Vite</text>
+      <text class="sub" x="22" y="270">blink any patch live</text>
+      <!-- GitHub Actions -->
+      <text class="lbl" x="262" y="150">GitHub Actions: weekly SPHEREx sync, vote count</text>
+      <!-- arrows -->
+      <path class="ar" d="M180 66H256" marker-end="url(#m)"/><text class="lbl" x="190" y="60">pixels, rows</text>
+      <path class="ar" d="M480 66H556" marker-end="url(#m)"/><text class="lbl" x="492" y="60">writes</text>
+      <path class="ar" d="M655 112V196" marker-end="url(#m)"/><text class="lbl" x="662" y="160">reads</text>
+      <path class="ar dash" d="M556 252H484" marker-end="url(#m)"/><text class="lbl" x="492" y="246">API calls</text>
+      <path class="ar dash" d="M370 200V116" marker-end="url(#m)"/><text class="lbl" x="376" y="190">runs</text>
+      <path class="ar dash" d="M260 252H184" marker-end="url(#m)"/><text class="lbl" x="192" y="246">proxy</text>
+      <path class="ar dash" d="M95 200V116" marker-end="url(#m)"/><text class="lbl" x="102" y="160">live frames</text>
+    </svg>
+  </div>
+</section>
+
+<!-- EVIDENCE -->
+<section class="sec" aria-labelledby="ev">
+  <header><span class="eyebrow">The core logic</span><h2 id="ev">How the evidence card decides</h2>
+  <p class="lede"><code>pipeline/evidence.py</code> asks these questions in order. The first "yes" wins. Confidence counts the key checks for the chosen class: high when all pass (at least 2) or 3 or more pass, medium when 2 pass, low otherwise. For the variable and steady classes, it drops one step, with the reason shown, when most SPHEREx points are saturated. Read the printed list of checks, not only the headline.</p></header>
+  <div class="ladder">
+    <div><span class="q">Cold and red, and it moved?</span><span class="a">Cold brown dwarf</span></div>
+    <div><span class="q">Brightness varies between surveys?</span><span class="a">Variable star</span></div>
+    <div><span class="q">Moved, and Gaia knows it?</span><span class="a">Nearby star, fast proper motion</span></div>
+    <div><span class="q">Moved, and matches a published motion?</span><span class="a">Nearby object, published motion</span></div>
+    <div><span class="q">Moved, with no match?</span><span class="a cand">Unexplained mover → candidate</span></div>
+    <div><span class="q">Listed as variable, but quiet here?</span><span class="a">Known variable, quiet in these snapshots</span></div>
+    <div><span class="q">None of the above</span><span class="a">Steady star</span></div>
+  </div>
+</section>
+
+<!-- REQUIREMENTS -->
+<section class="sec" aria-labelledby="req">
+  <header><span class="eyebrow">Challenge scorecard</span><h2 id="req">The six requirements</h2></header>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Requirement</th><th>What WANDERERS does</th><th>Code</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td>SPHEREx data updates</td><td>Asks IRSA which releases exist. Every page shows the release and last sync. A weekly Action opens a pull request with fresh data.</td><td><span class="mono">spherex_releases.py, spherex-sync.yml</span></td></tr>
+      <tr><td class="n">2</td><td>Combine six detectors</td><td>Each detector co-add is divided by its own noise, then summed. A switch picks D1–D6 or "Combined (all 6)".</td><td><span class="mono">analyze.py, app.js</span></td></tr>
+      <tr><td class="n">3</td><td>Quality metadata</td><td>Every frame shows mission, wavelength, dates, flags, saturation and a good / caution / poor verdict with the reason.</td><td><span class="mono">frameinfo.js</span></td></tr>
+      <tr><td class="n">4</td><td>Citizen classification</td><td>Vote Moving / Variable / Stationary / Artifact / Unsure. Votes go through GitHub issues. Consensus needs 3 voters and 60%.</td><td><span class="mono">classify.js, aggregate_votes.py</span></td></tr>
+      <tr><td class="n">5</td><td>Candidate ranking</td><td>Each mover is checked against Gaia DR3 and ranked by a transparent score. SPHEREx 2025–26 data checks whether the mover is where its track predicts. Filters (including SPHEREx-confirmed only), presets, CSV/JSON export with the SPHEREx verdict.</td><td><span class="mono">pipeline/survey/, survey/spherex.py</span></td></tr>
+      <tr><td class="n">6</td><td>Billion-object search</td><td>12,288 HEALPix tiles. NEOWISE detections 2014–2024 are linked into ten-year tracks, fitted, vetted and ranked.</td><td><span class="mono">tiles.py, link.py, rank.py</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- TECH STACK -->
+<section class="sec" aria-labelledby="ts">
+  <header><span class="eyebrow">What it is built with</span><h2 id="ts">Tech stack</h2></header>
+  <div class="tbl"><table>
+    <thead><tr><th>Layer</th><th>Technology</th><th>Job</th></tr></thead>
+    <tbody>
+      <tr><td>Data pipeline</td><td>Python · Astropy · astroquery · PyVO · reproject · astropy-healpix · NumPy · SciPy · PyArrow · cedar-solve · pillow-heif</td><td>Download cutouts, measure motion, spectrum and brightness, build evidence; plate-solve Star Fix photos</td></tr>
+      <tr><td>Machine learning</td><td>scikit-learn <code>HuberRegressor</code>, BIC model choice, bootstrap</td><td>Learn each star's path 1900–2100 from up to 13 catalogues</td></tr>
+      <tr><td>Main site</td><td>Plain JavaScript · HTML canvas · Aladin Lite 3.8.2 · three.js · service worker</td><td>Flipbook, spectrum, sky map, 3D star paths, offline phone use</td></tr>
+      <tr><td>Phone extra</td><td>DeviceOrientation sensor fusion · Web Audio · NASA GIBS</td><td>Sky Compass AR view, Starquakes sound</td></tr>
+      <tr><td>Local server</td><td>Node.js (<code>server.js</code>, <code>fields.js</code>, <code>start.js</code>)</td><td>Any-coordinate jobs, live questions, Star Fix uploads, one-click start</td></tr>
+      <tr><td>Live explorer</td><td>FastAPI (port 8001) · React · TypeScript · Vite</td><td>Blink any patch of sky live from IRSA</td></tr>
+      <tr><td>AI</td><td>Claude (Claude Code CLI, headless)</td><td>Plain-language explanations from measured numbers only</td></tr>
+      <tr><td>Automation</td><td>GitHub Actions · GitHub issue forms · GitHub Pages</td><td>Tests on every pull request, weekly data sync, vote count, hosting</td></tr>
+      <tr><td>Tests</td><td><code>node --test</code> · Python <code>unittest</code> · pytest · headless Edge/Chrome</td><td>Checks against real committed targets and astropy</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- DATA -->
+<section class="sec" aria-labelledby="dt">
+  <header><span class="eyebrow">Sixteen years of sky</span><h2 id="dt">Data and scale</h2></header>
+  <div class="nums">
+    <div><b>2010–2026</b><span>years covered by images</span></div>
+    <div><b>102</b><span>SPHEREx colours, 0.75–5.0 µm</span></div>
+    <div><b>12,288</b><span>HEALPix tiles in the survey</span></div>
+    <div><b>10 billion+</b><span>NEOWISE detections processed</span></div>
+    <div><b>12,244</b><span>stars with a profile</span></div>
+    <div><b>22,049</b><span>JWST frames matched</span></div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Epoch</th><th>Source</th><th>Use</th></tr></thead>
+    <tbody>
+      <tr><td class="n">2010</td><td>WISE / AllWISE (NASA IRSA)</td><td>First image, 3.4 and 4.6 µm</td></tr>
+      <tr><td class="n">2014–2024</td><td>NEOWISE single exposures (IRSA on AWS)</td><td>One image every six months; the survey search</td></tr>
+      <tr><td class="n">2016</td><td>Gaia DR3 (ESA)</td><td>Expected position of every field star ("ghosts")</td></tr>
+      <tr><td class="n">2025–2026</td><td>SPHEREx DR1 and QR3 (IRSA)</td><td>Latest images, spectrum, brightness change; checks survey movers in the all-sky cube</td></tr>
+    </tbody>
+  </table></div>
+  <p class="lede">Eleven targets ship ready, for example Barnard's Star, R Draconis, RW Aurigae, Epsilon Indi B, Luhman 16 and WISE 0855 (the coldest known brown dwarf).</p>
+</section>
+
+<!-- LIMITS -->
+<section class="sec" aria-labelledby="lim">
+  <header><span class="eyebrow">Stated on the site too</span><h2 id="lim">Known limits</h2></header>
+  <ul class="limits">
+    <li>Bright stars saturate SPHEREx. Those points are dropped, and the card says so.</li>
+    <li>A usable spectrum exists for 5 of the 11 shipped targets. Bright stars such as Barnard's Star have none, and the panel says so.</li>
+    <li>Aperture photometry gives the shape of a spectrum, not precise absolute flux.</li>
+    <li>One Star Fix photo is right to about 50 to 150 km. It needs the local server with the plate solver installed.</li>
+    <li>The public site shows only prepared targets. New coordinates need <code>node server.js</code> (about 12–15 minutes).</li>
+    <li>The field search recovers its own target in 8 of 9 moving-target fields. WISE 0855 is still missed.</li>
+    <li>An empty "what else moved" list means "nothing found", not "nothing there".</li>
+  </ul>
+</section>
+
+<footer>Source: <code>README.md</code>, <code>docs/demo-script.md</code>, <code>BRAND.md</code> in kneha07/WANDERERS at commit cfc0129 (15 Nov 2026). WANDERERS is a Space Apps project. It is not endorsed by NASA or ESA.</footer>
+</div>
+
+<script>
+// Use cases
+const CASES = [
+ {k:"Spot a mover", who:"Citizen scientist", steps:[
+  "Open the explorer on Barnard's Star.",
+  "Play the flipbook: WISE 2010, then NEOWISE every six months, then SPHEREx 2025 and 2026.",
+  "Watch Barnard's dot walk away from its Gaia ghost circles. A dot with no circle at all would be unexplained.",
+  "Turn on Predicted path to compare the measured path with the catalogue motion.",
+  "Subtract two frames: green is now, pink is before."], where:"observatory.html?target=barnard"},
+ {k:"Identify an object", who:"Student or judge", steps:[
+  "Open WISE 0855 and switch to the 4.6 µm channel.",
+  "Read the 0.75–5.0 µm spectrum. Water, methane and CO/CO₂ bands are marked.",
+  "Read the evidence card: class, confidence and the checks that agree.",
+  "Read the Claude explanation and the \"What this view cannot show\" box."], where:"observatory.html?target=wise0855&ch=all"},
+ {k:"Work the candidate list", who:"Astronomer", steps:[
+  "Open the Sky Survey and pick the High-confidence preset (12+ visits, S/N 10+).",
+  "Filter for unexplained, red movers. Red is a brown-dwarf hint, not proof.",
+  "Open a candidate. Follow links to SIMBAD, Gaia and Legacy Surveys at the right epoch.",
+  "Tick SPHEREx-confirmed only to keep movers that SPHEREx saw in 2025–26 where predicted.",
+  "Export CSV or JSON, or run promote.py to build a full time-lapse."], where:"survey.html?preset=high"},
+ {k:"Vote on an object", who:"Citizen scientist", steps:[
+  "On any target or candidate, pick Moving, Variable, Stationary, Artifact or Unsure.",
+  "Press Send my vote. A public GitHub issue form opens, filled in.",
+  "A GitHub Action counts all votes. One vote per person per object; the newest wins.",
+  "A consensus shows when 3 or more people agree by 60%."], where:"classify.js → aggregate_votes.py"},
+ {k:"Point a phone at the sky", who:"Public", steps:[
+  "Open the Sky Compass on a phone. Earth swings in to your location.",
+  "Calibrate for about 10 s: lay the phone flat and give it three quarter turns.",
+  "Pick Eye for drawn stars and planets, or Deep for survey photographs.",
+  "Tap a star for its profile, path, Starquake sound and whether Webb imaged it."], where:"compass.html"},
+ {k:"Find where a photo was taken", who:"Public, local", steps:[
+  "Run start.cmd or node start.js. This installs the plate solver.",
+  "Open Star Fix and upload original iPhone night-sky photos (HEIC).",
+  "The stars, the phone's gravity sensor and the photo time give a latitude and longitude.",
+  "Read the answer, the map circle, and the distance to the GPS position the phone stored."], where:"starfix.html → POST /api/star-fix"},
+ {k:"Explore any patch", who:"Anyone, local", steps:[
+  "Run node start.js (or double-click start.cmd).",
+  "Type any RA/Dec. The pipeline prepares the field and opens it as a flipbook.",
+  "Or open /explore/ and type a star name to blink its SPHEREx images live."], where:"localhost:8000/explore/"}
+];
+const tabs=document.getElementById("tabs"), box=document.getElementById("case");
+function show(i){
+  [...tabs.children].forEach((b,j)=>b.setAttribute("aria-selected", j===i));
+  const c=CASES[i];
+  box.innerHTML=`<div><span class="eyebrow">${c.who}</span><h3 style="margin-top:6px">${c.k}</h3></div>
+   <ol class="steps">${c.steps.map(s=>`<li><span>${s}</span></li>`).join("")}</ol>
+   <span class="where">Where: ${c.where}</span>`;
+}
+CASES.forEach((c,i)=>{const b=document.createElement("button");b.id="tab"+i;b.role="tab";b.textContent=c.k;b.onclick=()=>show(i);tabs.appendChild(b);});
+show(0);
+
+// Blink sky: field stars with Gaia ghosts, one mover with hollow rings at past epochs (brand motif)
+(function(){
+  const cv=document.getElementById("sky"), x=cv.getContext("2d"), yrEl=document.getElementById("yr");
+  const W=cv.width, H=cv.height; let seed=7; const r=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  const stars=[...Array(70)].map(()=>({x:r()*W,y:r()*H,m:0.6+r()*2.2,g:r()<.45}));
+  const epochs=[2010,2014,2016,2018,2020,2022,2024,2025,2026];
+  const P=t=>({x:W*0.18+t*W*0.6, y:H*0.72-t*H*0.42});   // straight proper-motion path
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function draw(k){
+    x.fillStyle="#0B1422"; x.fillRect(0,0,W,H);
+    for(const s of stars){
+      x.fillStyle="rgba(241,245,250,.85)"; x.beginPath(); x.arc(s.x,s.y,s.m,0,7); x.fill();
+      if(s.g){x.strokeStyle="rgba(138,182,239,.55)"; x.lineWidth=1; x.beginPath(); x.arc(s.x,s.y,s.m+5,0,7); x.stroke();}
+    }
+    x.setLineDash([3,4]); x.strokeStyle="rgba(138,182,239,.35)"; x.beginPath();
+    const a=P(0), b=P(1); x.moveTo(a.x,a.y); x.lineTo(b.x,b.y); x.stroke(); x.setLineDash([]);
+    for(let i=0;i<k;i++){const p=P(i/(epochs.length-1)); x.strokeStyle="rgba(241,245,250,.5)"; x.lineWidth=1.2; x.beginPath(); x.arc(p.x,p.y,4,0,7); x.stroke();}
+    const p=P(k/(epochs.length-1));
+    x.fillStyle="#F2A766"; x.beginPath(); x.arc(p.x,p.y,4.5,0,7); x.fill();
+    x.strokeStyle="#F2A766"; x.lineWidth=1.5;
+    [[0,-1],[0,1],[-1,0],[1,0]].forEach(([dx,dy])=>{x.beginPath();x.moveTo(p.x+dx*9,p.y+dy*9);x.lineTo(p.x+dx*15,p.y+dy*15);x.stroke();});
+    yrEl.textContent=epochs[k];
+  }
+  let k=epochs.length-1; draw(k);
+  if(!reduce){ setInterval(()=>{k=(k+1)%epochs.length; draw(k);}, 700); }
+})();
+</script>

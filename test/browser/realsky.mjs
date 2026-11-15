@@ -8,7 +8,8 @@
 // It needs the network (IRSA tiles, the Aladin Lite script) for parts 1 and 2. It then proves the offline
 // behaviour by starting the browser again with those hosts mapped to nowhere:
 //   1. registration: photographs and canvas put the same star on the same pixel, on a phone-sized screen,
-//      for dragged views and for fed phone poses that lean (roll); then Infrared, the cache trim, Eye, taps, drag the sky
+//      for dragged views and for fed phone poses that lean (roll); then Infrared, the cache trim, Eye, taps, drag the sky,
+//      and the telescope view (Eye at 12x on Capella, small moves at 150x and 300x, a pinch, hold with fed phone poses)
 //   2. save the sky for a latitude; the saved cache fills and the "recent" cache holds no copy of it
 //   3. same profile, archive unreachable AND our own server stopped: the page still opens, Eye and Deep work
 //   4. fresh profile, archive unreachable: Deep falls back to Eye and says so
@@ -137,7 +138,7 @@ async function main() {
   for (const [az, alt] of [[180, 30], [0, 60], [90, 10], [300, 45], [200, 84]]) { await page.eval(aim(az, alt)); await reg(`az ${az} alt ${alt}`); }
   for (const [a, b, gm] of [[30, 120, 25], [200, 130, -35], [60, 140, -20], [300, 125, 30]]) { await page.eval(feed(a, b, gm)); await reg(`phone pose alpha ${a} beta ${b} gamma ${gm}`); }
   check("registration covered a leaning phone", report.registration.some((r) => Math.abs(r.roll) > 15));
-  await page.eval(aim(300, 45)); await sleep(3000); await page.shot("deep-phone.png");
+  await page.eval(aim(300, 45)); const z0 = await reg("az 300 alt 45 again, before zooming"); await page.shot("deep-phone.png");
 
   // ---- 1b. Infrared ----
   await page.eval(`(document.querySelector('#surveySeg [data-survey="infrared"]').click(), true)`);
@@ -162,6 +163,34 @@ async function main() {
   })()`);
   check("service worker trim keeps the 5 newest pictures, oldest dropped first", sw.before > 5 && JSON.stringify(sw.kept) === JSON.stringify(sw.newest), `${sw.before} → ${sw.kept.length}`);
   check("service worker drops the recent cache once it is older than the age limit", sw.gone);
+
+  // ---- 1c2. zoom, and a survey that the archive has reissued ----
+  await page.eval(`(RealSky.setSky("deep"), ${W8}.setZoom(4), true)`); await page.eval(aim(300, 45));
+  await sleep(4000);
+  const z = await page.eval(`RealSky.selfTest()`), wide = (r) => [].concat(r.fov)[0];
+  report.registration.push({ label: "zoomed in 4 times, az 300 alt 45", objects: z.stars.length, worst: z.worst, roll: z.roll, pxPerDeg: z.pxPerDeg });
+  check("zoom: photographs and canvas still agree when zoomed in 4 times", z.worst <= 3 && z.stars.length >= 1 && Math.abs(z.pxPerDeg / z0.pxPerDeg - 4) < 0.05,
+    `${z.stars.length} objects, worst ${z.worst} px (1° = ${z.pxPerDeg} px)`);
+  check("zoom: the photographs show a quarter of the view", Math.abs(wide(z) - 2 * Math.atan(Math.tan(wide(z0) * Math.PI / 360) / 4) * 180 / Math.PI) < 0.05, `${wide(z0).toFixed(2)}° → ${wide(z).toFixed(2)}°`);
+  await page.shot("deep-zoom-phone.png");
+  await page.eval(`(RealSky.setSky("off"), ${W8}.setZoom(1), true)`); await sleep(2500);
+  const rel = await page.eval(`(async () => {
+    const base = RealSky.DEEP.base, data = await caches.open(Hips.CONFIG.caches.pinned), stamp = Hips.releaseUrl(base);
+    const read = async () => { const r = await data.match(stamp); return r ? r.json() : null; };
+    const tiles = async () => (await caches.has("wanderers-sky-v1")) ? (await (await caches.open("wanderers-sky-v1")).keys()).filter((k) => k.url.startsWith(base + "/Norder")).length : 0;
+    const first = await read(), before = await tiles();
+    await fetch(base + "/properties"); await new Promise((r) => setTimeout(r, 1500));
+    const same = await tiles();                                    // checked less than a day ago: nothing happens
+    await data.put(stamp, new Response(JSON.stringify({ at: 0, release: "1999-01-01T00:00Z" })));
+    await fetch(base + "/properties");
+    let now = null;
+    for (let i = 0; i < 60 && !(now && now.at); i++) { await new Promise((r) => setTimeout(r, 250)); now = await read(); }
+    return { first, before, same, after: await tiles(), now };
+  })()`);
+  check("the survey's issue date is recorded with its pictures", !!rel.first && /^\d{4}-\d\d-\d\d/.test(rel.first.release), rel.first && rel.first.release);
+  check("a survey checked less than a day ago is left alone", rel.before > 0 && rel.same === rel.before, `${rel.before} pictures`);
+  check("a reissued survey: its recent pictures are dropped and the new date is recorded", rel.after === 0 && !!rel.now && rel.now.release === rel.first.release,
+    `${rel.before} → ${rel.after}, ${JSON.stringify(rel.now)}`);
 
   // ---- 1d. Eye ----
   await page.goto("sky=eye&limit=dark");
@@ -216,6 +245,45 @@ async function main() {
   const fine = await page.eval(`({ az: ${W8}.F.fineAz, alt: ${W8}.F.fineAlt, frozen: ${W8}.F.compassFrozen })`);
   check("drag the sky: Done keeps it as the sight check", fine.frozen && (Math.abs(fine.az - ref.fine[0]) > 1 || Math.abs(fine.alt - ref.fine[1]) > 1),
     `direction ${fine.az.toFixed(2)}°, tilt ${fine.alt.toFixed(2)}°`);
+
+  // ---- 1g. the telescope view: Eye mode, no camera, zoomed in on Capella ----
+  // The photographs cover the view and stay on the canvas's pixels while the view moves by small steps at 150x and
+  // 300x and while it is pinched (each step is checked 2 frames later). Then hold mode with fed phone poses: the held
+  // view does not move when the phone turns. selfTest's worst is 0 when it compares nothing, so each check asks for
+  // compared >= 1.
+  await page.goto("sky=eye&limit=dark");
+  await page.until(`window.RealSky && !!RealSky.EYE.stars && !document.getElementById("ar").hidden`, 30000, "the star list");
+  const twoFrames = `new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(() => ok(true))))`;
+  await page.eval(`(() => { const o = Sky.observe({ ra: 79.172, dec: 45.998 }, ${W8}.nowDate(), 47.6, -122.3);
+    ${W8}.S.sensors = false; ${W8}.S.manual = { az: o.az, alt: o.alt }; ${W8}.setZoom(12); return true; })()`);
+  await page.until(deepReady, 60000, "the telescope photographs");
+  await sleep(3500);
+  const t12 = await page.eval(`({ cover: RealSky.cover(), r: RealSky.selfTest() })`);
+  check("telescope, Eye at 12x on Capella: the photographs cover the view", t12.cover === 1, `cover ${t12.cover}`);
+  check("telescope, Eye at 12x on Capella: photographs and canvas agree", t12.r.compared >= 1 && t12.r.worst <= 3,
+    `${t12.r.compared} compared (${t12.r.stars.map((s) => s.name).join(", ")}), worst ${t12.r.worst} px (1° = ${t12.r.pxPerDeg} px)`);
+  await page.shot("telescope-12x-phone.png");
+  const step = async (label, move) => {
+    await page.eval(`(${move}, ${twoFrames})`);
+    const r = await page.eval(`RealSky.selfTest()`);
+    check(`telescope: ${label}`, r.compared >= 1 && r.worst <= 3, `${r.compared} compared, worst ${r.worst} px (1° = ${r.pxPerDeg} px)`);
+  };
+  for (const z of [150, 300]) {
+    await page.eval(`(${W8}.setZoom(${z}), true)`); await sleep(2000);
+    for (let i = 1; i <= 4; i++) await step(`${z}x, step ${i} of 0.003° in azimuth`, `${W8}.S.manual.az += 0.003`);
+  }
+  await page.shot("telescope-300x-phone.png");
+  await step("a pinch from 300x to 280x", `${W8}.setZoom(280)`);
+  await page.eval(`(${W8}.setZoom(1), true)`);
+  await page.eval(feed(30, 120, 25)); await sleep(300);
+  await page.eval(`(${W8}.setZoom(10), ${twoFrames})`);
+  const held = `(() => { const w = ${W8}, p = w.pose(), q = w.F.pointing(); return { az: p.az, alt: p.alt, hold: w.S.hold, phone: q.az }; })()`;
+  const h0 = await page.eval(held);
+  await page.eval(feed(33, 120, 25)); await page.eval(twoFrames);
+  const h1 = await page.eval(held), turned = ((h1.phone - h0.phone) % 360 + 540) % 360 - 180;
+  check("telescope: held at 10x, a phone pose 3° away does not move the view",
+    h0.hold && h1.hold && h1.az === h0.az && h1.alt === h0.alt && Math.abs(turned) > 2,
+    `view ${h0.az.toFixed(4)}°, ${h0.alt.toFixed(4)}° -> ${h1.az.toFixed(4)}°, ${h1.alt.toFixed(4)}°; the phone turned ${turned.toFixed(2)}°`);
   check("no script errors on the page (online)", page.errors.length === 0, page.errors.slice(0, 2).join(" | "));
 
   // ---- 2. save the sky for places, through the info sheet; then remove one place ----
@@ -255,6 +323,21 @@ async function main() {
   check("saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest", st.tiles === 60 && st.saved.length === 65, `${st.tiles} tiles, ${st.saved.length} files`);
   check("no saved picture is also kept as a recent one", st.both === 0, `${st.both} duplicates`);
   check("the place is listed from its manifest", st.places.length === 1 && st.places[0].order === 1 && Math.round(st.places[0].lat) === 48 && st.list.length === 1, JSON.stringify(st.list));
+  // the archive reissues the survey: every saved picture is fetched again, in place (one is spoiled first, as proof)
+  const renew = await page.eval(`(async () => {
+    const base = Hips.CONFIG.surveys.visible.hosts[0], data = await caches.open(Hips.CONFIG.caches.pinned), stamp = Hips.releaseUrl(base);
+    const saved = await caches.open("wanderers-sky-saved-v1"), tile = (await saved.keys()).map((k) => k.url).find((u) => /Npix\\d+\\.jpg$/.test(u));
+    const size = async () => (await (await saved.match(tile)).blob()).size, files = async () => (await saved.keys()).length;
+    await saved.put(tile, new Response("old"));
+    const spoiled = await size(), before = await files();
+    await data.put(stamp, new Response(JSON.stringify({ at: 0, release: "1999-01-01T00:00Z" })));
+    await fetch(base + "/properties");
+    let now = null;
+    for (let i = 0; i < 480 && !(now && now.at && !now.savedDue); i++) { await new Promise((r) => setTimeout(r, 250)); const r = await data.match(stamp); now = r ? await r.json() : null; }
+    return { spoiled, size: await size(), before, after: await files(), now };
+  })()`);
+  check("a reissued survey: the saved pictures are fetched again in place", renew.spoiled === 3 && renew.size > 1000 && renew.after === renew.before && !!renew.now && renew.now.savedDue === false,
+    `spoiled tile ${renew.spoiled} → ${renew.size} bytes, ${renew.before} → ${renew.after} files, ${JSON.stringify(renew.now)}`);
   const seattle = st.places[0].urls;
   st = await saveFor(-33.9, 2, "Standard, 34° S");
   check("Standard, 34° S: about 190 tiles of its own on top", st.places.length === 2 && st.tiles > 200 && st.list.length === 2, `${st.tiles} tiles in all; ${st.list.join(" | ")}`);

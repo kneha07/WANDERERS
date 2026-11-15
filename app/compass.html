@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="compass.css?v=20261115e">
+<link rel="stylesheet" href="compass.css?v=20261117b">
 </head>
 <body>
 <video id="cam" playsinline muted autoplay hidden></video>
@@ -75,6 +75,9 @@
 <!-- 3. AR HUD (drawn on the canvas, plus these controls) -->
 <section id="ar" class="ar" hidden>
   <div class="telemetry mono" id="telemetry"></div>
+  <button id="zoomReset" class="btn hud zoom-reset" aria-label="Zoom back to 1×" hidden>1×</button>
+  <span id="heldMark" class="held-mark" hidden>HELD</span>
+  <p id="holdHint" class="hold-hint" role="status" hidden>View held. Drag to move. Pinch out to follow the phone again.</p>
   <div class="skybar" id="skybar">
     <div class="seg" id="skySeg" role="radiogroup" aria-label="Sky behind the view">
       <button data-sky="off" role="radio">Off</button><button data-sky="eye" role="radio">Eye</button><button data-sky="deep" role="radio">Deep</button>
@@ -203,15 +206,15 @@
 </div>
 
 <script src="theme.js"></script>
-<script src="sky.js?v=20261116p"></script>
-<script src="search.js?v=20261116p"></script>
-<script src="starcore.js?v=20261116p"></script>
-<script src="pathview.js?v=20261116p"></script>
-<script src="telescope.js?v=20261116p"></script>
-<script src="orient.js?v=20261116p"></script>
-<script src="skyview.js?v=20261116p"></script>
-<script src="hips.js?v=20261116p"></script>
-<script src="realsky.js?v=20261116p"></script>
-<script type="module" src="compass.js?v=20261116p"></script>
+<script src="sky.js?v=20261117a"></script>
+<script src="search.js?v=20261117a"></script>
+<script src="starcore.js?v=20261117a"></script>
+<script src="pathview.js?v=20261117a"></script>
+<script src="telescope.js?v=20261117a"></script>
+<script src="orient.js?v=20261117a"></script>
+<script src="skyview.js?v=20261117a"></script>
+<script src="hips.js?v=20261117a"></script>
+<script src="realsky.js?v=20261117b"></script>
+<script type="module" src="compass.js?v=20261117b"></script>
 </body>
 </html>
