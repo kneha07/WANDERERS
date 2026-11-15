@@ -141,13 +141,20 @@ http.createServer(async (req, res) => {
   // live mode API: proxy to the FastAPI server; /api/live-health maps to its /api/health
   if (req.method === "GET" && (LIVE_ROUTES.has(url.pathname) || url.pathname === "/api/live-health")) {
     const target = LIVE + (LIVE_ROUTES.has(url.pathname) ? url.pathname + url.search : "/api/health");
-    // pipeline, not pipe: if the backend dies mid-answer the browser's response is destroyed (no endless wait),
-    // and if the browser goes away the upstream request is destroyed too.
-    http.get(target, (r) => { res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" }); pipeline(r, res, () => {}); })
-      .on("error", () => {
-        if (res.headersSent) return res.destroy();
-        res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN }));
-      });
+    // pipeline, not pipe: if the backend dies mid-answer the browser's response is destroyed (no endless wait).
+    // A browser that leaves (a new target during a cold load) aborts the upstream request; an answer that still
+    // arrives is dropped. No error here may escape: one would stop the whole server.
+    const up = http.get(target, (r) => {
+      if (res.destroyed || res.writableEnded) return r.destroy();
+      res.writeHead(r.statusCode, { "content-type": r.headers["content-type"] || "application/json" });
+      pipeline(r, res, () => {});   // premature close of either side: both are destroyed, nothing is thrown
+    });
+    up.on("error", () => {
+      if (res.destroyed || res.writableEnded) return;
+      if (res.headersSent) return res.destroy();
+      res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: LIVE_DOWN }));
+    });
+    res.on("close", () => { if (!res.writableFinished) up.destroy(); });
     return;
   }
   // live mode app: web/dist under /explore/, no directory traversal, unknown routes fall back to index.html

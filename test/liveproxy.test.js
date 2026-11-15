@@ -66,3 +66,20 @@ test("proxy: a live API that is not running gives 502 with a JSON detail", async
     assert.match((await res.json()).detail, /live SPHEREx server is not running/);
   });
 });
+
+test("proxy: a browser that leaves before a slow answer arrives does not crash the server (NH1)", async () => {
+  // The live API answers after 800 ms; the browser gives up after 200 ms (a target switch during a cold load).
+  const slow = http.createServer((req, res) => setTimeout(() => {
+    if (res.destroyed) return;
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ path: req.url }));
+  }, 800));
+  const port = await listen(slow);
+  try {
+    await withProxy(`http://127.0.0.1:${port}`, async (base) => {
+      await assert.rejects(fetch(base + "/api/frames?q=Gliese+445", { signal: AbortSignal.timeout(200) }));
+      await wait(1200); // the slow answer arrives after the browser left
+      assert.equal((await fetch(base + "/api/health")).status, 200);
+      assert.deepEqual(await (await fetch(base + "/api/frames?q=R%20Dra")).json(), { path: "/api/frames?q=R%20Dra" });
+    });
+  } finally { slow.close(); }
+});
