@@ -546,7 +546,7 @@ def wanderers_obs(star):
     for p in json.loads(f.read_text()).get("track", []):
         if p.get("ch", "w2") != "w2":
             continue
-        name = "WANDERERS WISE" if p["mission"] == "WISE" else "WANDERERS SPHEREx"
+        name = "WANDERERS " + (p["mission"] if p["mission"] in ("WISE", "NEOWISE") else "SPHEREx")
         for axis in (0, 1):
             out.append({"catalogue": f"{name} {p['year']:.2f}", "axis": axis, "epoch": p["year"], "ra": p["ra"], "dec": p["dec"],
                         "sigma_mas": 1000.0, "floor_mas": 300.0, "plx": "single" if p["mission"] == "SPHEREx" else "mean",
