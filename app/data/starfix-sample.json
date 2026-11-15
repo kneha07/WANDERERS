@@ -1,0 +1,6 @@
+[
+{"name": "20260614_081050893_iOS.heic", "status": "fix", "lat": -39.5, "lon": 145.52, "utc": "2026-06-14T08:10:50Z", "local": "2026-06-14T18:10:50+10:00", "sky": {"ra": 183.8, "dec": -67.7, "matches": 45, "constellation": "Musca"}, "camera_alt": 60.7, "model": "iPhone 17 Pro", "gps": {"lat": -38.5, "lon": 145.2}, "warnings": []},
+{"name": "20260614_081100956_iOS.heic", "status": "fix", "lat": -39.09, "lon": 144.54, "utc": "2026-06-14T08:11:00Z", "local": "2026-06-14T18:11:00+10:00", "sky": {"ra": 121.0, "dec": -42.4, "matches": 43, "constellation": "Puppis"}, "camera_alt": 53.5, "model": "iPhone 17 Pro", "gps": {"lat": -38.5, "lon": 145.2}, "warnings": []},
+{"name": "20260614_082034840_iOS.heic", "status": "fix", "lat": -38.02, "lon": 146.81, "utc": "2026-06-14T08:20:34Z", "local": "2026-06-14T18:20:34+10:00", "sky": {"ra": 144.2, "dec": -65.2, "matches": 52, "constellation": "Carina"}, "camera_alt": 57.5, "model": "iPhone 17 Pro", "gps": {"lat": -38.5, "lon": 145.2}, "warnings": []},
+{"name": "20260614_082051102_iOS.heic", "status": "fix", "lat": -38.78, "lon": 145.34, "utc": "2026-06-14T08:20:51Z", "local": "2026-06-14T18:20:51+10:00", "sky": {"ra": 139.1, "dec": -72.2, "matches": 53, "constellation": "Carina"}, "camera_alt": 52.4, "model": "iPhone 17 Pro", "gps": {"lat": -38.5, "lon": 145.2}, "warnings": []}
+]
