@@ -53,8 +53,8 @@
   }
 
   // ---- words: every sentence the person reads comes from here or from starfix.html (one test checks them all) ----
-  const TEXT = { no_solve: "Too few stars to recognise. Use a darker, clearer photo.", bad_file: "This file is not a photo.",
-    too_large: "This file is too large (30 MB limit).", error: "Could not read this photo. Add it again.", waiting: "waiting", reading: "reading" };
+  const TEXT = { no_solve: "Too few stars to recognise. Use a darker, clearer photo.", bad_file: "This file is not a photo. Choose a .heic or .jpg file.",
+    too_large: "This file is too large (30 MB limit). Use the original photo.", error: "Could not read this photo.", waiting: "waiting", reading: "reading" };
   const MISSING = { gravity: "the file has no tilt data. Use the original iPhone file.", time: "the file has no time data. Use the original iPhone file.",
     rear_camera: "this camera is not supported. Use the main rear camera." };
   const WARN = { zone_mismatch: "The place does not match the photo's time zone. The file may be edited.",
@@ -88,9 +88,10 @@
   const fmtPos = (p) => `${Math.abs(p.lat).toFixed(1)}° ${p.lat < 0 ? "S" : "N"}, ${Math.abs(p.lon).toFixed(1)}° ${p.lon < 0 ? "W" : "E"}`;
 
   // The lines above the map for one night. c: combine() result or null; city: nearestCity(); gps: the first photo's
-  // own GPS or null; count: photos with a place; example: the built-in example says "The phone's GPS".
-  function headline(c, city, gps, count, example = false) {
-    if (!c) return { headline: "No place found from these photos yet." };
+  // own GPS or null; count: photos used for the place; example: the built-in example says "The phone's GPS";
+  // pending: photos of this night are still waiting or being read.
+  function headline(c, city, gps, count, example = false, pending = false) {
+    if (!c) return { headline: `No place found from these photos${pending ? " yet" : ""}.` };
     const where = !city ? `at ${fmtPos(c)}` : city.km <= c.radiusKm ? `near ${city.name}, ${city.country}`
       : `about ${Math.round(city.km / 10) * 10} km ${direction(city, c)} of ${city.name}, ${city.country}`;
     const out = { headline: `The stars place ${count === 1 ? "this photo" : "these photos"} ${where}.`, position: fmtPos(c),
@@ -102,6 +103,17 @@
     }
     if (count <= 2) out.hint = "Add 2 or more photos from the same night for a better result.";
     return out;
+  }
+
+  // One night of rows -> what its block shows. Refused files (not a photo, too large) are listed but are not photos of
+  // the night, so they are not counted. A photo that disagrees (outlier) counts as a photo, but not as used.
+  const REFUSED = ["bad_file", "too_large"];
+  function night(rows) {
+    const fixes = rows.filter((r) => r.result && r.result.status === "fix").map((r) => r.result);
+    const c = fixes.length ? combine(fixes) : null, outliers = c ? c.outliers : [];
+    const first = (k) => (rows.find((r) => r.result && r.result[k]) || { result: {} }).result[k] || null;
+    return { c, outliers, used: fixes.length - outliers.length, pending: rows.some((r) => !r.result), gps: first("gps"), local: first("local"),
+      total: rows.filter((r) => !(r.result && REFUSED.includes(r.result.status))).length };
   }
 
   // Summary of the photo list of one night, and the progress line.
@@ -118,9 +130,10 @@
     const finish = (row, result) => Object.assign(row, { state: "done", result, utc: result.utc });
     const enqueue = (row) => { Object.assign(row, { state: "waiting", result: null }); queue.push(row); m++; };
 
-    function add(files) {
+    function add(files) {   // returns the names of files that were already in the list
+      const again = [];
       for (const file of files) {
-        if (rows.some((r) => r.name === file.name && r.size === file.size)) continue;   // the same file again
+        if (rows.some((r) => r.name === file.name && r.size === file.size)) { again.push(file.name); continue; }
         const row = { id: nextId++, name: file.name, size: file.size, file };
         rows.push(row);
         if (!PHOTO.test(file.name)) finish(row, { status: "bad_file" });
@@ -129,6 +142,7 @@
       }
       onChange();   // every row shows before the first request starts
       pump();
+      return again;
     }
 
     async function pump() {
@@ -163,6 +177,6 @@
     return { rows, add, retry, clear, restore, progress: () => ({ n, m, active: m > 0 }) };
   }
 
-  const api = { distKm, sessions, combine, circle, describe, nearestCity, headline, photosLine, reading, photoQueue };
+  const api = { distKm, sessions, combine, circle, describe, nearestCity, headline, night, photosLine, reading, photoQueue };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.StarFixCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

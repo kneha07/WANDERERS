@@ -81,9 +81,9 @@ test("describe: the exact row text of the design for every case (A14)", () => {
   assert.equal(C.describe(skyOnly(["time"])), "Stars recognised (Carina), but the file has no time data. Use the original iPhone file.");
   assert.equal(C.describe(skyOnly(["rear_camera"])), "Stars recognised (Carina), but this camera is not supported. Use the main rear camera.");
   assert.equal(C.describe({ status: "no_solve", stars: 11 }), "Too few stars to recognise. Use a darker, clearer photo.");
-  assert.equal(C.describe({ status: "bad_file" }), "This file is not a photo.");
-  assert.equal(C.describe({ status: "too_large" }), "This file is too large (30 MB limit).");
-  assert.equal(C.describe({ status: "error" }), "Could not read this photo. Add it again.");
+  assert.equal(C.describe({ status: "bad_file" }), "This file is not a photo. Choose a .heic or .jpg file.");
+  assert.equal(C.describe({ status: "too_large" }), "This file is too large (30 MB limit). Use the original photo.");
+  assert.equal(C.describe({ status: "error" }), "Could not read this photo.");   // the row has a "Try again" button
   assert.equal(C.describe({ status: "waiting" }), "waiting");
   assert.equal(C.describe({ status: "reading" }), "reading");
 });
@@ -131,7 +131,8 @@ test("headline: near a city inside the circle, one photo, GPS outside the circle
   assert.equal(h.hint, "Add 2 or more photos from the same night for a better result.");
   assert.equal(C.headline(one, city, null, 1).check, undefined);
   assert.equal(C.headline({ lat: 47.6, lon: -122.3, radiusKm: 50 }, null, null, 3).headline, "The stars place these photos at 47.6° N, 122.3° W.");
-  assert.deepEqual(C.headline(null, null, null, 0), { headline: "No place found from these photos yet." });
+  assert.deepEqual(C.headline(null, null, null, 0), { headline: "No place found from these photos." });
+  assert.deepEqual(C.headline(null, null, null, 0, false, true), { headline: "No place found from these photos yet." }, "only while photos are read");
 });
 
 test("photosLine and reading: the photo list summary and the progress line", () => {
@@ -195,7 +196,7 @@ test("photoQueue: every row shows at once, one request at a time, in order; phot
 test("photoQueue: the same file (name and size) is added once, also while it still waits (U2)", async () => {
   const q = C.photoQueue(async () => fix(), () => {});   // a server that answers at once
   q.add([file("a.heic"), file("b.heic")]);
-  q.add([file("b.heic"), file("a.heic", 2000), file("a.heic")]);   // b is still waiting here
+  assert.deepEqual(q.add([file("b.heic"), file("a.heic", 2000), file("a.heic")]), ["b.heic", "a.heic"], "the duplicates, for the status line");   // b still waits
   assert.deepEqual(q.rows.map((r) => r.name + " " + r.size), ["a.heic 1000", "b.heic 1000", "a.heic 2000"]);
   await tick();
   assert.deepEqual(q.rows.map((r) => r.state), ["done", "done", "done"]);
@@ -270,7 +271,7 @@ test("starfix.html: the exact words of the design, and no technical word (A14)",
     "The app recognises the stars in your photo.", "Your phone stored which way was down and the exact time.",
     "Together they give the one place on Earth where those stars were overhead.",
     "Stars give the place to about 50 to 150 km. GPS is 10 000 times better. Navigators worked like this before GPS.",
-    "Remove my photos", "Example ·", "stars", "phone GPS", "Open in OpenStreetMap", "Drop to add", "Photos removed.", "Undo", "Try again"])
+    "Remove my photos", "Example ·", "stars", "phone GPS", "Open in OpenStreetMap", "Drop to add", "Photos removed.", "Undo", "Try again", "Already added:"])
     assert.ok(text.includes(s), s);
   assert.ok(clean(text), text.match(new RegExp(`.{0,40}(${FORBIDDEN.source}).{0,40}`, "i"))?.[0]);
 });
@@ -283,4 +284,16 @@ test("starfix.html: one primary button, native controls, no confirm dialog and n
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(js, /confirm\(|alert\(|pushState|location\.hash/);
   assert.doesNotMatch(page("sw.js"), /starfix/, "the offline list is for the Sky Compass only");
+});
+
+test("night: refused files are listed but not counted; a photo that disagrees counts, but is not used (L-c)", () => {
+  const near = (lat, lon, utc) => ({ result: { status: "fix", lat, lon, utc, sky: { constellation: "Carina" }, warnings: [] }, utc });
+  const rows = [near(-38.5, 145.2, "2026-06-14T08:10:00Z"), near(-38.9, 145.6, "2026-06-14T08:11:00Z"), near(-33.9, 151.2, "2026-06-14T08:12:00Z"),
+    { result: { status: "no_solve", stars: 3 } }, { result: { status: "bad_file" } }, { result: { status: "too_large" } }];
+  const n = C.night(rows);
+  assert.deepEqual([n.used, n.total, n.pending, n.outliers.length], [2, 4, false, 1]);
+  assert.equal(C.photosLine(n.used, n.total, n.pending), "2 of 4 photos used");
+  assert.equal(C.night([rows[0], rows[4]]).total, 1);
+  assert.equal(C.night([rows[0], { state: "waiting" }]).pending, true);
+  assert.equal(C.night([rows[4]]).c, null);
 });

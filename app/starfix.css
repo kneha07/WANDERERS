@@ -6,7 +6,8 @@
 .sf-lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 22px; }
 
 /* Upload: the page is the drop target; this box shows it */
-.sf-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+/* The button, then the hint on its own line (as in the wireframe): a late web font cannot re-wrap it and move the page */
+.sf-upload { display: grid; justify-items: start; gap: 10px; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
 .sf-upload.is-drag { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
 .sf-pick { position: relative; min-height: 44px; }
 .sf-pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }   /* keeps the native control, keyboard included */
@@ -15,7 +16,7 @@
 .sf-pick.is-off input { cursor: not-allowed; }
 .sf-drop { color: var(--muted); }
 .sf-drop-now { color: var(--accent); font-weight: 600; }
-.sf-offline { flex-basis: 100%; margin: 0; }
+.sf-offline { margin: 0; }
 .sf-note { color: var(--muted); font-size: .9rem; margin: 10px 0 6px; }
 
 /* Closed help texts */
@@ -28,8 +29,8 @@
 .sf-progress p { margin: 18px 0 6px; font-weight: 500; }
 .sf-progress p:empty { margin: 0; }
 .sf-progress progress { display: block; width: 100%; accent-color: var(--accent); }
-.sf-undo { margin: 12px 0 0; }
-.sf-undo:has(> [hidden]) { margin: 0; }
+.sf-undo { margin: 0; }
+.sf-undo > span { display: block; margin-top: 12px; }   /* "Photos removed. Undo" or "Already added: ..." */
 .sf-text-btn { background: none; border: 0; padding: 6px 0; min-height: 32px; color: var(--accent); font: 500 .95rem var(--f-ui);
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 

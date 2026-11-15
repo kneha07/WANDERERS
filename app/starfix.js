@@ -32,21 +32,17 @@
     const b = { el, isExample, day: part(".sf-day"), head: part(".sf-headline"), pos: part(".sf-pos"), radius: part(".sf-radius"),
       check: part(".sf-check"), map: part(".sf-map"), canvas: part("canvas"), gpsKey: part(".sf-key-gps-row"), osm: part(".sf-osm"),
       link: part(".sf-osm a"), details: part(".sf-photos"), summary: part(".sf-photos summary"), list: part(".sf-photos ul"),
-      hint: part(".sf-hint"), notUsed: new Set(), touched: false, want: null, target: null, drawn: null, anim: 0, gps: null };
+      hint: part(".sf-hint"), touched: false, target: null, drawn: null, anim: 0, gps: null };
     if (isExample) { el.classList.add("sf-example"); part(".sf-ex").hidden = false; }
-    b.details.addEventListener("toggle", () => { if (b.details.open !== b.want) b.touched = true; });   // the person's choice wins
+    b.summary.addEventListener("click", () => { b.touched = true; });   // mouse, Enter or Space: from now on the person decides
     return b;
   }
-  const setOpen = (b, open) => { b.want = open; if (b.details.open !== open) b.details.open = open; };
 
   function fill(b, rows) {
-    const fixes = rows.filter((r) => r.result && r.result.status === "fix").map((r) => r.result);
-    const c = fixes.length ? C.combine(fixes) : null, outliers = c ? c.outliers : [], pending = rows.some((r) => !r.result);
-    const first = (k) => (rows.find((r) => r.result && r.result[k]) || { result: {} }).result[k] || null;
-    const gps = first("gps"), local = first("local");
-    const h = C.headline(c, c && C.nearestCity(c.lat, c.lon, cities), gps, fixes.length, b.isExample);
+    const { c, outliers, used, total, pending, gps, local } = C.night(rows);
+    const h = C.headline(c, c && C.nearestCity(c.lat, c.lon, cities), gps, used, b.isExample, pending);
     setText(b.day, local ? fmtDate(local) : "");
-    setText(b.head, c || !pending ? h.headline : "");   // no sentence while the first photos are still being read
+    setText(b.head, c || rows.some((r) => r.result) ? h.headline : "");   // no sentence before the first answer of this night
     setText(b.pos, h.position || ""); setKm(b.radius, h.radius || ""); setKm(b.check, h.check || ""); setText(b.hint, h.hint || "");
     b.map.hidden = b.osm.hidden = !c;
     if (c) {
@@ -54,7 +50,9 @@
       b.canvas.setAttribute("aria-label", h.headline);
       b.link.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=7/${lat}/${lon}`;
       b.gpsKey.hidden = !gps; b.gps = gps;
-      draw(b, { lat: c.lat, lon: c.lon, r: c.radiusKm });
+      // window: half-height 4 x the larger of the radius and the GPS distance; 6 to 40 degrees across, 2:1
+      const span = Math.min(40, Math.max(6, 16 * Math.max(c.radiusKm, gps ? C.distKm(gps, c) : 0) / 111.19));
+      draw(b, { lat: c.lat, lon: c.lon, r: c.radiusKm, span });
     }
     rows.forEach((r, i) => {
       const e = rowFor(r), out = outliers.includes(r.result);
@@ -63,11 +61,10 @@
       setText(e.text, C.describe(r.result || { status: r.state }, out));
       e.retry.hidden = !r.result || r.result.status !== "error";
     });
-    const notUsed = rows.filter((r) => r.result && !isUsed(r, outliers)).map((r) => r.id);
-    setText(b.summary, C.photosLine(rows.filter((r) => isUsed(r, outliers)).length, rows.length, pending));
-    if (notUsed.some((id) => !b.notUsed.has(id))) setOpen(b, true);   // a photo was not used: show why, without a click
-    else if (!b.touched) setOpen(b, pending || notUsed.length > 0);  // open while reading, closed when every photo was used
-    b.notUsed = new Set(notUsed);
+    setText(b.summary, C.photosLine(used, total, pending));
+    // Until the person opens or closes the list: open while photos are read or when one was not used, else closed.
+    const open = pending || rows.some((r) => r.result && !isUsed(r, outliers));
+    if (!b.touched && b.details.open !== open) b.details.open = open;
   }
 
   function rowFor(r) {
@@ -108,31 +105,34 @@
     }
   }
 
-  // ---- the map: 40 x 20 degrees of the Blue Marble around the answer, the circle, two marks ----
-  function draw(b, to) {   // the circle glides to its new place in 400 ms; a newer answer starts from where it is drawn now
-    if (b.target && to.lat === b.target.lat && to.lon === b.target.lon && to.r === b.target.r) return;
+  // ---- the map: the Blue Marble around the answer (window sized from the data), the circle, two marks ----
+  function draw(b, to) {   // map and circle glide to the new answer in 400 ms; a newer answer starts from what is drawn now
+    const t = b.target;
+    if (t && to.lat === t.lat && to.lon === t.lon && to.r === t.r && to.span === t.span) return;
     b.target = to; cancelAnimationFrame(b.anim);
     const from = b.drawn;
     if (!from || still.matches || !b.canvas.clientWidth) return paint(b, to);
-    const t0 = performance.now(), step = (t) => {
-      const k = Math.min(1, (t - t0) / 400), e = k * (2 - k);
-      paint(b, { lat: from.lat + (to.lat - from.lat) * e, lon: from.lon + (to.lon - from.lon) * e, r: from.r + (to.r - from.r) * e });
+    const t0 = performance.now(), mix = (a, z, e) => a + (z - a) * e, step = (now) => {
+      const k = Math.min(1, (now - t0) / 400), e = k * (2 - k);
+      paint(b, { lat: mix(from.lat, to.lat, e), lon: mix(from.lon, to.lon, e), r: mix(from.r, to.r, e), span: mix(from.span, to.span, e) });
       if (k < 1) b.anim = requestAnimationFrame(step);
     };
     b.anim = requestAnimationFrame(step);
   }
-  // ponytail: 20 km per pixel and no wrap at 180 degrees; use map tiles if a sharper map is needed
+  // ponytail: day.jpg has about 20 km per image pixel (blurry when zoomed in) and no wrap at 180 degrees; use map tiles if a sharper map is needed
   function paint(b, s) {
     b.drawn = s;
     const cv = b.canvas, k = devicePixelRatio || 1, W = Math.round(cv.clientWidth * k), H = Math.round(W / 2);
     if (!W) return;   // hidden now: drawn again when it shows
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     const g = cv.getContext("2d"), css = getComputedStyle(document.documentElement), tok = (n) => css.getPropertyValue(n).trim();
-    const x = (lon) => (lon - s.lon + 20) / 40 * W, y = (lat) => (s.lat + 10 - lat) / 20 * H;
+    const w = s.span, h = s.span / 2;   // degrees across and down: 2:1, like the canvas
+    const x = (lon) => (lon - s.lon + w / 2) / w * W, y = (lat) => (s.lat + h / 2 - lat) / h * H;
     g.fillStyle = tok("--viewer"); g.fillRect(0, 0, W, H);
     if (earth.naturalWidth) {
       const iw = earth.naturalWidth / 360, ih = earth.naturalHeight / 180;
-      g.drawImage(earth, (s.lon - 20 + 180) * iw, (90 - s.lat - 10) * ih, 40 * iw, 20 * ih, 0, 0, W, H);
+      g.imageSmoothingQuality = "high";
+      g.drawImage(earth, (s.lon - w / 2 + 180) * iw, (90 - s.lat - h / 2) * ih, w * iw, h * ih, 0, 0, W, H);
     }
     g.lineWidth = 1.5 * k; g.strokeStyle = g.fillStyle = getComputedStyle(b.map).getPropertyValue("--map-accent").trim();
     g.beginPath(); C.circle(s.lat, s.lon, s.r).forEach((p, i) => g[i ? "lineTo" : "moveTo"](x(p.lon), y(p.lat))); g.closePath(); g.stroke();
@@ -165,7 +165,8 @@
   function add(list) {
     if (input.disabled || !list.length) return;
     dismissUndo();
-    q.add([...list]);
+    const again = q.add([...list]);   // files already in the list: say so in the status line (no new layer)
+    $("dupNames").textContent = again.join(", "); $("dupBox").hidden = !again.length;
   }
   input.addEventListener("change", () => { add(input.files); input.value = ""; });
   const dragging = (on) => { $("upload").classList.toggle("is-drag", on); $("dropHint").hidden = on || input.disabled; $("dropNow").hidden = !on; };
@@ -183,7 +184,7 @@
   // ---- "Remove my photos", with Undo instead of a question ----
   function dismissUndo() { clearTimeout(undoTimer); removed = null; $("undoBox").hidden = true; }
   $("remove").addEventListener("click", () => {
-    removed = q.clear();
+    removed = q.clear(); $("dupBox").hidden = true;
     for (const b of blocks.values()) { cancelAnimationFrame(b.anim); b.el.remove(); }
     blocks.clear(); rowEls.clear();
     wasActive = false; bar.hidden = true; setText(say, "");

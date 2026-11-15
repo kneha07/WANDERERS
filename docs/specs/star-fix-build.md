@@ -240,7 +240,9 @@ Input: the `fix` results of the page. Functions:
 | `outliers` | Only with 3 or more photos: a photo more than 300 km from the combined fix. Its row says "Not used". The median already ignores it. |
 | `circle(lat, lon, km, n = 64)` | Points of the error circle, by the destination-point formula, for the map |
 | `describe(result, isOutlier)` | The row text for one photo: the exact sentences of the table in section 10.2 |
-| `headline(combined, city, gps, count)` | The headline, the "Usually right to about N km" line and the check line, by the rules in section 10.2 |
+| `headline(combined, city, gps, count, example, pending)` | The headline, the "Usually right to about N km" line and the check line, by the rules in section 10.2 |
+| `night(rows)` | One night of page rows -> `{c, outliers, used, total, pending, gps, local}`: the counts of 10.2 (refused files not counted, outliers not used) |
+| `photoQueue(send, onChange)` | The photo list and its one-at-a-time queue (10.4); `add(files)` returns the names that were already in the list |
 
 The radius rule covers the truth in all three sample sessions (radius 53, 65 and 107 km; truth at 3, 61 and 10 km).
 Three sessions are a sanity check, not a calibration. So the page says "Usually right to about N km", never "within N km".
@@ -340,6 +342,7 @@ Parts, top to bottom:
 1. **Header.** Logo link to home and the theme toggle (copy from `compass.html`). Title "Star Fix". One line: "Find where you were, from the stars in your photo." The door on the home page uses the same words.
 2. **Upload.** One control: a `<label>` styled as the primary button around
    `<input type="file" multiple accept=".heic,.heif,.jpg,.jpeg,image/heic,image/jpeg">`. The whole page is the drop target.
+   "or drop them here" has its own line under the button, so a late web font cannot re-wrap it and move the page.
    Text under it: "Your photos stay on this computer." After the first photo the button text becomes "Add more photos".
    One closed `<details>` "Which photos work?": "Night-sky photos from an iPhone, with many stars. Use the original file (AirDrop, cable or iCloud). Chat apps remove the data that this needs."
 3. **Progress**, only while photos are read: "Reading photo 2 of 4" and a native `<progress>`. It is an `aria-live="polite"` region.
@@ -349,7 +352,7 @@ Parts, top to bottom:
    - "Usually right to about 65 km." (the radius, rounded to 5 km);
    - the check line, only when the files hold GPS (rule below);
    - the map; then the link "Open in OpenStreetMap";
-   - a `<details>` "4 photos used" (or "3 of 4 photos used") with one row per photo. Closed when every photo was used. Open when one was not, so the reason is visible without a click.
+   - a `<details>` "4 photos used" (or "3 of 4 photos used") with one row per photo. Until the person opens or closes it: open while photos are read or when one was not used (so the reason is visible without a click), closed when every photo was used. After the person opens or closes it, their choice stays. Refused files (not a photo, too large) have a row but are not counted; a photo that disagrees counts but is not used.
    - with 1 or 2 photos, one hint: "Add 2 or more photos from the same night for a better result."
    The block appears after the first photo and updates as more arrive.
 5. **Example.** Before the user's first result, the page shows the answer block built from `app/data/starfix-sample.json`,
@@ -369,27 +372,32 @@ Words (all user text comes from `describe()` and `headline()` in `starfixcore.js
 | `sky_only`, `time` missing | "Stars recognised (Carina), but the file has no time data. Use the original iPhone file." |
 | `sky_only`, `rear_camera` missing | "Stars recognised (Carina), but this camera is not supported. Use the main rear camera." |
 | `no_solve` | "Too few stars to recognise. Use a darker, clearer photo." |
-| `bad_file` | "This file is not a photo." |
-| above 30 MB (checked in the page) | "This file is too large (30 MB limit)." |
-| 409, 500, 504 or network error | "Could not read this photo. Add it again." |
+| `bad_file`, or no `.heic`/`.heif`/`.jpg`/`.jpeg`/`.png` name (checked in the page) | "This file is not a photo. Choose a .heic or .jpg file." |
+| above 30 MB (checked in the page) | "This file is too large (30 MB limit). Use the original photo." |
+| 409, 500, 504 or network error | "Could not read this photo." and a text button "Try again" in the row |
+| the same file again (name and size) | No new row. The status line says "Already added: {name}". |
 | warning `zone_mismatch` (added to the row) | "The place does not match the photo's time zone. The file may be edited." |
 | warning `untested_lens` (added to the row) | "Zoom or wide lens: the result may be less exact." |
+| warning `small_photo` (added to the row) | "This photo is small. Use the original file for a better result." |
 
 | Line | Rule |
 |---|---|
-| Headline | "The stars place these photos {where}." Nearest city from `data/earth/cities.json` (6204 large cities). City inside the radius: "near {city}, {country}". Else: "about {d} km {direction} of {city}, {country}", `d` rounded to 10 km, `direction` one of the 8 compass words (north, north-east, ...) from the city to the answer. One photo: "this photo"; more: "these photos". |
+| Headline | "The stars place these photos {where}." Nearest city from `data/earth/cities.json` (6204 large cities). City inside the radius: "near {city}, {country}". Else: "about {d} km {direction} of {city}, {country}", `d` rounded to 10 km, `direction` one of the 8 compass words (north, north-east, ...) from the city to the answer. One photo: "this photo"; more: "these photos". The count is the photos used for the place (no refused file, no photo that disagrees). |
+| No place | "No place found from these photos." With "yet" before the full stop only while photos of that night are still waiting or being read. No sentence before the first answer of the night. |
 | Exact position | Small text under the headline: "38.2° S, 145.5° E". |
 | Check line, GPS inside the radius | "✓ Your phone's GPS recorded a spot {d} km from here." |
 | Check line, GPS outside the radius | "Your phone's GPS recorded a spot {d} km from here. Add more photos from the same night." |
 | GPS used for the check | The `gps` of the first photo of that night that has one. |
 | Example block | Same lines, but "Your phone's GPS" reads "The phone's GPS". |
 
-Map: a `<canvas>` that draws a 40 x 20 degree window of `data/earth/day.jpg` (2048 x 1024, plate carree) centred on the answer.
+Map: a `<canvas>` that draws a window of `data/earth/day.jpg` (2048 x 1024, plate carree) centred on the answer. The window comes from the data
+(fix round 1): half-height = 4 x the larger of the radius and the GPS distance, 2:1, from 6 to 40 degrees across. So the circle is about
+1/8 of the map height, clearly bigger than the reticle, and the map glides in as photos arrive. The crop of the 2048 px image is upscaled (blurry).
 Draw only two marks, in the language of the WANDERERS emblem (`BRAND.md`): the star answer is the solid point with the four-tick reticle
 ("the position measured now") inside the circle from `circle()`; the phone's GPS is a hollow ring ("recorded"). The legend is two words on the map: "stars", "phone GPS".
 No dot per photo: it adds a third mark and no decision. Give the canvas an `aria-label` that repeats the headline.
 The link under it: `https://www.openstreetmap.org/?mlat=..&mlon=..#map=7/../..`, `rel="noopener noreferrer"`.
-Mark the code: `// ponytail: 20 km per pixel and no wrap at 180 degrees; use map tiles if a sharper map is needed`.
+Mark the code: `// ponytail: day.jpg has about 20 km per image pixel (blurry when zoomed in) and no wrap at 180 degrees; use map tiles if a sharper map is needed`.
 
 Behaviour:
 
@@ -431,10 +439,10 @@ done --Add more--> reading ; done --Remove my photos--> example + inline Undo (8
 | # | Rule |
 |---|---|
 | U1 | Every chosen file shows as a row ("waiting") within 100 ms, before the first request. |
-| U2 | One request at a time (`photoQueue` in `starfixcore.js`). Dedupe by name + size, also against waiting rows. |
+| U2 | One request at a time (`photoQueue` in `starfixcore.js`). Dedupe by name + size, also against waiting rows; the status line says "Already added: {name}". |
 | U3 | Every request ends: abort at 75 s. A 409/500/504/network failure keeps the File and shows an in-row "Try again". |
-| U4 | Keyed in-place updates. A `<details>` that the person opened or closed keeps its state; focus never jumps. |
-| U5 | No layout shift: the map has a fixed 2:1 box; the example renders only after its data and the city list load. |
+| U4 | Keyed in-place updates. A `<details>` that the person opened or closed keeps its state, always: the automatic rule applies only until the person touches it. Focus never jumps. |
+| U5 | No layout shift: the map has a fixed 2:1 box; the example renders only after its data and the city list load; the drop hint has its own line. CLS below 0.1 at 390 px on a first visit (measured 0.003 to 0.006, also with fonts 1.2 s late). |
 | U6 | The "start WANDERERS" line shows only after `/api/health` fails, never while it is pending. |
 | U7 | "Remove my photos" acts at once, moves focus to the upload control and offers "Undo" for 8 s. No `confirm()`. |
 | U8 | Visible drop state ("Drop to add"). Non-image files and files above 30 MB are refused in the page without a request. |
