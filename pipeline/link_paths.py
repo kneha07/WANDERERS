@@ -4,13 +4,19 @@
 
 1. app/data/stars.json (the name search, 9,265 stars) gains each star's motion from the star database
    (app/data/stars/index.json, HYG v4.1): proper motion, radial velocity and the database key, matched by
-   Hipparcos number, then by name. Rows become [..., flags, pmra, pmdec, rv, key].
+   Hipparcos number, then by name. Rows become [..., flags, pmra, pmdec, rv, key]. Every prepared target in
+   app/data/index.json is linked to its row first ("W:<id>" in flags, see make_stars.link_targets), and common
+   names HYG lacks are added (make_stars.EXTRA_NAMES: Alpha Centauri, Eps Indi, WISE 1049-5319, ...).
 2. app/data/paths.json maps each WANDERERS target to its starting state for the path model:
    the scikit-learn path (app/data/stars/pred/<key>.json) when one has been learnt, else the target's own
    reference (Gaia DR3 or the published motion), so a path can be drawn for every target.
 """
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from make_stars import add_names, link_targets
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "app" / "data"
@@ -25,11 +31,14 @@ def main():
             by_name.setdefault(n.lower(), s)
     preds = {p.stem for p in (DATA / "stars" / "pred").glob("*.json") if p.stem != "index"}
 
-    # 1. motion for the name search
+    # 1. motion for the name search, and every prepared target linked to its row (targets added with
+    #    fetch.py --ra/--dec after make_stars.py ran would otherwise be missing from the search)
     rows = json.loads((DATA / "stars.json").read_text())
-    hit = 0
     for r in rows:
         r[:] = r[:9]                                   # idempotent: drop columns from an earlier run
+    add_names(link_targets(rows, json.loads((DATA / "index.json").read_text())))
+    hit = 0
+    for r in rows:
         names = [r[0], *(r[1].split("|") if r[1] else [])]
         s = next((by_hip[int(n[4:])] for n in names if n.startswith("HIP ") and n[4:].isdigit() and int(n[4:]) in by_hip), None)
         s = s or next((by_name[n.lower()] for n in names if n.lower() in by_name), None)
@@ -50,6 +59,7 @@ def main():
                 s = next((x for x in db if str(x.get("gaia_dr3") or "") == str(ref["source_id"])), None)
             key = s["key"] if s else None
         plx = ref.get("parallax")
+        plx = plx if plx and plx > 0 else None          # a zero or negative (noisy Gaia) parallax gives no distance
         if not plx and key:
             s = next((x for x in db if x["key"] == key), None)
             plx = 1000 / s["dist_pc"] if s and s.get("dist_pc") else None

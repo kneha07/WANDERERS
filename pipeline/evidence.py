@@ -29,10 +29,11 @@ def card(t):
 
     if m:
         moved = m["shift_spherex_pixels"] >= 2 and m["measured_arcsec_per_yr"] >= 0.3
+        y0, y1 = int(m["from_year"]), int(m["to_year"])      # calendar years: 2026.67 is September 2026, not 2027
         checks.append({"state": "ok" if moved else "no",
-                       "text": (f"Moved {m['shift_arcsec']:.0f}″ between {m['from_year']:.0f} and {m['to_year']:.0f} "
+                       "text": (f"Moved {m['shift_arcsec']:.0f}″ between {y0} and {y1} "
                                 f"({m['shift_spherex_pixels']:.1f} SPHEREx pixels)") if moved else
-                               f"No measurable motion between {m['from_year']:.0f} and {m['to_year']:.0f}"})
+                               f"No measurable motion between {y0} and {y1}"})
         # Below the detection limit the centroid shift is mostly noise (R Draconis: saturated core), so say so.
         numbers.append({"label": "measured motion" if moved else "apparent drift (below the detection limit, not a real motion)",
                         "value": f"{m['measured_arcsec_per_yr']:.2f}″/yr"})
@@ -54,9 +55,13 @@ def card(t):
                        "Luhman 16) are often missing from Gaia."})
     elif t["target_in_gaia"]:
         checks.append({"state": "ok", "text": f"Gaia DR3 has this object (source {t['reference']['source_id']})"})
-    else:
+    elif t["reference"].get("catalogued", True):
         checks.append({"state": "warn", "text": "No Gaia DR3 counterpart: too faint or too cold for Gaia's visible-light camera. "
                                                 f"Catalogued in the literature ({t['reference']['source']})."})
+    else:
+        # a typed-in position with no Gaia star near it (pipeline/fetch.py) and no published entry either
+        checks.append({"state": "warn", "text": "No Gaia DR3 star and no published catalogue entry at the typed position: "
+                                                "nothing catalogued is known there."})
 
     if col.get("ratio"):
         r = col["ratio"]

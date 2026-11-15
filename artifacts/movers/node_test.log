@@ -1,0 +1,168 @@
+✔ builds the link for WISE 0855's field (1.1839ms)
+✔ field of view converts arcseconds to degrees for each size the page offers (0.2784ms)
+✔ values are brought into the ranges Aladin accepts (0.935ms)
+✔ a different survey can be chosen (0.154ms)
+✔ missing or non-numeric values are rejected instead of making a broken link (0.4363ms)
+✔ the link only carries the four sky parameters and goes to the CDS host (0.1468ms)
+✔ real data: every committed target gives a link inside Aladin's ranges, centred on its field (2.9312ms)
+✔ chart width: real width within limits, 900 when unknown (1.2981ms)
+✔ chart height is shorter on narrow screens (0.1255ms)
+✔ names use subscripts (0.1052ms)
+✔ well-separated bands all stay on the first row (0.2784ms)
+✔ crowded bands move to the second row, and the input is not reordered (0.6229ms)
+✔ a name with no room on either row is left out, not drawn on top of another (0.1791ms)
+✔ no band list gives no labels (0.1025ms)
+✔ real bands: labels never overlap within a row at any width from a small phone to a wide screen (1.4058ms)
+✔ real bands: on a wide chart every band gets a name; on a phone most do (0.1558ms)
+✔ target id matches pipeline/fetch.py add_position (2.2115ms)
+✔ rejects out-of-range or non-finite coordinates (1.2234ms)
+✔ cached field returns ready without running the pipeline (1.7671ms)
+✔ new field runs fetch, analyze, evidence in order and finishes (27.8714ms)
+✔ the same field asked twice shares one job (109.9365ms)
+✔ jobs run one at a time (187.3081ms)
+✔ limits how many fields can wait (2.3307ms)
+✔ no SPHEREx data: reports an error, not success (13.3643ms)
+✔ a failed field can be retried (15.5536ms)
+✔ error text never contains server paths (14.8465ms)
+✔ job ids are validated (1.377ms)
+✔ HTTP: /api/field rejects bad input without starting work (335.8602ms)
+✔ HTTP: /api/job rejects bad ids and unknown jobs (262.7399ms)
+✔ field of view: ids, jobs and the fetch command (13.8218ms)
+✔ field of view: a cached field of that size is ready, other sizes are not (1.743ms)
+✔ field of view must be a whole number from 60 to 900 (7.3615ms)
+✔ job ids with a field-of-view suffix are accepted, junk is not (0.5832ms)
+﹣ ids match pipeline/fov.py (Python) for many positions and sizes (0.047ms) # python3 not available
+✔ HTTP: /api/field rejects a bad field of view (244.1693ms)
+✔ signal formatting (0.7986ms)
+✔ a frame row: WISE vs SPHEREx, seen vs not detected vs not measured (0.6871ms)
+✔ a frame with odd values does not break (0.1546ms)
+✔ quality levels and wording (1.4744ms)
+✔ no spectrum measurements, missing fields and empty targets are handled (0.3902ms)
+✔ visits are numbered and their images added up (0.2019ms)
+✖ real data: WISE 0855 (faint, partly flagged) (1.3286ms)
+✖ real data: Barnard's Star (too bright: every measurement flagged, no detection data) (0.7136ms)
+✔ real data: every committed target describes both channels without error (4.1414ms)
+✔ luminance from RGBA (1.9832ms)
+✔ percentile (0.1638ms)
+✔ add averages frames (0.6373ms)
+✔ add rejects an empty set and mismatched sizes (0.3956ms)
+✔ adding frames lowers random noise (2.5353ms)
+✔ matchBrightness recovers gain and offset (2.8523ms)
+✔ subtract cancels static stars even when frames differ in brightness (1.507ms)
+✔ subtract shows a moving dot: positive where it is now, negative where it was (1.3261ms)
+✔ subtract of identical frames is zero and does not divide by zero on flat frames (1.0299ms)
+✔ autoScale has a floor so noise is not blown up (0.636ms)
+✔ diffToRGBA colours: green for now, pink for before, grey for small (0.2432ms)
+✔ grayToRGBA (0.1307ms)
+✔ smooth keeps a flat frame flat, lowers noise, and radius 0 is a copy (1.7986ms)
+✔ diffToRGBA threshold hides faint differences (0.1567ms)
+✔ real data: WISE 0855 mover shows up in the difference (34.9535ms)
+✔ sparse sky with one moving star: the old position still shows as negative (0.4652ms)
+✔ real data: Barnard's Star shows both its old and new position (12.4707ms)
+✔ matches astropy over tens of thousands of years: Barnard's Star (1.7475ms)
+✔ matches astropy over tens of thousands of years: Proxima Centauri (0.2172ms)
+✔ matches astropy over tens of thousands of years: Sirius (0.1221ms)
+✔ matches astropy over tens of thousands of years: Pole crosser (synthetic) (0.1142ms)
+✔ matches astropy over tens of thousands of years: RA 0h crosser (synthetic) (0.1052ms)
+✔ zero time gives the input back, including the motion (0.1182ms)
+✔ Barnard's Star: closest approach about 11,800 CE at about 3.8 light-years, and it speeds up on the way (0.7774ms)
+✔ the sky track curves: it is a great circle, not a straight line in RA/Dec (0.1531ms)
+✔ starting state from a learnt prediction uses the learnt motion and Gaia's radial velocity (1.3041ms)
+✔ starting state without a prediction uses catalogue values and warns about what is missing (0.3202ms)
+✔ Monte Carlo cloud grows with time and is reproducible (3.1334ms)
+✔ magnitude follows the inverse-square law (0.1308ms)
+✔ orthographic projection: east left, north up, back side flagged (0.1272ms)
+✔ year labels (0.0739ms)
+✔ crossing the celestial pole: RA jumps by 180° but the star moves smoothly (0.7594ms)
+✔ crossing RA 0h/24h: RA stays in [0, 360) and the motion is continuous (0.5429ms)
+✔ orthographic projection keeps points across RA 0h together (0.0916ms)
+✔ search finds stars by proper name, Bayer, catalogue number and Gliese (349.2758ms)
+✔ search: empty or junk queries give nothing; limit is respected (64.6238ms)
+✔ search: exact names beat partial ones, and ready predictions come first among equals (0.2453ms)
+✔ sexagesimal formatting, including rounding at 60 and negative declinations (0.2463ms)
+✔ tangent-plane offsets: east is +x, north is +y, and 1 arcsec is 1 arcsec (0.1727ms)
+✔ chart: equal scale on both axes, east on the left, north up (0.5698ms)
+✔ scale bar is a round number (0.1534ms)
+✔ star index: every row has what the page needs (2.9002ms)
+✔ prediction list matches the files (0.6086ms)
+✔ committed prediction: hip104214 (1.2653ms)
+✔ committed prediction: hip114046 (0.7201ms)
+✔ committed prediction: hip11767 (0.6298ms)
+✔ committed prediction: hip1475 (0.578ms)
+✔ committed prediction: hip24186 (0.6468ms)
+✔ committed prediction: hip32349 (0.5734ms)
+✔ committed prediction: hip36208 (0.5533ms)
+✔ committed prediction: hip54035 (0.5307ms)
+✔ committed prediction: hip57939 (0.5075ms)
+✔ committed prediction: hip69673 (0.8275ms)
+✔ committed prediction: hip70890 (0.6111ms)
+✔ committed prediction: hip71683 (0.5298ms)
+✔ committed prediction: hip8102 (0.5793ms)
+✔ committed prediction: hip87937 (0.6109ms)
+✔ committed prediction: hip91262 (0.5777ms)
+✔ committed prediction: wanderers_eps_indi_b (0.9755ms)
+✔ committed prediction: wanderers_r_dra (0.8049ms)
+✔ committed prediction: wanderers_rw_aur (0.7728ms)
+✔ committed prediction: wanderers_wise0855 (0.7137ms)
+✔ at() interpolates between samples and is exact on them (1.1808ms)
+✔ at() is null outside the path or for bad input (0.6715ms)
+✔ between() clips to the path and adds exact end points (0.2891ms)
+✔ summary() states rate, parallax, agreement and a forecast (0.3372ms)
+✔ summary() leaves out a parallax too small to matter (0.1319ms)
+✔ committed trajectory: barnard (2.4635ms)
+✔ committed trajectory: eps_indi_b (1.4842ms)
+✔ committed trajectory: rw_aur (1.4435ms)
+✔ committed trajectory: r_dra (1.4509ms)
+✔ committed trajectory: wise0855 (1.3714ms)
+ℹ tests 116
+ℹ suites 0
+ℹ pass 113
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 3561.0855
+
+✖ failing tests:
+
+test at test\frameinfo.test.js:59:1
+✖ real data: WISE 0855 (faint, partly flagged) (1.3286ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (C:\Users\user\Desktop\github\hackathon\nasa-space-apps-2026\.worktrees\movers\test\frameinfo.test.js:64:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\frameinfo.test.js:70:1
+✖ real data: Barnard's Star (too bright: every measurement flagged, no detection data) (0.7136ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  11 !== 9
+  
+      at TestContext.<anonymous> (C:\Users\user\Desktop\github\hackathon\nasa-space-apps-2026\.worktrees\movers\test\frameinfo.test.js:72:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 11,
+    expected: 9,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

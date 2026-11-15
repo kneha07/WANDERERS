@@ -59,6 +59,17 @@ class PositionIdTests(unittest.TestCase):
         self.assertEqual(fov.position_id(10, 20, 5000), fov.position_id(10, 20, 900))
         self.assertEqual(fov.position_id(10, 20, "junk"), fov.position_id(10, 20))
 
+    def test_rounding_matches_javascript_tofixed(self):
+        # fields.js uses toFixed(4), which rounds an exact tie away from zero; Python's format rounds it to even.
+        # Odd multiples of 1/32 degree are exact ties in binary.
+        self.assertEqual(fov.position_id(1.03125, -7.03125), "pos_1p0313_s7p0313")
+        self.assertEqual(fov.position_id(10.09375, 0.15625), "pos_10p0938_n0p1563")
+        self.assertEqual(fov.position_id(10.0, -0.0), "pos_10p0000_n0p0000")        # JS: -0 < 0 is false
+        self.assertEqual(fov.position_id(10.0, -0.00004), "pos_10p0000_s0p0000")    # JS: "-" + "0.0000"
+
+    def test_huge_numbers_fall_back_to_the_default(self):
+        self.assertEqual(fov.clamp_fov(10 ** 400), fov.DEFAULT_FOV)
+
     def test_ids_are_safe_for_file_names_and_urls(self):
         import re
         for args in ((359.9999, -89.9999, 600), (0, 90, 120), (12.5, -0.00004, None)):

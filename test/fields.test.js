@@ -132,6 +132,10 @@ const post = (base, p, body) => fetch(base + p, { method: "POST", headers: { "co
 test("HTTP: /api/field rejects bad input without starting work", async () => {
   await withServer(async (base) => {
     assert.equal((await post(base, "/api/field", "{")).status, 400);
+    for (const body of ["null", "[]", "5"]) {                       // valid JSON, but not an object: a client error, not a 500
+      const r = await post(base, "/api/field", body);
+      assert.equal(r.status, 400, body); assert.match((await r.json()).error, /ra and dec must be numbers/, body);
+    }
     assert.equal((await post(base, "/api/field", { ra: "10", dec: 5 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 400, dec: 5 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 10, dec: -100 })).status, 400);
@@ -185,7 +189,8 @@ test("job ids with a field-of-view suffix are accepted, junk is not", () => {
 
 test("ids match pipeline/fov.py (Python) for many positions and sizes", { skip: spawnSync("python3", ["--version"]).status !== 0 && "python3 not available" }, () => {
   const { svc } = fake(tmp()), cases = [];
-  for (const [ra, dec] of [[133.7951, -7.2451], [76.9564, 30.4014], [0, 0], [248.16734, 66.75501], [10.00005, -0.00004], [359.9999, -89.9999]])
+  for (const [ra, dec] of [[133.7951, -7.2451], [76.9564, 30.4014], [0, 0], [248.16734, 66.75501], [10.00005, -0.00004], [359.9999, -89.9999],
+                           [1.03125, -7.03125], [10.09375, 0.15625]])   // exact ties: toFixed rounds them away from zero
     for (const fov of [60, 120, 300, 600, 900]) cases.push([ra, dec, fov]);
   const code = "import sys, json\nsys.path.insert(0, 'pipeline')\nimport fov\n" +
     "print(json.dumps([fov.position_id(r, d, f) for r, d, f in json.loads(sys.argv[1])]))";
@@ -201,4 +206,43 @@ test("HTTP: /api/field rejects a bad field of view", async () => {
     assert.equal((await post(base, "/api/field", { ra: 10, dec: 5, fov: 5000 })).status, 400);
     assert.equal((await post(base, "/api/field", { ra: 10, dec: 5, fov: 12.5 })).status, 400);
   });
+});
+
+// ---- which Python runs the pipeline (issue #18: it failed on Windows) ----
+const { pickPython } = require("../fields");
+const root = path.join(os.tmpdir(), "wanderers-root");
+const has = (...files) => { const set = new Set(files.map((f) => path.join(root, ...f))); return (p) => set.has(p); };
+const none = () => false;
+
+test("python: WANDERERS_PYTHON wins over everything, an empty one is ignored", () => {
+  assert.equal(pickPython(root, { env: { WANDERERS_PYTHON: "/opt/py/bin/python" }, platform: "linux", exists: has([".venv", "bin", "python"]) }), "/opt/py/bin/python");
+  assert.equal(pickPython(root, { env: { WANDERERS_PYTHON: "C:\\Py\\python.exe" }, platform: "win32", exists: none }), "C:\\Py\\python.exe");
+  assert.equal(pickPython(root, { env: { WANDERERS_PYTHON: "" }, platform: "linux", exists: none }), "python3");
+});
+
+test("python: macOS and Linux use .venv/bin/python, else python3", () => {
+  for (const platform of ["darwin", "linux"]) {
+    assert.equal(pickPython(root, { env: {}, platform, exists: has([".venv", "bin", "python"]) }), path.join(root, ".venv", "bin", "python"));
+    assert.equal(pickPython(root, { env: {}, platform, exists: none }), "python3");
+  }
+});
+
+test("python: on Windows use .venv\\Scripts\\python.exe, else python (not python3)", () => {
+  assert.equal(pickPython(root, { env: {}, platform: "win32", exists: has([".venv", "Scripts", "python.exe"]) }), path.join(root, ".venv", "Scripts", "python.exe"));
+  assert.equal(pickPython(root, { env: {}, platform: "win32", exists: none }), "python");
+});
+
+test("python: Windows prefers Scripts, but accepts a bin venv (for example from Git Bash)", () => {
+  const both = has([".venv", "Scripts", "python.exe"], [".venv", "bin", "python"]);
+  assert.equal(pickPython(root, { env: {}, platform: "win32", exists: both }), path.join(root, ".venv", "Scripts", "python.exe"));
+  assert.equal(pickPython(root, { env: {}, platform: "win32", exists: has([".venv", "bin", "python"]) }), path.join(root, ".venv", "bin", "python"));
+});
+
+test("python: a Windows-style venv on macOS or Linux is not used (it cannot run there)", () => {
+  assert.equal(pickPython(root, { env: {}, platform: "linux", exists: has([".venv", "Scripts", "python.exe"]) }), "python3");
+});
+
+test("python: with no options it uses the real environment and does not throw", () => {
+  const p = pickPython(path.join(os.tmpdir(), "no-such-project-" + Date.now()));
+  assert.ok(typeof p === "string" && p.length > 0);
 });

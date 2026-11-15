@@ -64,12 +64,13 @@ def fetch(kic, months=2, skip=4):
 
 def read(paths):
     """-> time (s), flux (ppm), header info. Each file is normalised by its own median."""
-    t_all, f_all, hdr = [], [], {}
+    t_all, f_all, hdr, quarters = [], [], {}, []
     for p in paths:
         with fits.open(p) as h:
             d = h[1].data
             hdr = {k: h[0].header.get(k) for k in ("OBJECT", "KEPLERID", "RA_OBJ", "DEC_OBJ", "KEPMAG", "TEFF", "QUARTER")}
-            hdr.setdefault("months", []).append(h[0].header.get("QUARTER"))
+            quarters.append(h[0].header.get("QUARTER"))
+            hdr["months"] = list(quarters)          # every file's quarter, not just the last file's
             ok = (d["SAP_QUALITY"] == 0) & np.isfinite(d["PDCSAP_FLUX"]) & np.isfinite(d["TIME"])
             t, f = d["TIME"][ok] * 86400.0, d["PDCSAP_FLUX"][ok]
             t_all.append(t); f_all.append((f / np.median(f) - 1) * 1e6)

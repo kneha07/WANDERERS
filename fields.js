@@ -17,10 +17,21 @@ const MAX_ACTIVE = 4;                 // running + waiting
 const STEP_TIMEOUT_MS = 20 * 60 * 1000;
 const KEEP_MS = 30 * 60 * 1000;       // how long finished jobs stay queryable
 
-function defaultPython(root) {
-  if (process.env.WANDERERS_PYTHON) return process.env.WANDERERS_PYTHON;
-  const venv = path.join(root, ".venv", "bin", "python");
-  return fs.existsSync(venv) ? venv : "python3";
+// Which Python runs the pipeline. In order:
+//   1. WANDERERS_PYTHON, if set (and not empty)
+//   2. the project's virtual environment: .venv/bin/python (macOS, Linux) or .venv\Scripts\python.exe (Windows)
+//   3. "python3", or "python" on Windows (where python3 is usually missing)
+// opts (for tests): env, platform, exists.
+function pickPython(root, opts = {}) {
+  const env = opts.env || process.env, platform = opts.platform || process.platform, exists = opts.exists || fs.existsSync;
+  if (env.WANDERERS_PYTHON) return env.WANDERERS_PYTHON;
+  const win = platform === "win32";
+  const venvs = win ? [[".venv", "Scripts", "python.exe"], [".venv", "bin", "python"]] : [[".venv", "bin", "python"]];
+  for (const parts of venvs) {
+    const p = path.join(root, ...parts);
+    if (exists(p)) return p;
+  }
+  return win ? "python" : "python3";
 }
 
 // Runs one pipeline script; resolves with its output, rejects on non-zero exit or timeout.
@@ -41,7 +52,7 @@ function httpError(status, message) { const e = new Error(message); e.status = s
 function createFieldService(opts = {}) {
   const root = opts.root || __dirname;
   const dataDir = opts.dataDir || path.join(root, "app", "data");
-  const run = opts.run || realRunner(root, defaultPython(root));
+  const run = opts.run || realRunner(root, pickPython(root));
   const jobs = new Map(), queue = [];
   let running = false;
 
@@ -131,7 +142,7 @@ function createFieldService(opts = {}) {
     const fail = (e) => send(e.status || 500, { error: e.status ? e.message : "Server error." });
     if (req.method === "POST" && url.pathname === "/api/field") {
       readJson(req).then((b) => {
-        if (typeof b.ra !== "number" || typeof b.dec !== "number") throw httpError(400, "ra and dec must be numbers.");
+        if (!b || typeof b.ra !== "number" || typeof b.dec !== "number") throw httpError(400, "ra and dec must be numbers.");   // null is valid JSON
         if (b.fov !== undefined && typeof b.fov !== "number") throw httpError(400, "fov must be a number.");
         const r = start(b.ra, b.dec, b.fov === undefined ? DEFAULT_FOV : b.fov); send(r.status === "ready" ? 200 : 202, r);
       }).catch(fail);
@@ -147,4 +158,4 @@ function createFieldService(opts = {}) {
   return { start, status, handle, idFor };
 }
 
-module.exports = { createFieldService };
+module.exports = { createFieldService, pickPython };

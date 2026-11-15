@@ -50,9 +50,10 @@
     }
     return inn;
   }
-  // candidates in a strip of RA (the list is sorted by RA); falls back to a full scan near the poles
+  // candidates in a strip of RA (the list is sorted by RA); a full scan when the circle reaches a pole.
+  // Half-width of a circle of radius rad in RA: asin(sin rad / cos dec) (rad / cos dec is too narrow for big circles)
   function strip(ra, dec, rad) {
-    const P = DB.p, w = Math.abs(dec) > 80 ? 360 : Math.min(360, rad / Math.cos(dec * D2R));
+    const P = DB.p, w = Math.abs(dec) + rad >= 89.9 ? 360 : Math.asin(Math.min(1, Math.sin(rad * D2R) / Math.cos(dec * D2R))) / D2R + 1e-6;
     if (w >= 180) return P;
     const lo = ra - w, hi = ra + w, out = [];
     const first = (x) => { let a = 0, b = P.length; while (a < b) { const m = (a + b) >> 1; P[m].ra < x ? (a = m + 1) : (b = m); } return a; };
@@ -119,7 +120,7 @@
     const fov = main ? Math.max(0.02, Math.min(1.5, main.r * 2.4)) : 0.25;
     if (!V.aladin || V.el !== el) {
       el.innerHTML = "";
-      V.aladin = A.aladin(el, { survey: BASE[opts.base || "twomass"].url, fov, target: `${ra} ${dec}`, cooFrame: "ICRSd", showReticle: true, showLayersControl: false,
+      V.aladin = A.aladin(el, { survey: BASE[opts.base || "twomass"].url, fov, target: `${ra} ${dec}`, cooFrame: "ICRSd", log: false, showReticle: true, showLayersControl: false,
         showGotoControl: false, showFullscreenControl: false, showCooGridControl: false, showSimbadPointerControl: false,
         showProjectionControl: false, showFrame: false, showZoomControl: true, showSettingsControl: false, showShareControl: false,
         showStatusBar: false });

@@ -70,12 +70,13 @@
       this.flat = null;           // calibration buffer
       this.relOnly = true;        // becomes false once we see a separate relative stream next to an absolute one
       this.sawRelative = false;
+      this.absMotion = false;     // true while the absolute stream drives motion (delta 0 is only valid for it)
     }
 
     // ---- input: call for every deviceorientation / deviceorientationabsolute event ----
     feed(e) {
       const t = e.t != null ? e.t : Date.now();
-      if (e.beta == null || e.gamma == null) return;
+      if (!Number.isFinite(e.beta) || !Number.isFinite(e.gamma)) return;   // null or NaN would poison the smoothing for good
       const hasCompass = typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading) && e.webkitCompassHeading >= 0;
       if (hasCompass) {
         // iOS: one event carries the smooth relative Euler angles AND a compass heading.
@@ -106,15 +107,18 @@
         if (!this.sawRelative) {
           // No separate gyro stream (some browsers): use the absolute stream as the motion source with delta 0.
           this.rel = { alpha: e.alpha || 0, beta: e.beta, gamma: e.gamma, t };
-          if (this.delta == null) { this.delta = 0; this.deltaStd = 5; }
+          if (this.delta == null) { this.delta = 0; this.deltaStd = 5; this.absMotion = true; }
           this._step(t);
           return;
         }
         // Yaw from the fused absolute stream is meaningful away from gimbal lock (beta near +-90).
-        if (Math.abs(Math.cos(e.beta * D2R)) > 0.35 && this.rel) this._yawSample(e.alpha, t, 0.5);
+        if (Number.isFinite(e.alpha) && Math.abs(Math.cos(e.beta * D2R)) > 0.35 && this.rel) this._yawSample(e.alpha, t, 0.5);
         return;
       }
       // relative (gyro) stream
+      // If an absolute event came first (both streams start together on Android), delta 0 was set for the absolute
+      // frame; the gyro frame's north is arbitrary, so let the next compass sample set delta afresh.
+      if (this.absMotion) { this.absMotion = false; this.delta = null; this.deltaStd = null; }
       this.sawRelative = true;
       this.rel = { alpha: e.alpha || 0, beta: e.beta, gamma: e.gamma, t };
       this._step(t);
