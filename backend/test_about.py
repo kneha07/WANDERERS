@@ -137,6 +137,7 @@ def test_about_a_named_star_in_three_sources(net):
         "sources": [{"label": "CDS Sesame / SIMBAD", "url": "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=NAME%20Barnard%27s%20star"},
                     {"label": "Wikipedia: Barnard's Star", "url": "https://en.wikipedia.org/wiki/Barnard%27s_Star"}],
         "notes": [],
+        "fast_movers": [],
     }
     wiki = [h for u, h in asked if "wikipedia" in u]
     assert wiki and all("WANDERERS" in h["User-Agent"] and "@" not in h["User-Agent"] for h in wiki)  # no e-mail address
@@ -206,3 +207,25 @@ def test_a_mark_on_a_fast_mover_finds_its_star_at_the_j2000_position(net):
     # the Gaia DR3 position (epoch 2016.0) and proper motion that the web app sends for a mark on Barnard's Star
     a = about.get_about(ra=269.44850253, dec=4.73942005, pmra=-801.551, pmdec=10362.394, epoch=2016.0)
     assert a["name"] == "Barnard's Star"
+
+
+# ---- a fast mover near a typed position (NM2) ----
+
+def test_the_path_of_a_fast_mover_passes_its_old_coordinates():
+    # WISE 0855: SIMBAD J2000 position and proper motion; the challenge coordinates are its 2010 position (85" away)
+    closest, now = about.path_near(133.81890825, -7.247048, -8123.7, 673.2, 133.795129, -7.245147)
+    assert closest == pytest.approx(0.2, abs=0.3)  # its path crosses the typed position (in 2010)
+    assert now == pytest.approx(127, abs=2)  # in 2026.0 it is 127" away
+
+
+def test_a_typed_position_names_the_fast_mover_whose_path_crosses_it(net):
+    services, _ = net
+    def simbad(params):
+        q = params["QUERY"]
+        if "pmra * pmra" in q:  # the search for fast movers within 300"
+            return Answer(data={"data": [["WISEA J085510.74-071442.5", 133.81890825, -7.247048, -8123.7, 673.2],
+                                         ["NAME Far Mover", 133.865, -7.245, 1100.0, 0.0]]})  # 250" east, moving away
+        return Answer(data={"data": []})  # nothing within 5"
+    services["sim-tap"] = simbad
+    a = about.get_about(ra=133.795129, dec=-7.245147)
+    assert a["fast_movers"] == [{"name": "WISEA J085510.74-071442.5", "pm_arcsec_yr": 8.15, "sep_arcsec": 127}]

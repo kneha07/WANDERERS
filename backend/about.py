@@ -29,6 +29,7 @@ CONE_ARCSEC, TIMEOUT_S = 5, 8
 TIE_ARCSEC = 1  # objects this close to the nearest one count as the same place (a star and its components)
 PLANET_TYPES = {"Pl"}  # SIMBAD's planet type ("Pl?": planet candidate)
 FAST_MAS_YR = 1000  # a proper motion above 1"/yr moves a star out of the 5" cone between J2000 and now
+FAST_SEARCH_ARCSEC, FAST_NEAR_ARCSEC = 300, 60  # fast movers within 300" whose path passes within 60" (NM2)
 # Identifiers worth showing, in this order (SIMBAD lists 50 or more for a famous star).
 ALIAS_ORDER = ("NAME ", "HD ", "HIP ", "GJ ", "2MASS ", "Gaia DR3 ", "WISEA ", "LHS ", "TYC ")
 
@@ -202,6 +203,44 @@ def j2000(ra, dec, pmra, pmdec, epoch):
     return (ra + pmra * years / 3.6e6 / math.cos(math.radians(dec))) % 360, dec0
 
 
+def path_near(ra0, dec0, pmra, pmdec, ra, dec):
+    """How near the path of a star (J2000 position ra0, dec0, proper motion in mas/yr) passes ra, dec between 1990 and
+    2030, and how far it is from ra, dec in 2026.0: (closest, now) in arcsec. Flat sky: good to ~0.1" over 300"."""
+    dx = ((ra - ra0 + 180) % 360 - 180) * math.cos(math.radians(dec0)) * 3600  # east of the star, arcsec
+    dy = (dec - dec0) * 3600
+    vx, vy = pmra / 1000, pmdec / 1000  # arcsec per year
+    t = max(-10.0, min(30.0, (dx * vx + dy * vy) / (vx * vx + vy * vy)))  # years after 2000 of the closest point
+    return math.hypot(dx - vx * t, dy - vy * t), math.hypot(dx - vx * 26, dy - vy * 26)
+
+
+def fast_movers(ra, dec):
+    """SIMBAD stars faster than 1"/yr whose path (1990-2030) passes within FAST_NEAR_ARCSEC of ra, dec: typed
+    coordinates from an old catalogue can be where such a star was, not where it is. [{name, pm_arcsec_yr,
+    sep_arcsec (in 2026)}], nearest path first; [] when SIMBAD does not answer (it is only a hint)."""
+    query = (f"SELECT TOP 20 main_id, ra, dec, pmra, pmdec FROM basic WHERE 1 = CONTAINS(POINT('ICRS', ra, dec), "
+             f"CIRCLE('ICRS', {ra}, {dec}, {FAST_SEARCH_ARCSEC / 3600})) AND pmra * pmra + pmdec * pmdec > {FAST_MAS_YR ** 2}")
+    for url in SIMBAD_TAP:
+        try:
+            r = requests.get(url, params={"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "json", "QUERY": query},
+                             headers=UA, timeout=TIMEOUT_S)
+            r.raise_for_status()
+            rows = r.json()["data"]
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            continue
+        near = []
+        for row in rows:
+            try:
+                name, ra0, dec0, pmra, pmdec = row
+                closest, now = path_near(ra0, dec0, pmra, pmdec, ra, dec)
+            except (ValueError, TypeError, ZeroDivisionError):  # a row without a full position or motion
+                continue
+            if closest <= FAST_NEAR_ARCSEC:
+                near.append((closest, {"name": PREFIX.sub("", " ".join(name.split())),
+                                       "pm_arcsec_yr": round(math.hypot(pmra, pmdec) / 1000, 2), "sep_arcsec": round(now)}))
+        return [f for _, f in sorted(near, key=lambda c: c[0])]
+    return []
+
+
 def simbad_near(ra, dec):
     """(main identifier or None, host) of the SIMBAD object that ra, dec means, within CONE_ARCSEC (pick_object).
     HTTPException(502) when no SIMBAD TAP host answers."""
@@ -312,6 +351,7 @@ def build_about(q, ra, dec, pm=None, epoch=None):
         "papers": facts and facts["papers"],
         "sources": sources,
         "notes": notes,
+        "fast_movers": fast_movers(ra, dec) if q is None else [],
     }, failed
 
 
