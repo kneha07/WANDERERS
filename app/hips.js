@@ -21,7 +21,13 @@
     aladin: "https://cdn.jsdelivr.net/npm/aladin-lite@3.8.2/dist/aladin.js",
     caches: { recent: "wanderers-sky-v1", saved: "wanderers-sky-saved-v1", shell: "wanderers-shell-v1", pinned: "wanderers-data-v1" },
     recent: { maxFiles: 1200, maxBytes: 40 * 1048576, maxAgeMs: 7 * 86400000 },
+    recheckMs: 86400000,                          // how often sw.js asks an archive whether its survey was reissued
   };
+
+  // A survey's issue date: `hips_release_date` in its properties file (IVOA HiPS 1.0). "" when it has none.
+  const releaseDate = (text) => (/^hips_release_date\s*=\s*(\S+)/m.exec(text || "") || [])[1] || "";
+  // Where sw.js keeps { at, release, savedDue } for one survey host (a made-up URL in the pinned cache).
+  const releaseUrl = (base) => `${base}/__wanderers_release__`;
 
   const TILE_DEG = 58.6323;                       // side of an order-0 tile: sqrt(4*pi/12) radians
 
@@ -120,6 +126,6 @@
     return removed.urls.filter((u) => !kept.has(u));
   }
 
-  const api = { CONFIG, manifestUrl, isManifest, orphans, pixel, centre, tileSide, orderFor, band, skyShare, tilesForLatitude, url, plan, evict };
+  const api = { CONFIG, releaseDate, releaseUrl, manifestUrl, isManifest, orphans, pixel, centre, tileSide, orderFor, band, skyShare, tilesForLatitude, url, plan, evict };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Hips = api;
 })(typeof self !== "undefined" ? self : globalThis);

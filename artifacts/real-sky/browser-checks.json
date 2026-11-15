@@ -1,5 +1,5 @@
 {
- "when": "2026-11-15T05:57:06.988Z",
+ "when": "2026-11-15T19:14:39.258Z",
  "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
@@ -72,11 +72,25 @@
    "pxPerDeg": 12.8
   },
   {
+   "label": "az 300 alt 45 again, before zooming",
+   "objects": 18,
+   "worst": 0.5,
+   "roll": 0,
+   "pxPerDeg": 12.8
+  },
+  {
    "label": "infrared, az 300 alt 45",
    "objects": 18,
    "worst": 0.5,
    "roll": 0,
    "pxPerDeg": 12.8
+  },
+  {
+   "label": "zoomed in 4 times, az 300 alt 45",
+   "objects": 1,
+   "worst": 0.1,
+   "roll": 0,
+   "pxPerDeg": 51
   },
   {
    "label": "offline, az 90 alt 25",
@@ -91,7 +105,7 @@
    "label": "Basic, 48° N",
    "lat": 47.6,
    "order": 1,
-   "seconds": 3,
+   "seconds": 5,
    "plan": "Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
    "msg": "Saved for latitude 48° N. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
    "tiles": 60
@@ -100,7 +114,7 @@
    "label": "Standard, 34° S",
    "lat": -33.9,
    "order": 2,
-   "seconds": 7,
+   "seconds": 14,
    "plan": "Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
    "msg": "Saved for latitude 34° S. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
    "tiles": 248
@@ -173,6 +187,11 @@
    "detail": ""
   },
   {
+   "name": "registration az 300 alt 45 again, before zooming",
+   "ok": true,
+   "detail": "18 objects, worst 0.5 px (1° = 12.8 px), roll 0°"
+  },
+  {
    "name": "registration infrared, az 300 alt 45",
    "ok": true,
    "detail": "18 objects, worst 0.5 px (1° = 12.8 px), roll 0°"
@@ -196,6 +215,31 @@
    "name": "service worker drops the recent cache once it is older than the age limit",
    "ok": true,
    "detail": ""
+  },
+  {
+   "name": "zoom: photographs and canvas still agree when zoomed in 4 times",
+   "ok": true,
+   "detail": "1 objects, worst 0.1 px (1° = 51 px)"
+  },
+  {
+   "name": "zoom: the photographs show a quarter of the view",
+   "ok": true,
+   "detail": "29.88° → 7.63°"
+  },
+  {
+   "name": "the survey's issue date is recorded with its pictures",
+   "ok": true,
+   "detail": "2019-05-07T10:55Z"
+  },
+  {
+   "name": "a survey checked less than a day ago is left alone",
+   "ok": true,
+   "detail": "8 pictures"
+  },
+  {
+   "name": "a reissued survey: its recent pictures are dropped and the new date is recorded",
+   "ok": true,
+   "detail": "8 → 0, {\"at\":1794770169886,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "Eye, dark site: about 2,500 stars above the horizon",
@@ -223,6 +267,66 @@
    "detail": "direction -7.44°, tilt 5.31°"
   },
   {
+   "name": "telescope, Eye at 12x on Capella: the photographs cover the view",
+   "ok": true,
+   "detail": "cover 1"
+  },
+  {
+   "name": "telescope, Eye at 12x on Capella: photographs and canvas agree",
+   "ok": true,
+   "detail": "2 compared (Capella, Gl 194B), worst 0 px (1° = 153.1 px)"
+  },
+  {
+   "name": "telescope: 150x, step 1 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 150x, step 2 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 150x, step 3 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 150x, step 4 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.5 px (1° = 1913.8 px)"
+  },
+  {
+   "name": "telescope: 300x, step 1 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 0.9 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: 300x, step 2 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 1 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: 300x, step 3 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 1 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: 300x, step 4 of 0.003° in azimuth",
+   "ok": true,
+   "detail": "2 compared, worst 1 px (1° = 3827.5 px)"
+  },
+  {
+   "name": "telescope: a pinch from 300x to 280x",
+   "ok": true,
+   "detail": "2 compared, worst 0.9 px (1° = 3572.3 px)"
+  },
+  {
+   "name": "telescope: held at 10x, a phone pose 3° away does not move the view",
+   "ok": true,
+   "detail": "view 316.5649°, 26.9462° -> 316.5649°, 26.9462°; the phone turned -3.00°"
+  },
+  {
    "name": "no script errors on the page (online)",
    "ok": true,
    "detail": ""
@@ -230,7 +334,7 @@
   {
    "name": "save Basic, 48° N: finished",
    "ok": true,
-   "detail": "Saved for latitude 48° N. On an iPhone, add this page to the (3 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)"
+   "detail": "Saved for latitude 48° N. On an iPhone, add this page to the (5 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)"
   },
   {
    "name": "saved cache holds the 60 Basic tiles, the survey files, the Aladin script and the place's manifest",
@@ -245,17 +349,22 @@
   {
    "name": "the place is listed from its manifest",
    "ok": true,
-   "detail": "[\"Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove\"]"
+   "detail": "[\"Latitude 48° N, Basic, 60 pictures, saved Nov 15 Remove\"]"
+  },
+  {
+   "name": "a reissued survey: the saved pictures are fetched again in place",
+   "ok": true,
+   "detail": "spoiled tile 3 → 48299 bytes, 65 → 65 files, {\"at\":1794770197000,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "save Standard, 34° S: finished",
    "ok": true,
-   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (7 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
+   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (14 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
   },
   {
    "name": "Standard, 34° S: about 190 tiles of its own on top",
    "ok": true,
-   "detail": "248 tiles in all; Latitude 48° N, Basic, 60 pictures, saved Nov 14 Remove | Latitude 34° S, Standard, 248 pictures, saved Nov 14 Remove"
+   "detail": "248 tiles in all; Latitude 48° N, Basic, 60 pictures, saved Nov 15 Remove | Latitude 34° S, Standard, 248 pictures, saved Nov 15 Remove"
   },
   {
    "name": "remove one place: the other place keeps every picture",
@@ -285,7 +394,7 @@
   {
    "name": "offline with nothing saved: falls back to Eye and says so",
    "ok": true,
-   "detail": "0.7 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
+   "detail": "2.0 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
   }
  ]
 }

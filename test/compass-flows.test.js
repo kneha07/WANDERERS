@@ -9,6 +9,7 @@ const APP = path.join(__dirname, "..", "app");
 const Orient = require("../app/orient.js");
 const Sky = require("../app/sky.js");
 const HIDDEN = new Set([...fs.readFileSync(path.join(APP, "compass.html"), "utf8").matchAll(/<[^>]*\bid="([^"]+)"[^>]*\shidden[\s>]/g)].map((m) => m[1]));
+const SHEETS = [...fs.readFileSync(path.join(APP, "compass.html"), "utf8").matchAll(/<div id="([^"]+)" class="sheet\b/g)].map((m) => m[1]);
 
 // ---- a fake browser: just enough DOM for compass.js ----
 function fakeElement(id) {
@@ -32,15 +33,16 @@ function fakeElement(id) {
     querySelector() { return this.querySelectorAll("button")[0] || null; },
     setAttribute() {}, removeAttribute() {}, focus() {}, blur() {},
     setPointerCapture() {}, play: () => Promise.resolve(), remove() {}, appendChild() {},
-    texts: [],   // canvas fillText calls: [text, x, y]
+    texts: [], strokes: [],   // canvas fillText calls: [text, x, y]; every strokeStyle set
     getContext() {
-      const texts = this.texts, base = { fillText: (t, x, y) => texts.push([String(t), x, y]), measureText: (t) => ({ width: String(t).length * 7 }) };
-      return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })), set: (t, k, v) => ((t[k] = v), true) });
+      const texts = this.texts, strokes = this.strokes, base = { fillText: (t, x, y) => texts.push([String(t), x, y]), measureText: (t) => ({ width: String(t).length * 7 }) };
+      return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} })),
+        set: (t, k, v) => { if (k === "strokeStyle") strokes.push(v); t[k] = v; return true; } });
     },
   };
 }
 
-function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles", pathView } = {}) {
+function loadCompass({ search = "", intro = "ok", geolocation = null, webb = null, files = {}, timeZone = "America/Los_Angeles", pathView, time = null } = {}) {
   const els = {}, timers = [], windowListeners = {}, rafs = [];
   let clock = 0;
   const $ = (id) => els[id] || (els[id] = fakeElement(id));
@@ -48,7 +50,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const body = fakeElement("body");
   const document = {
     getElementById: $, body,
-    querySelectorAll: (sel) => (sel === ".dirs button" ? dirs : []),
+    querySelectorAll: (sel) => (sel === ".dirs button" ? dirs : sel === ".sheet" ? SHEETS.map($) : []),
     createElement: () => fakeElement(), addEventListener() {},
   };
   const loc = new URL("https://wanderers.test/compass.html" + search);
@@ -76,12 +78,14 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const env = {
     window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
     // realsky.js (the team's real-sky layer) draws extra sky detail; these flow tests only need it to be present
-    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, renderSaved() {}, projector: () => () => null },
+    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cover: () => 0, cancelGesture() {}, cancelDrag() {}, renderSaved() {}, projector: () => () => null },
     Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: pathView,
     getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
     DeviceOrientationEvent: undefined, innerWidth: 390, innerHeight: 844, console: { warn() {}, log() {} },
     Intl: { DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone }) }) },
+    // a clock the test moves (time.t, in ms) for checks over time; the real one otherwise
+    Date: time ? class extends Date { constructor(...a) { super(...(a.length ? a : [time.t])); } static now() { return time.t; } } : Date,
   };
   Object.assign(window, env);
   let src = fs.readFileSync(path.join(APP, "compass.js"), "utf8");
@@ -239,6 +243,213 @@ test("drag mode: a drag longer than a full turn keeps the heading in 0-360", asy
   assert.ok(Math.abs(az - (((180 - 8000 * 70 / 844) % 360) + 360) % 360) < 1e-9);
   hud.dispatch("pointermove", { clientX: -9000, clientY: 400 });
   assert.ok(c.S.manual.az >= 0 && c.S.manual.az < 360);
+});
+
+test("zoom: two fingers pinch the view, and the finger that stays down does not drag it", async () => {
+  const c = loadCompass({ intro: "fail" });
+  const hud = c.$("hud"), stop = { stopImmediatePropagation() {} };
+  const ev = (type, id, x, y) => hud.dispatch(type, { pointerId: id, clientX: x, clientY: y, ...stop });
+  ev("pointerdown", 1, 100, 400); ev("pointerdown", 2, 200, 400);
+  ev("pointermove", 2, 300, 400);                                    // fingers 100 px apart, then 200 px
+  assert.equal(c.S.zoom, 2);
+  assert.equal(c.S.manual.az, 180, "a pinch does not turn the view");
+  ev("pointermove", 2, 40000, 400);
+  assert.equal(c.S.zoom, 300, "zoom stops at 300x");
+  ev("pointermove", 2, 110, 400);
+  assert.equal(c.S.zoom, 0.5, "with no camera the view can widen, to half");
+  ev("pointerup", 2, 110, 400); ev("pointermove", 1, 600, 400);
+  assert.equal(c.S.manual.az, 180, "the remaining finger does not drag");
+  ev("pointerup", 1, 600, 400);
+  c.S.camOn = true; hud.dispatch("wheel", { deltaY: 5000 });
+  assert.equal(c.S.zoom, 1, "the camera picture cannot be made wider than the lens");
+  hud.dispatch("wheel", { deltaY: -200 });
+  assert.ok(c.S.zoom > 1.4 && c.$("cam").style.transform === `scale(${c.S.zoom})`, "the camera picture is enlarged by the same factor");
+  ev("pointerdown", 1, 0, 400); ev("pointermove", 1, 844, 400);       // one finger: 70 deg per screen height, divided by the zoom
+  assert.ok(Math.abs(c.S.manual.az - (180 - 70 / c.S.zoom)) < 1e-9);
+});
+
+// a phone page with a fixed time and place, so frames drawn at high zoom do not move the view.
+// Aim below 38 deg up: above that, an iPhone's compass heading means the top of the phone, not the camera.
+const AT = "2026-11-15T06:00:00Z", HERE = { lat: 47.6, lon: -122.3 };
+async function phoneAt(az, alt) {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}` });
+  await c.flush();
+  await c.$("go").onclick();
+  aimPhone(c, az, alt);
+  return c;
+}
+const near = (p, az, alt, tol = 1) => Math.abs(Orient.wrap180(p.az - az)) < tol && Math.abs(p.alt - alt) < tol;
+
+test("hold mode: from 8x the view stops following the phone, and below 6x it follows again", async () => {
+  const c = await phoneAt(100, 20);
+  c.setZoom(7.9);
+  assert.equal(c.S.hold, false, "not at 7.9x");
+  c.setZoom(8);
+  assert.equal(c.S.hold, true, "held at 8x");
+  const held = c.pose();
+  assert.ok(near(held, 100, 20), `held where the phone pointed, got ${held.az}, ${held.alt}`);
+  aimPhone(c, 140, 35);                                       // the phone moves (or its sensors jitter)
+  c.frame();                                                  // and a frame at a fixed time adds no sidereal drift
+  assert.deepEqual([c.pose().az, c.pose().alt], [held.az, held.alt], "the held view does not move");
+  assert.match(c.$("telemetry").innerHTML, /ZOOM<\/b> 8\.0× HELD/);
+  c.setZoom(12); c.frame();
+  assert.match(c.$("telemetry").innerHTML, /ZOOM<\/b> 12× HELD/, "no decimals from 10x");
+  c.setZoom(6.5);
+  assert.equal(c.S.hold, true, "still held at 6.5x: the gap stops flicker");
+  c.setZoom(5.9);
+  assert.equal(c.S.hold, false, "let go below 6x");
+  assert.ok(near(c.pose(), 140, 35), `follows the phone again, got ${c.pose().az}, ${c.pose().alt}`);
+  assert.equal(c.S.holds, 1, "one hold so far");
+  c.setZoom(8);
+  assert.equal(c.S.holds, 2, "each hold is counted once (the note shows its hint on the first only)");
+});
+
+test("hold mode: one finger and the arrow keys move the held view, slower when zoomed in", async () => {
+  const c = await phoneAt(100, 20);
+  c.setZoom(10);
+  const { az, alt } = c.S.manual, hud = c.$("hud");
+  hud.dispatch("pointerdown", { pointerId: 1, isPrimary: true, clientX: 0, clientY: 400 });
+  hud.dispatch("pointermove", { pointerId: 1, clientX: 844, clientY: 400 });     // a screen height: 70 deg, divided by the zoom
+  hud.dispatch("pointerup", { pointerId: 1, clientX: 844, clientY: 400 });
+  assert.ok(Math.abs(Orient.wrap180(c.S.manual.az - (az - 7))) < 1e-9, `drag: ${az} -> ${c.S.manual.az}`);
+  for (const fn of c.windowListeners.keydown) fn({ key: "ArrowUp", target: { tagName: "BODY" } });
+  assert.ok(Math.abs(c.S.manual.alt - (alt + 0.2)) < 1e-9, `arrow key: 2 deg divided by the zoom, ${alt} -> ${c.S.manual.alt}`);
+  assert.deepEqual([c.pose().az, c.pose().alt], [c.S.manual.az, c.S.manual.alt]);
+});
+
+test("hold mode: a selected target within 6 deg of the crosshair is centred, not the noisy phone pose (snap)", async () => {
+  const c = await phoneAt(337, 28);                          // R Draconis is at az 340.9, alt 29.6 at this time and place
+  c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();
+  c.frame();
+  const T = c.S.sel;
+  assert.ok(T._sep > 1 && T._sep <= 6, `crosshair ${T._sep} deg from the target`);
+  c.setZoom(8);
+  assert.ok(near(c.S.manual, 337, 28), "the view glides from where the phone points");
+  c.frame();                                                 // 250 ms later (each reading of the test clock is 300 ms on)
+  assert.deepEqual(c.S.manual, { az: T._az, alt: T._alt });
+  assert.equal(c.S.snapped, true);
+});
+
+test("hold mode is checked every frame: it starts when the sensors start late, and over a live camera only while the photographs cover it", async () => {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}` });
+  await c.flush(); await c.$("go").onclick();
+  c.setZoom(10);
+  assert.equal(c.S.hold, false, "no sensors yet");
+  aimPhone(c, 100, 20); c.frame();
+  assert.equal(c.S.hold, true, "the sensors started after the zoom");
+  c.S.camOn = true; c.RealSky.cover = () => 0.5; c.frame();
+  assert.equal(c.S.hold, false, "the camera shows through the photographs again (loading, failed, offline): let go");
+  c.frame();
+  assert.equal(c.S.hold, false, "and not held while the camera shows");
+  c.RealSky.cover = () => 1; c.frame();
+  assert.equal(c.S.hold, true, "covered again: held");
+});
+
+test("entering or leaving hold first cancels a running 'Drag the sky', so its old pose is not put back over the held view", async () => {
+  const c = await phoneAt(100, 20);
+  let cancels = 0;
+  c.RealSky.cancelDrag = () => { cancels++; Object.assign(c.S.manual, { az: 180, alt: 25 }); };   // as Cancel does: back to the pose at its start
+  c.setZoom(10);
+  assert.equal(cancels, 1);
+  assert.ok(near(c.S.manual, 100, 20), `held where the phone points, got ${c.S.manual.az}, ${c.S.manual.alt}`);
+  c.setZoom(5);
+  assert.equal(cancels, 2, "leaving hold cancels it too");
+});
+
+test("hold mode: the first hold shows its hint under the crosshair for 4 s; HELD shows by the 1x button while held", async () => {
+  const c = await phoneAt(100, 20);
+  const shown = () => [!c.$("holdHint").hidden, !c.$("heldMark").hidden];
+  assert.deepEqual(shown(), [false, false], "not held");
+  c.setZoom(10);
+  assert.deepEqual(shown(), [true, true], "first hold: the hint and HELD");
+  c.runTimers(4000);
+  assert.deepEqual(shown(), [false, true], "after 4 s the hint goes, HELD stays");
+  c.setZoom(5);
+  assert.deepEqual(shown(), [false, false], "let go: neither");
+  c.setZoom(10);
+  assert.deepEqual(shown(), [false, true], "a later hold: HELD only");
+  const d = await phoneAt(100, 20);
+  d.setZoom(10); d.setZoom(5);
+  assert.equal(d.$("holdHint").hidden, true, "the hint also goes when the first hold ends before 4 s");
+});
+
+test("hold mode: a key press or a drag during the snap's glide stops the view where it is, no longer 'snapped'", async () => {
+  const c = await phoneAt(337, 28);
+  c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();
+  c.frame();
+  c.setZoom(8);
+  for (const fn of c.windowListeners.keydown) fn({ key: "ArrowLeft", target: { tagName: "BODY" } });
+  const stopped = { ...c.S.manual };
+  c.frame();
+  assert.deepEqual(c.S.manual, stopped);
+  assert.ok(near(stopped, 337 - 2 / 8, 28), `stopped near the phone pose, got ${stopped.az}, ${stopped.alt}`);
+  assert.equal(c.S.snapped, false, "not on the target, so the note warns again that the direction is approximate");
+  c.setZoom(5); c.frame(); c.setZoom(8);                     // a new snap and glide
+  assert.equal(c.S.snapped, true);
+  c.$("hud").dispatch("pointerdown", { pointerId: 1, isPrimary: true, clientX: 200, clientY: 400 });
+  assert.equal(c.S.snapped, false, "a drag stops it too");
+});
+
+test("hold mode: with no sensor pose yet the view is not held; it is held once the pose comes", async () => {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}` });
+  await c.flush(); await c.$("go").onclick();
+  c.S.sensors = true;                                        // the sensor stream started, but no pose has come yet
+  c.setZoom(10); c.frame();
+  assert.equal(c.S.hold, false);
+  aimPhone(c, 100, 20); c.frame();
+  assert.equal(c.S.hold, true);
+  assert.ok(near(c.S.manual, 100, 20), `held where the phone points, got ${c.S.manual.az}, ${c.S.manual.alt}`);
+});
+
+test("the 1x button and Escape take the view back to 1x in one step, and let go of the hold", async () => {
+  const c = await phoneAt(100, 20), buzz = [];
+  c.window.navigator.vibrate = (ms) => buzz.push(ms);
+  assert.equal(c.$("zoomReset").hidden, true, "no button at 1x");
+  c.setZoom(12);
+  assert.equal(c.$("zoomReset").hidden, false, "shown when zoomed");
+  assert.deepEqual([c.S.hold, buzz], [true, [30]], "held, with a short buzz");
+  c.$("zoomReset").click();
+  assert.deepEqual([c.S.zoom, c.S.hold, c.$("zoomReset").hidden], [1, false, true]);
+  const esc = (tagName) => { for (const fn of c.windowListeners.keydown) fn({ key: "Escape", target: { tagName } }); };
+  c.setZoom(4);
+  esc("INPUT");
+  assert.equal(c.S.zoom, 4, "not while typing");
+  c.$("info").hidden = false; esc("BODY");
+  assert.equal(c.S.zoom, 4, "not while a sheet is open");
+  c.$("info").hidden = true; esc("BODY");
+  assert.equal(c.S.zoom, 1);
+});
+
+test("from 8x a dragged or held view turns with the sky, so a star stays in the view (sidereal tracking)", async () => {
+  const time = { t: Date.parse(AT) }, capella = { ra: 79.17, dec: 46.0 }, D2R = Math.PI / 180;
+  const c = loadCompass({ intro: "fail", search: `?debug=1&lat=${HERE.lat}&lon=${HERE.lon}`, time });
+  await c.$("go").onclick();
+  const seen = () => Sky.observe(capella, new Date(time.t), HERE.lat, HERE.lon);
+  const unit = (p) => [Math.sin(p.az * D2R) * Math.cos(p.alt * D2R), Math.cos(p.az * D2R) * Math.cos(p.alt * D2R), Math.sin(p.alt * D2R)];
+  const apart = (a, b) => Math.acos(Math.min(1, unit(a).reduce((s, x, i) => s + x * unit(b)[i], 0))) / D2R;
+  const start = seen();
+  c.S.manual = { az: start.az, alt: start.alt };
+  c.setZoom(300);
+  c.$("hud").dispatch("pointerdown", { pointerId: 1, isPrimary: true, clientX: 200, clientY: 400 });   // a finger rests on the sky
+  c.frame();
+  for (let i = 0; i < 20; i++) { time.t += 30000; c.frame(); }    // 10 minutes, a frame every 30 s
+  c.$("hud").dispatch("pointermove", { pointerId: 1, clientX: 200, clientY: 400 });
+  assert.ok(apart(c.S.manual, start) > 1, `the view turned ${apart(c.S.manual, start).toFixed(2)} deg with the sky`);
+  assert.ok(apart(c.S.manual, seen()) < 0.01, `${apart(c.S.manual, seen()).toFixed(4)} deg from Capella after 10 minutes`);
+});
+
+test("above 6x the altitude rings and azimuth lines are left out; the horizon line stays", async () => {
+  const c = loadCompass({ intro: "fail", search: "?debug=1" });
+  await c.$("go").onclick();
+  const strokes = () => { c.$("hud").strokes.length = 0; c.frame(); return c.$("hud").strokes; };
+  const RING = "rgba(108,196,255,.18)", AZ_LINE = "rgba(108,196,255,.12)", HORIZON = "rgba(255,255,255,.7)";
+  assert.ok(strokes().includes(RING), "rings at 1x");
+  c.setZoom(6);
+  assert.ok(strokes().includes(AZ_LINE), "still drawn at 6x");
+  c.setZoom(12);
+  const s = strokes();
+  assert.ok(!s.includes(RING) && !s.includes(AZ_LINE), "no rings or azimuth lines at 12x");
+  assert.ok(s.includes(HORIZON), "the horizon line stays");
 });
 
 test("location note: a later GPS timeout does not claim the location was declined", async () => {

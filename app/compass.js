@@ -13,7 +13,7 @@ const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const F = new Orient.Fusion();
 const S = {
   targets: [], sel: null, loc: null, locNote: "location not shared yet", place: null, cities: null,
-  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, regionImg: null, lastTele: 0, buzzed: {},
+  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, zoom: 1, hold: false, holds: 0, regionImg: null, lastTele: 0, buzzed: {},
 };
 window.__wanderers = { F, S };   // debug handle for automated tests (feed sensor events with exact timestamps)
 // Links for checks and screenshots: ?at=2026-11-15T06:00:00Z&lat=47.6&lon=-122.3&go=1&intro=skip&cam=0&sky=eye
@@ -108,7 +108,7 @@ $("go").onclick = async () => {
 async function startCamera() {
   try {
     const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-    $("cam").srcObject = st; S.camOn = true;
+    $("cam").srcObject = st; S.camOn = true; setZoom(S.zoom);
   } catch { S.camOn = false; }
 }
 
@@ -210,8 +210,10 @@ function calibrationTick() {
 }
 
 // ---------- pointing: sensors, or drag on desktop ----------
+// The phone's motion sensors steer the view: not in drag mode, and not while the view is held (zoomed in).
+const phoneSteers = () => S.sensors && !S.hold;
 function pose() {
-  const p = S.sensors ? F.pointing() : null;
+  const p = phoneSteers() ? F.pointing() : null;
   if (p) return p;
   const f = vec(S.manual.az, S.manual.alt);
   let up = [0, 0, 1].map((z, i) => z - f[2] * f[i]); const n = Math.hypot(...up) || 1; up = up.map((x) => x / n);
@@ -219,17 +221,109 @@ function pose() {
   return { az: S.manual.az, alt: S.manual.alt, forward: f, up, right, ready: true };
 }
 let drag = null;
-$("hud").addEventListener("pointerdown", (e) => { if (!S.sensors) { drag = { x: e.clientX, y: e.clientY, az: S.manual.az, alt: S.manual.alt }; $("hud").setPointerCapture(e.pointerId); } });
+// Sidereal tracking, like a telescope mount: from 8x a dragged or held view turns with the sky (east to west,
+// about the celestial pole), so a star stays in it. At 300x the view is 0.1 deg wide and the sky moves 0.25 deg
+// a minute. The time steps come from nowDate(), so a fixed ?at= time does not drift. Called once per frame.
+let trackAt = 0;
+function track(now, L) {
+  const dt = (now - trackAt) / 1000; trackAt = +now;
+  if (!(dt > 0 && dt <= 60) || phoneSteers() || S.zoom < 8) return;
+  const a = -360.98564736629 / 86400 * dt * D2R, c = Math.cos(a), s = Math.sin(a);     // the turn in dt (sidereal rate)
+  const k = [0, Math.cos(L.lat * D2R), Math.sin(L.lat * D2R)], v = vec(S.manual.az, S.manual.alt), kv = dot(k, v);
+  const kxv = [k[1] * v[2] - k[2] * v[1], k[2] * v[0], -k[1] * v[0]];                  // k x v (the pole has no east part)
+  const r = v.map((x, i) => x * c + kxv[i] * s + k[i] * kv * (1 - c));                // Rodrigues rotation about the pole
+  S.manual = { az: (Math.atan2(r[0], r[1]) / D2R + 360) % 360, alt: Math.max(-85, Math.min(85, Math.asin(r[2]) / D2R)) };
+}
+
+// ---------- zoom: two fingers on the sky, or the mouse wheel ----------
+// S.zoom multiplies the focal length (focalPx), so the drawn sky, the photographs and taps all follow it.
+// The camera picture is enlarged by the same factor (a digital zoom), so with the camera on the view can only
+// zoom in. Without the camera it can also widen. These listeners come before every other one on the canvas:
+// while two fingers are down, no drag and no tap may start.
+const ZOOM_MAX = 300;
+function setZoom(z) {
+  S.zoom = Math.max(S.camOn ? 1 : 0.5, Math.min(ZOOM_MAX, z));
+  $("cam").style.transform = S.zoom === 1 ? "" : `scale(${S.zoom})`;
+  $("zoomReset").hidden = S.zoom === 1;
+  updateHold();
+}
+$("zoomReset").onclick = () => setZoom(1);      // back to 1x in one step (Escape too, on a keyboard)
+// Hold mode (the mount): from 8x the phone's sensors jitter by more than the view, so the view stops following
+// the phone and uses S.manual, like drag mode. It lets go below 6x (the gap stops flicker). Over a live camera it
+// holds only while the photographs cover the camera, or the drawn sky would freeze over a moving picture.
+// Checked in setZoom and every frame (the sensors or the photographs can start after the zoom).
+// Snap: a selected target within 6 deg ("Locked on") is centred instead of the noisy phone pose. The view glides
+// there in 250 ms (glide(), in the draw loop), or jumps with reduced motion. A drag or a key press stops the glide.
+// While held, HELD shows by the 1x button; on the first hold of a visit a hint shows under the crosshair for 4 s.
+let ease = null, hintTimer = 0;
+function updateHold() {
+  const covered = !S.camOn || RealSky.cover() === 1;
+  const p = phoneSteers() && S.zoom >= 8 && covered && F.pointing();     // no pose yet: not held (until a frame has one)
+  if (p) {
+    RealSky.cancelDrag();       // first, so Drag the sky's Cancel cannot put its old pose back over the held view
+    const T = S.sel && S.targets.find((t) => t.id === S.sel.id);
+    S.snapped = !!(T && T._sep != null && T._sep <= 6);
+    S.manual = { az: p.az, alt: p.alt };
+    if (S.snapped) {
+      const to = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
+      if (reduced) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
+    }
+    S.hold = true; S.holds++; $("heldMark").hidden = false;
+    if (S.holds === 1) { $("holdHint").hidden = false; hintTimer = setTimeout(() => ($("holdHint").hidden = true), 4000); }
+    if (navigator.vibrate) navigator.vibrate(30);
+  } else if (S.hold && (S.zoom < 6 || !covered)) {
+    RealSky.cancelDrag(); S.hold = false; S.snapped = false; ease = null;
+    $("heldMark").hidden = true; $("holdHint").hidden = true; clearTimeout(hintTimer);
+  }
+}
+const stopGlide = () => { if (ease) { ease = null; S.snapped = false; } };   // a drag or a key: the view is not on the target
+function glide() {
+  if (!ease) return;
+  const k = Math.min(1, (performance.now() - ease.t0) / 250), q = 1 - (1 - k) ** 3, { from: a, to: b } = ease;   // ease-out
+  S.manual = k < 1 ? { az: (a.az + wrap180(b.az - a.az) * q + 360) % 360, alt: a.alt + (b.alt - a.alt) * q } : b;
+  if (k === 1) ease = null;
+}
+const fingers = new Map();
+let pinch = null;
+const fingerGap = () => { const [a, b] = [...fingers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+$("hud").addEventListener("pointerdown", (e) => {
+  if (e.isPrimary) { fingers.clear(); pinch = null; }      // a first finger: forget any finger whose lift was missed
+  fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (fingers.size < 2) return;
+  e.stopImmediatePropagation();
+  if (fingers.size === 2) { pinch = { gap: fingerGap(), zoom: S.zoom }; drag = null; RealSky.cancelGesture(); }
+});
+$("hud").addEventListener("pointermove", (e) => {
+  const p = fingers.get(e.pointerId);
+  if (p) { p.x = e.clientX; p.y = e.clientY; }
+  if (!pinch) return;
+  e.stopImmediatePropagation();
+  if (fingers.size === 2) setZoom(pinch.zoom * fingerGap() / pinch.gap);
+});
+for (const type of ["pointerup", "pointercancel"]) $("hud").addEventListener(type, (e) => {
+  fingers.delete(e.pointerId);
+  if (!pinch) return;
+  e.stopImmediatePropagation();           // the finger that stays down after a pinch must not drag or tap
+  if (!fingers.size) pinch = null;
+});
+$("hud").addEventListener("wheel", (e) => { e.preventDefault(); setZoom(S.zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
+window.addEventListener("gesturestart", (e) => e.preventDefault());   // iOS Safari: do not zoom the page itself
+
+$("hud").addEventListener("pointerdown", (e) => { if (!phoneSteers() && !pinch) { drag = { x: e.clientX, y: e.clientY }; stopGlide(); $("hud").setPointerCapture(e.pointerId); } });
 $("hud").addEventListener("pointermove", (e) => {
   if (!drag) return;
-  const k = 70 / innerHeight;
-  S.manual.az = ((drag.az - (e.clientX - drag.x) * k) % 360 + 360) % 360;   // a long drag can pass a full turn
-  S.manual.alt = Math.max(-85, Math.min(85, drag.alt + (e.clientY - drag.y) * k));
+  const k = 70 / innerHeight / S.zoom;       // step by step, so the sidereal tracking between two moves is kept
+  S.manual.az = ((S.manual.az - (e.clientX - drag.x) * k) % 360 + 360) % 360;   // a long drag can pass a full turn
+  S.manual.alt = Math.max(-85, Math.min(85, S.manual.alt + (e.clientY - drag.y) * k));
+  drag.x = e.clientX; drag.y = e.clientY;
 });
 $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
-  if (S.sensors || e.target.tagName === "INPUT") return;
-  const s = e.shiftKey ? 10 : 2;
+  if (e.target.tagName === "INPUT") return;
+  stopGlide();
+  if (e.key === "Escape") { if (![...document.querySelectorAll(".sheet")].some((el) => !el.hidden)) setZoom(1); return; }
+  if (phoneSteers()) return;
+  const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
   if (e.key === "ArrowLeft") S.manual.az = (S.manual.az - s + 360) % 360;
   if (e.key === "ArrowRight") S.manual.az = (S.manual.az + s) % 360;
   if (e.key === "ArrowUp") S.manual.alt = Math.min(85, S.manual.alt + s);
@@ -242,9 +336,9 @@ function focalPx(W, H) {
   const v = $("cam");
   if (S.camOn && v.videoWidth) {
     const vw = v.videoWidth, vh = v.videoHeight, scale = Math.max(W / vw, H / vh);      // object-fit: cover
-    return (Math.max(vw, vh) / 2) / Math.tan(LONG_SIDE_FOV / 2 * D2R) * scale;
+    return (Math.max(vw, vh) / 2) / Math.tan(LONG_SIDE_FOV / 2 * D2R) * scale * S.zoom;
   }
-  return (H / 2) / Math.tan(S.vfovNoCam / 2 * D2R);
+  return (H / 2) / Math.tan(S.vfovNoCam / 2 * D2R) * S.zoom;
 }
 
 // ---------- drawing ----------
@@ -262,6 +356,7 @@ function loop() { draw(); calibrationTick(); requestAnimationFrame(loop); }
 
 function draw() {
   const W = innerWidth, H = innerHeight, now = nowDate(), L = loc();
+  updateHold(); track(now, L); glide();
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.clearRect(0, 0, W, H);
   const P = pose(), f = focalPx(W, H), cx = W / 2, cy = H / 2;
@@ -270,10 +365,9 @@ function draw() {
     return [cx + f * dot(v, P.right) / z, cy - f * dot(v, P.up) / z];
   };
 
-  // virtual sky when there is no camera: sky above the horizon, ground below (the Deep photographs replace the dark sky)
-  const deepShows = RealSky.R.sky === "deep" && RealSky.DEEP.state === "ready";
+  // virtual sky when there is no camera: sky above the horizon, ground below (the photographs fade out the dark sky)
   if (!S.camOn) {
-    if (!deepShows) { g.fillStyle = "#040914"; g.fillRect(0, 0, W, H); }
+    g.globalAlpha = 1 - RealSky.cover(); g.fillStyle = "#040914"; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
     const a = proj(vec(P.az - 30, 0)), b = proj(vec(P.az + 30, 0));
     if (a && b) {
       const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy) || 1, nx = -dy / n, ny = dx / n;  // normal pointing to ground
@@ -288,15 +382,17 @@ function draw() {
   // the real sky: Eye stars, constellation lines and planets; Deep keeps the photographs lined up (realsky.js)
   RealSky.draw(g, P, f, W, H, now, L);
 
-  // altitude rings and azimuth lines
+  // altitude rings and azimuth lines (above 6x they are left out: drawn as 5 deg chords they would be visibly wrong)
   const poly = (pts, style, w, dash) => {
     g.strokeStyle = style; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath();
     let on = false;
     for (const v of pts) { const q = proj(v); if (!q) { on = false; continue; } on ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); on = true; }
     g.stroke(); g.setLineDash([]);
   };
-  for (const alt of [30, 60]) poly(Array.from({ length: 73 }, (_, i) => vec(i * 5, alt)), "rgba(108,196,255,.18)", 1);
-  for (let az = 0; az < 360; az += 30) poly(Array.from({ length: 19 }, (_, i) => vec(az, -5 + i * 5)), "rgba(108,196,255,.12)", 1);
+  if (S.zoom <= 6) {
+    for (const alt of [30, 60]) poly(Array.from({ length: 73 }, (_, i) => vec(i * 5, alt)), "rgba(108,196,255,.18)", 1);
+    for (let az = 0; az < 360; az += 30) poly(Array.from({ length: 19 }, (_, i) => vec(az, -5 + i * 5)), "rgba(108,196,255,.12)", 1);
+  }
   poly(Array.from({ length: 145 }, (_, i) => vec(i * 2.5, 0)), "rgba(255,255,255,.7)", 1.5);
   g.font = "600 13px 'JetBrains Mono', monospace"; g.textAlign = "center"; g.textBaseline = "bottom";
   for (let az = 0; az < 360; az += 45) {
@@ -409,9 +505,11 @@ function draw() {
     g.font = "700 13px 'Space Grotesk', sans-serif"; g.textAlign = "center"; g.fillStyle = "#ffb547";
     g.fillText(S.aim.dir ? `camera → ${S.aim.dir}` : `put ${S.aim.label} here`, cx, cy - 82);
   }
-  g.strokeStyle = "rgba(255,255,255,.9)"; g.lineWidth = 1.5;
-  g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.stroke();
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.beginPath(); g.moveTo(cx + dx * 28, cy + dy * 28); g.lineTo(cx + dx * 40, cy + dy * 40); g.stroke(); }
+  for (const [style, w] of [["rgba(0,0,0,.6)", 3.5], ["rgba(255,255,255,.9)", 1.5]]) {   // a dark edge under the white: seen on a bright star
+    g.strokeStyle = style; g.lineWidth = w;
+    g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.stroke();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.beginPath(); g.moveTo(cx + dx * 28, cy + dy * 28); g.lineTo(cx + dx * 40, cy + dy * 40); g.stroke(); }
+  }
 
   drawTape(W, P, T);
   drawPitch(W, H, P, T);
@@ -512,6 +610,7 @@ function telemetry(now, L, P) {
     ["LAT", `${Math.abs(L.lat).toFixed(3)}°${L.lat >= 0 ? "N" : "S"}`], ["LON", `${Math.abs(L.lon).toFixed(3)}°${L.lon >= 0 ? "E" : "W"}`],
     ["LOCAL", `${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ${tz.split("/").pop().replace(/_/g, " ")}`],
     ["UTC", now.toISOString().slice(11, 19)], ["LST", hm(lst)], ["DECL", `${F.decl >= 0 ? "+" : ""}${F.decl.toFixed(1)}°`], ["CAL", cal],
+    ...(S.zoom !== 1 ? [["ZOOM", `${S.zoom.toFixed(S.zoom >= 10 ? 0 : 1)}×${S.hold ? " HELD" : ""}`]] : []),
   ].map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
   if (!$("info").hidden) renderInfo(now, L, lst, tz);
   webbTick(P, now, L, lst);
@@ -761,7 +860,7 @@ function renderInfo(now, L, lst, tz) {
 
 // ---------- the real sky (realsky.js) ----------
 RealSky.init({
-  pose, focal: focalPx, loc, camOn: () => S.camOn, F, S,
+  pose, focal: focalPx, loc, camOn: () => S.camOn, phoneSteers, F, S,
   openSight: () => $("northBtn").click(),
   // a tapped star opens the same star sheet as the search, found by its star-database key
   onStar: async (pk) => {
@@ -771,7 +870,7 @@ RealSky.init({
   },
 });
 $("infoBtn").addEventListener("click", () => RealSky.renderSaved());
-if (Q.get("debug")) Object.assign(window.__wanderers, { RealSky, pose, focal: focalPx, nowDate,
+if (Q.get("debug")) Object.assign(window.__wanderers, { RealSky, pose, focal: focalPx, nowDate, setZoom,
   // where a J2000 position is on the screen now, in CSS pixels (null when behind the camera)
   screenOf: (ra, dec) => { const W = innerWidth, H = innerHeight, L = loc(), o = Sky.observe({ ra, dec }, nowDate(), L.lat, L.lon);
     return RealSky.projector(pose(), focalPx(W, H), W, H)([Math.sin(o.az * D2R) * Math.cos(o.alt * D2R), Math.cos(o.az * D2R) * Math.cos(o.alt * D2R), Math.sin(o.alt * D2R)]); } });

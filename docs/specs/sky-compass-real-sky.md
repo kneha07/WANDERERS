@@ -15,7 +15,12 @@ a camera projection). The real sky now lives in `app/realsky.js` and draws in th
   It solves on a modelled pose, because the fused sensors apply new offsets only at the next (smoothed) event.
 - `compass.js` loads `intro.js` (three.js from a CDN) on demand, and `sw.js` keeps that pinned three.js. Before, a failed
   CDN stopped the whole page.
-- Not ported: the radar's zoom (+/−, pinch); the AR view has a fixed lens.
+- Zoom (added 2026-11-17): two fingers or the mouse wheel set `S.zoom`, 1 to 8 times (down to 0.5 with no camera). It
+  multiplies the focal length, so the drawn sky, the photographs and taps follow; the camera picture is enlarged by
+  the same factor in CSS (a digital zoom). Checks: `test/compass-flows.test.js`, and the browser check at 4 times.
+- Reissued surveys (added 2026-11-17): `sw.js` records each survey's `hips_release_date` and asks the archive for it
+  at most once a day. On a newer date it drops that survey's recent pictures and fetches the saved ones again (not
+  over mobile data). DSS2 colour was last reissued 2019-05-07, 2MASS colour at IRSA 2024-10-09.
 
 Files: `app/realsky.js`, `app/skyview.js`, `app/hips.js`, `app/sw.js`, `app/sky.js`, `app/compass.html|js|css`.
 
