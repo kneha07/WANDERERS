@@ -38,6 +38,10 @@ FIELD_ARCSEC = DEFAULT_FOV  # default side of the square field we analyse; a tar
 SPX_PIX = 6.15              # SPHEREx pixel scale, arcsec
 KEEP_HDUS = ("IMAGE", "FLAGS", "VARIANCE", "WCS-WAVE")
 MAX_IMAGES = 150            # SPHEREx cutouts per target (see fetch())
+# SPHEREx releases to search, oldest first. New data: add the newest collection name here (IRSA lists them with
+# Irsa.list_collections(servicetype="SIA", filter="spherex")) and re-run fetch + analyze. Duplicate images of the
+# same exposure are kept once (the first release listed wins).
+RELEASES = ["spherex_dr1", "spherex_qr3"]
 
 session = requests.Session()
 session.headers["User-Agent"] = "wanderers-spaceapps/0.1"
@@ -182,8 +186,22 @@ def fetch(tid):
 
     # --- SPHEREx DR1: one cutout per spectral image covering the target -------------------
     c25 = predict(ref, 2025.9)
-    spx = sia("spherex_dr1", c25, d / "spherex_sia.xml")
-    spx = spx[spx["dataproduct_subtype"] == "science"]
+    from astropy.table import vstack
+    tabs, seen = [], set()
+    for rel in RELEASES:
+        try:
+            tb = sia(rel, c25, d / ("spherex_sia.xml" if rel == "spherex_dr1" else f"{rel}_sia.xml"))
+        except Exception as e:
+            print(f"   {rel}: not available ({e})"); continue
+        if len(tb) == 0:
+            continue
+        tb = tb[tb["dataproduct_subtype"] == "science"]
+        keep = [i for i, r in enumerate(tb) if (str(r["obs_id"]), str(r["energy_bandpassname"])) not in seen]
+        for i in keep:
+            seen.add((str(tb[i]["obs_id"]), str(tb[i]["energy_bandpassname"])))
+        if keep:
+            tabs.append(tb[keep]); print(f"   {rel}: {len(keep)} images")
+    spx = vstack(tabs, metadata_conflicts="silent")
     spx.sort(["energy_bandpassname", "t_min"])
     n_all = len(spx)
     # Every cutout carries ~4 MB of PSF tables, so cap the count. Picking evenly through the list
