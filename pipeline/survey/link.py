@@ -45,7 +45,9 @@ DAYS_PER_YEAR = 365.25
 
 LINK_RADIUS = 2.5        # arcsec, within-visit clustering and cross-visit friends-of-friends
 DET_FLOOR = 0.1          # arcsec added in quadrature to each detection's error when weighting a visit mean
-VISIT_SYS = 0.05         # arcsec, systematic error per visit position (frame-to-frame astrometry), see process_tile
+VISIT_SYS = 0.0          # arcsec, extra systematic error per visit position. 0: on real tile 8545 the visit
+                         # errors alone already give chi2r 0.4 (W2 < 12, 486 stars) to 1.2 (W2 > 14.5), so a
+                         # 0.05" term overstated bright stars' pm errors ~3x (chi2r 0.09); kept as a knob
 FAST_VMAX = 12.0         # arcsec/yr, fastest motion searched for
 FAST_TOL = 1.5           # arcsec, max distance of a row from the fitted straight line in the velocity search
 FAST_MIN_VISITS = 5      # distinct visits needed to accept a velocity-search track
@@ -667,7 +669,89 @@ def link_tracks(vs, radius: float = LINK_RADIUS, vmax: float = FAST_VMAX, tol: f
     o = o[np.lexsort((t[o], lab[o]))]
     cuts = np.flatnonzero(np.diff(lab[o])) + 1
     tracks = [g for g in np.split(o, cuts) if len(g) >= 2]
-    return tracks + fast
+    return stitch_tracks(tracks + fast, x, y, t, vis, sig)
+
+
+STITCH_MIN_ROWS = 3      # a fragment needs this many visits to have a usable line
+STITCH_MIN_PM = 0.1      # arcsec/yr: only moving fragments are joined (stationary tracks are never fragments)
+STITCH_TOL = 2.5         # arcsec: the fragments' lines must meet this closely, and the joined track must stay
+                         # this close to one straight line
+STITCH_PM_FRAC = 0.15    # the fragments' velocities must agree to 15% (or STITCH_PM_ABS, whichever is larger)
+STITCH_PM_ABS = 0.05     # arcsec/yr
+STITCH_NSIG = 4.0        # ... or to this many sigma of the two fragments' velocity errors (short fragments)
+
+
+def _line_fits(tracks, x, y, t, w, errors=False):
+    """Weighted straight lines through many tracks at once: tref, x0, y0 (arcsec at tref), vx, vy (arcsec/yr);
+    with errors=True also the per-axis velocity error (arcsec/yr, from the weights)."""
+    lens = np.fromiter((len(a) for a in tracks), np.int64, len(tracks))
+    rows = np.concatenate(tracks)
+    tid = np.repeat(np.arange(len(tracks)), lens)
+    m = len(tracks)
+
+    def s(v):
+        return np.bincount(tid, v, minlength=m)
+    W, T = w[rows], t[rows]
+    S = s(W)
+    tref = s(W * T) / S
+    dt = T - tref[tid]
+    D = np.maximum(s(W * dt * dt), 1e-300)
+    X, Y = x[rows], y[rows]
+    out = (tref, s(W * X) / S, s(W * Y) / S, s(W * dt * X) / D, s(W * dt * Y) / D)
+    return out + (np.sqrt(1.0 / D),) if errors else out
+
+
+def stitch_tracks(tracks, x, y, t, vis, sig, min_rows=STITCH_MIN_ROWS, min_pm=STITCH_MIN_PM, tol=STITCH_TOL,
+                  pm_frac=STITCH_PM_FRAC, pm_abs=STITCH_PM_ABS, nsig=STITCH_NSIG):
+    """(c) Join fragments of one mover. A fast mover (several arcsec/yr, plus parallax) can step more than the
+    linking length between two visits (a missed visit, a long gap); friends-of-friends then cuts its track in
+    two, each piece covering only part of the visits that saw it (and so failing the coverage vetting), and the
+    pieces are too long for the velocity search's pool. Two moving fragments (>= min_rows visits, >= min_pm
+    arcsec/yr) are joined when their lines meet within `tol` at a common epoch, their velocities agree to
+    max(pm_frac * v, pm_abs, nsig * their combined velocity error), they share no visit, and the joined track stays within `tol` of one straight line.
+    Returns the new list of tracks (joined tracks replace their fragments; each sorted by epoch)."""
+    if len(tracks) < 2:
+        return tracks
+    big = [i for i, g in enumerate(tracks) if len(g) >= min_rows]
+    if len(big) < 2:
+        return tracks
+    w = 1.0 / np.maximum(np.asarray(sig, float), 0.05) ** 2
+    sub = [tracks[i] for i in big]
+    tref, x0, y0, vx, vy, ev = _line_fits(sub, x, y, t, w, errors=True)
+    v = np.hypot(vx, vy)
+    mov = np.flatnonzero(v >= min_pm)
+    if len(mov) < 2:
+        return tracks
+    t0 = float(np.median(t))
+    px = x0[mov] + vx[mov] * (t0 - tref[mov])
+    py = y0[mov] + vy[mov] * (t0 - tref[mov])
+    pairs = cKDTree(np.column_stack([px, py])).query_pairs(tol, output_type="ndarray")
+    if len(pairs) == 0:
+        return tracks
+    a, b = mov[pairs[:, 0]], mov[pairs[:, 1]]
+    dv = np.hypot(vx[a] - vx[b], vy[a] - vy[b])
+    ok = dv <= np.maximum(np.maximum(pm_frac * np.maximum(v[a], v[b]), pm_abs), nsig * np.hypot(ev[a], ev[b]))
+    a, b = a[ok], b[ok]
+    if len(a) == 0:
+        return tracks
+    n_sub = len(sub)
+    ncomp, lab = connected_components(coo_matrix((np.ones(len(a)), (a, b)), shape=(n_sub, n_sub)), directed=False)
+    joined, drop = [], set()
+    for c in np.unique(lab[np.concatenate([a, b])]):
+        members = np.flatnonzero(lab == c)
+        rows = np.concatenate([sub[i] for i in members])
+        if len(np.unique(vis[rows])) != len(rows):
+            continue                                   # two fragments claim the same visit: not one source
+        rows = rows[np.argsort(t[rows], kind="stable")]
+        tr, xr, yr, vxr, vyr = (q[0] for q in _line_fits([rows], x, y, t, w))
+        res = np.hypot(x[rows] - xr - vxr * (t[rows] - tr), y[rows] - yr - vyr * (t[rows] - tr))
+        if res.max() > tol:
+            continue
+        joined.append(rows)
+        drop.update(big[i] for i in members)
+    if not joined:
+        return tracks
+    return [g for i, g in enumerate(tracks) if i not in drop] + joined
 
 
 # ------------------------------------------------------------------------------------------------ motion fit
@@ -1099,8 +1183,9 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
       - rejected if seen in a median of < 3 exposures per visit (marginal detections);
       - rejected if detected in < 60% of the visits that observed its predicted position (a real source does
         not vanish for years; a chimera only exists while its parts line up);
-      - rejected as a blend if another source lies within 8" in >= 30% of its visits and its total motion over
-        the span is < 16", i.e. it never moved clear of its neighbour.
+      - rejected as a blend if another source, not more than 2.5 mag fainter, lies within 8" in >= 30% of its
+        visits and its total motion over the span is < 16", i.e. it never moved clear of its neighbour (a much
+        fainter neighbour cannot shift its centroid by arcseconds, so it only earns the "crowded" flag).
     `rejected`, if a list, receives (reason, summary dict) for each rejected candidate (diagnostics)."""
     if not tracks:
         return []
@@ -1130,6 +1215,12 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
                 d.update({k: f[k] for k in ("ra", "dec", "pm", "pm_snr", "chi2r")})
             rejected.append((reason, d))
 
+    mb1 = np.asarray(vs["w1"], float).copy() if "w1" in vs else np.full(len(t), np.nan)
+    mb2 = np.asarray(vs["w2"], float).copy() if "w2" in vs else np.full(len(t), np.nan)
+    if "w1lim" in vs:
+        mb1[np.asarray(vs["w1lim"], bool)] = np.nan
+    if "w2lim" in vs:
+        mb2[np.asarray(vs["w2lim"], bool)] = np.nan
     movers = []
     for c in cand:
         rows = tracks[c]
@@ -1167,10 +1258,10 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
         if coverage < MIN_COVERAGE:
             reject("coverage", c, f)
             continue
-        nb = atree.query_ball_point(np.column_stack([x[kr], y[kr], vis[kr] * 1.0e7]), CROWD_RADIUS,
-                                    return_length=True)
-        frac_crowd = float(np.mean(nb > 1))
-        if frac_crowd >= CROWD_FRAC and f["pm"] / 1000.0 * f["span_yr"] < 2 * CROWD_RADIUS:
+        nbl = atree.query_ball_point(np.column_stack([x[kr], y[kr], vis[kr] * 1.0e7]), CROWD_RADIUS)
+        frac_crowd = float(np.mean([len(l) > 1 for l in nbl]))
+        frac_blend = float(np.mean([any(i != j and _can_blend(i, j, mb1, mb2) for i in l) for j, l in zip(kr, nbl)]))
+        if frac_blend >= CROWD_FRAC and f["pm"] / 1000.0 * f["span_yr"] < 2 * CROWD_RADIUS:
             reject("blend", c, f)   # never moved clear of its neighbour: centroid shifts of a blend
             continue
         # final fit with the leave-one-visit-out (jackknife) error: robust to a few bad visits
@@ -1232,6 +1323,20 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
     for i, m in enumerate(movers):
         m["id"] = f"{k5}-{i + 1:04d}"
     return [{"id": m.pop("id"), **m} for m in movers]
+
+
+BLEND_DMAG = 2.5       # mag: a neighbour fainter than this (flux ratio < 0.1) cannot pull a centroid by arcsecs
+
+
+def _can_blend(i, j, m1, m2, dmag=BLEND_DMAG):
+    """True if source i is bright enough to blend with source j: not more than `dmag` fainter in a band both
+    were detected in (W2 first). A faint field star a few arcsec from a bright mover cannot shift the mover's
+    centroid by the arcseconds a blend chimera needs, so it must not get a real mover rejected. With no common
+    band the pair counts as a possible blend (conservative)."""
+    for m in (m2, m1):
+        if np.isfinite(m[i]) and np.isfinite(m[j]):
+            return bool(m[i] < m[j] + dmag)
+    return True
 
 
 def _leaves_tile(k5, f):
