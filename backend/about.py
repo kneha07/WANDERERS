@@ -9,6 +9,9 @@ import hashlib
 import json
 import math
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from urllib.parse import quote
 
 import requests
@@ -19,7 +22,8 @@ from backend import spherex
 from backend.spherex import read_cache, sesame_resolver, write_json
 
 CACHE_DIR = spherex.CACHE_DIR
-ABOUT_VERSION, ABOUT_MAX_AGE_S = 1, 30 * 86400
+ABOUT_VERSION, ABOUT_MAX_AGE_S = 2, 30 * 86400  # version 2: position answers have fast_movers
+ABOUT_DEGRADED_AGE_S = 3600  # a position answer whose fast-mover search failed is rebuilt after an hour
 # -oxpI: XML with proper motion, parallax, spectral type, number of papers (nrefs) and all identifiers (aliases).
 SESAME_FULL = tuple(u.replace("/-oxp/", "/-oxpI/") for u in spherex.SESAME_URLS)
 SIMBAD_TAP = ("https://simbad.cds.unistra.fr/simbad/sim-tap/sync", "https://simbad.cfa.harvard.edu/simbad/sim-tap/sync")
@@ -30,6 +34,9 @@ TIE_ARCSEC = 1  # objects this close to the nearest one count as the same place 
 PLANET_TYPES = {"Pl"}  # SIMBAD's planet type ("Pl?": planet candidate)
 FAST_MAS_YR = 1000  # a proper motion above 1"/yr moves a star out of the 5" cone between J2000 and now
 FAST_SEARCH_ARCSEC, FAST_NEAR_ARCSEC = 300, 60  # fast movers within 300" whose path passes within 60" (NM2)
+FAST_HERE_ARCSEC = 5  # no hint when the typed position is where the star is now
+FAST_TIMEOUT_S = 6  # the fast-mover search runs next to the other lookups and gets at most this long
+_pool = ThreadPoolExecutor(4, thread_name_prefix="about")  # shared: a slow search finishes on its own after the cap
 # Identifiers worth showing, in this order (SIMBAD lists 50 or more for a famous star).
 ALIAS_ORDER = ("NAME ", "HD ", "HIP ", "GJ ", "2MASS ", "Gaia DR3 ", "WISEA ", "LHS ", "TYC ")
 
@@ -216,7 +223,8 @@ def path_near(ra0, dec0, pmra, pmdec, ra, dec):
 def fast_movers(ra, dec):
     """SIMBAD stars faster than 1"/yr whose path (1990-2030) passes within FAST_NEAR_ARCSEC of ra, dec: typed
     coordinates from an old catalogue can be where such a star was, not where it is. [{name, pm_arcsec_yr,
-    sep_arcsec (in 2026)}], nearest path first; [] when SIMBAD does not answer (it is only a hint)."""
+    sep_arcsec (in 2026)}], nearest path first, without a star that is now within FAST_HERE_ARCSEC (the position is
+    already right). None when SIMBAD does not answer: unknown, not "no fast mover"."""
     query = (f"SELECT TOP 20 main_id, ra, dec, pmra, pmdec FROM basic WHERE 1 = CONTAINS(POINT('ICRS', ra, dec), "
              f"CIRCLE('ICRS', {ra}, {dec}, {FAST_SEARCH_ARCSEC / 3600})) AND pmra * pmra + pmdec * pmdec > {FAST_MAS_YR ** 2}")
     for url in SIMBAD_TAP:
@@ -234,11 +242,11 @@ def fast_movers(ra, dec):
                 closest, now = path_near(ra0, dec0, pmra, pmdec, ra, dec)
             except (ValueError, TypeError, ZeroDivisionError):  # a row without a full position or motion
                 continue
-            if closest <= FAST_NEAR_ARCSEC:
+            if closest <= FAST_NEAR_ARCSEC and now > FAST_HERE_ARCSEC:
                 near.append((closest, {"name": PREFIX.sub("", " ".join(name.split())),
                                        "pm_arcsec_yr": round(math.hypot(pmra, pmdec) / 1000, 2), "sep_arcsec": round(now)}))
         return [f for _, f in sorted(near, key=lambda c: c[0])]
-    return []
+    return None
 
 
 def simbad_near(ra, dec):
@@ -295,6 +303,8 @@ def build_about(q, ra, dec, pm=None, epoch=None):
     """(answer, failed): failed is True when a source did not answer (the answer is then not cached).
     pm (pmra, pmdec in mas/yr) and epoch (Julian year of ra, dec): a fast mover is also looked for at J2000."""
     notes, sources, failed, name = [], [], False, q
+    # The fast-mover hint runs next to the other lookups, so it adds at most FAST_TIMEOUT_S to a position answer.
+    movers, t0 = (_pool.submit(fast_movers, ra, dec), time.monotonic()) if q is None else (None, None)
     if q is None:
         try:
             fast = bool(pm) and epoch is not None and math.hypot(*pm) > FAST_MAS_YR
@@ -339,6 +349,14 @@ def build_about(q, ra, dec, pm=None, epoch=None):
     history = history_sentence(page.get("extract")) if page else None
     if page:
         sources.append({"label": f"Wikipedia: {page['title']}", "url": page_url})
+    fast = []
+    if movers is not None:
+        try:
+            fast = movers.result(timeout=max(0.0, FAST_TIMEOUT_S - (time.monotonic() - t0)))
+        except FuturesTimeout:
+            fast = None
+        if fast is None:
+            notes.append("The search for fast-moving stars near this position did not finish, so that hint is missing.")
     return {
         "name": shown,
         "object_type": kind,
@@ -351,19 +369,19 @@ def build_about(q, ra, dec, pm=None, epoch=None):
         "papers": facts and facts["papers"],
         "sources": sources,
         "notes": notes,
-        "fast_movers": fast_movers(ra, dec) if q is None else [],
+        "fast_movers": fast,  # None: the search failed (the answer is then kept one hour only)
     }, failed
 
 
 def get_about(q=None, ra=None, dec=None, pmra=None, pmdec=None, epoch=None):
     """GET /api/about: by name (q) or by position (ra, dec in degrees, at epoch with proper motion pmra, pmdec when
-    known). Served from the disk cache for 30 days."""
+    known). Served from the disk cache for 30 days, or one hour when the fast-mover search failed."""
     pm = (pmra, pmdec) if pmra is not None and pmdec is not None else None
     key = (["q", " ".join(q.split()).casefold()] if q is not None
            else ["pos", round(ra, 5), round(dec, 5), pm and [round(pm[0]), round(pm[1])], epoch])
     path = CACHE_DIR / f"about-{hashlib.sha256(json.dumps([ABOUT_VERSION, *key]).encode()).hexdigest()[:32]}.json"
     cached, age = read_cache(path)
-    if cached is not None and age <= ABOUT_MAX_AGE_S:
+    if cached is not None and age <= (ABOUT_MAX_AGE_S if cached.get("fast_movers") is not None else ABOUT_DEGRADED_AGE_S):
         return cached
     answer, failed = build_about(q, ra, dec, pm, epoch)
     if not failed:  # a missing source is tried again on the next request

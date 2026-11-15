@@ -1,4 +1,8 @@
 """'About this star' (backend/about.py): catalog facts in words, one Wikipedia history sentence. No network."""
+import math
+import os
+import time
+
 import pytest
 
 from backend import about
@@ -168,7 +172,8 @@ def test_a_position_without_simbad_says_what_is_missing(net):
     services["sim-tap"] = about.requests.Timeout("SIMBAD is down")
     a = about.get_about(ra=150.0, dec=2.2)
     assert (a["name"], a["facts_sentence"], a["history_sentence"]) == (None, None, None)
-    assert a["notes"] == ["SIMBAD did not answer, so the object at this position is not known here."]
+    assert a["notes"] == ["SIMBAD did not answer, so the object at this position is not known here.",
+                          "The search for fast-moving stars near this position did not finish, so that hint is missing."]
 
 
 # ---- which object a position means ----
@@ -229,3 +234,50 @@ def test_a_typed_position_names_the_fast_mover_whose_path_crosses_it(net):
     services["sim-tap"] = simbad
     a = about.get_about(ra=133.795129, dec=-7.245147)
     assert a["fast_movers"] == [{"name": "WISEA J085510.74-071442.5", "pm_arcsec_yr": 8.15, "sep_arcsec": 127}]
+
+
+def test_a_failed_fast_mover_search_is_said_and_kept_one_hour_only(net, tmp_path):
+    services, _ = net
+    calls = {"fast": 0}
+    def simbad(params):
+        if "pmra * pmra" in params["QUERY"]:
+            calls["fast"] += 1
+            if calls["fast"] <= 2:  # both SIMBAD hosts time out on the first request
+                raise about.requests.Timeout("SIMBAD is slow")
+            return Answer(data={"data": [["WISEA J085510.74-071442.5", 133.81890825, -7.247048, -8123.7, 673.2]]})
+        return Answer(data={"data": []})
+    services["sim-tap"] = simbad
+    first = about.get_about(ra=133.795129, dec=-7.245147)
+    assert first["fast_movers"] is None  # unknown, not "none near"
+    assert any("fast-moving" in n for n in first["notes"])
+    assert about.get_about(ra=133.795129, dec=-7.245147) == first  # kept for a while: no new SIMBAD request
+    for p in tmp_path.glob("about-*.json"):  # 2 hours later the hint is looked for again
+        t = time.time() - 2 * 3600
+        os.utime(p, (t, t))
+    assert about.get_about(ra=133.795129, dec=-7.245147)["fast_movers"][0]["sep_arcsec"] == 127
+
+
+def test_a_slow_fast_mover_search_does_not_hold_the_answer(net, monkeypatch):
+    services, _ = net
+    def simbad(params):
+        if "pmra * pmra" in params["QUERY"]:
+            time.sleep(2)  # far longer than the cap below
+        return Answer(data={"data": []})
+    services["sim-tap"] = simbad
+    monkeypatch.setattr(about, "FAST_TIMEOUT_S", 0.3)
+    t0 = time.monotonic()
+    a = about.get_about(ra=150.0, dec=2.2)
+    assert time.monotonic() - t0 < 1.5
+    assert a["fast_movers"] is None and any("fast-moving" in n for n in a["notes"])
+
+
+def test_no_hint_when_the_typed_position_is_where_the_star_is_now(net):
+    services, _ = net
+    # the star's 2026.0 position: J2000 position moved 26 years at 8"/yr to the west
+    ra0, dec0 = 133.81890825, -7.247048
+    now_ra = ra0 + (-8123.7 * 26 / 3.6e6) / math.cos(math.radians(dec0))
+    def simbad(params):
+        rows = [["WISEA J085510.74-071442.5", ra0, dec0, -8123.7, 673.2]] if "pmra * pmra" in params["QUERY"] else []
+        return Answer(data={"data": rows})
+    services["sim-tap"] = simbad
+    assert about.get_about(ra=now_ra, dec=dec0 + 673.2 * 26 / 3.6e6)["fast_movers"] == []
