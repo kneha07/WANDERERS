@@ -1,10 +1,10 @@
 # Boot and demo script
 
-Status on 2026-11-14 (afternoon): WANDERERS (the precomputed missions) and the live blink tool both run locally. The one-click start (`start.cmd` / `start.command` / `node start.js`) and the `/explore/` mode inside WANDERERS are in progress. Until they land, use "Boot today".
+Status on 2026-11-14 (evening): the one-click start and the `/explore/` mode work (tested with commit `f18c472`). The NASA-style redesign of `/explore/` is in progress on branch `feat/explore-redesign`.
 
-## Boot (target: one click)
+## Boot (one click)
 
-Once `start.js` lands:
+Needs Node.js and Python 3.11 or later. The first run installs the packages, so it takes a few minutes. Later runs take seconds.
 
 - Windows: double-click `start.cmd`.
 - macOS: double-click `start.command`.
@@ -19,12 +19,13 @@ start.js ──► backend/.venv uvicorn :8001  (live SPHEREx frames, disk cache
                                   └─► /api/frames proxy to :8001
 ```
 
-## Boot today (before the merge)
+- Open `http://localhost:8000` for the missions, and `http://localhost:8000/explore/` for the live explorer. The missions page also links to it with "Explore any patch (live) →".
+- Stop: press Ctrl+C in the start window, or close it.
+- If a port is busy: the script reuses our own servers on 8000/8001. It stops with a message if another program uses them.
 
-1. WANDERERS (static, precomputed data): `python -m http.server 8002 -d app`. Run it from a checkout of `origin/main`. Open `http://localhost:8002`.
-2. Live API: `backend/.venv/Scripts/python -m uvicorn backend.app:app --port 8000`. On macOS/Linux, use `backend/.venv/bin/python`.
-3. Live page: `npm run dev` in `web/`. Open `http://localhost:5173`.
-4. Before a demo, warm the cache: `backend/.venv/Scripts/python -m backend.precompute`.
+### Stable demo copy (while implementers work on `main`)
+
+`main` can hold half-finished work during development. For a demo, run from the worktree `.worktrees/demo` (detached at a good commit): double-click `.worktrees/demo/start.cmd`. Its `backend/.venv` and `web/node_modules` are junctions to the main checkout, so it needs no new install.
 
 ## Demo script (about 2 minutes)
 
