@@ -237,7 +237,7 @@
     $("mix").value = Math.round(R.mix * 100);
     DEEP.last = null; DEEP.op = null; NOTE = ""; note();              // the next frame sets the photographs' opacity
   }
-  let NOTE = "", HOLDS = 0, HELD = false;          // HOLDS: how many times the view was held in this visit
+  let NOTE = "";
   // The note always names what is on screen. Zoomed in, it names the survey, says it is an archive photograph,
   // and says when the direction is only approximate (no sight check, no snap to a target).
   function note() {
@@ -245,13 +245,11 @@
     const loading = DEEP.state === "loading" && (S.zoom >= 3 ? "Loading telescope photographs… " : R.sky === "deep" ? "Loading sky photographs… " : "");
     const state = loading || (R.sky === "eye" && EYE.failed ? "The star list could not be loaded. " : "");
     const scoped = t > 0 && DEEP.state === "ready";
-    if (S.hold && !HELD) HOLDS++;
-    HELD = S.hold;
     const text = [R.msg,
       scoped ? `Telescope view: ${surveyOf(R.survey).name}. Archive photograph, not live.`
         : (state + (R.sky === "deep" ? `Background: ${surveyOf(R.survey).name}. ` : "") + SkyView.LABELS[R.sky]).trim(),
       scoped && S.sensors && !F.compassFrozen && !S.snapped && "Your compass is good to a few degrees, so this is near where you point, not exactly it.",
-      S.hold && (HOLDS > 1 ? "View held." : "View held. Drag to move. Pinch out to follow the phone again."),   // the hint once
+      S.hold && (S.holds > 1 ? "View held." : "View held. Drag to move. Pinch out to follow the phone again."),   // the hint once
       // one message per problem: with no connection, that is the reason
       t > 0 && (navigator.onLine === false ? "No connection: no finer photographs." : DEEP.failed && "Telescope photographs are not reachable now."),
       pt.text].filter(Boolean).join(" · ");

@@ -299,6 +299,9 @@ test("hold mode: from 8x the view stops following the phone, and below 6x it fol
   c.setZoom(5.9);
   assert.equal(c.S.hold, false, "let go below 6x");
   assert.ok(near(c.pose(), 140, 35), `follows the phone again, got ${c.pose().az}, ${c.pose().alt}`);
+  assert.equal(c.S.holds, 1, "one hold so far");
+  c.setZoom(8);
+  assert.equal(c.S.holds, 2, "each hold is counted once (the note shows its hint on the first only)");
 });
 
 test("hold mode: one finger and the arrow keys move the held view, slower when zoomed in", async () => {

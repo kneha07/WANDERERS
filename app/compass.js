@@ -13,7 +13,7 @@ const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const F = new Orient.Fusion();
 const S = {
   targets: [], sel: null, loc: null, locNote: "location not shared yet", place: null, cities: null,
-  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, zoom: 1, hold: false, regionImg: null, lastTele: 0, buzzed: {},
+  camOn: false, sensors: false, manual: { az: 180, alt: 25 }, vfovNoCam: 60, zoom: 1, hold: false, holds: 0, regionImg: null, lastTele: 0, buzzed: {},
 };
 window.__wanderers = { F, S };   // debug handle for automated tests (feed sensor events with exact timestamps)
 // Links for checks and screenshots: ?at=2026-11-15T06:00:00Z&lat=47.6&lon=-122.3&go=1&intro=skip&cam=0&sky=eye
@@ -267,7 +267,7 @@ function updateHold() {
       const to = { az: T._az, alt: Math.max(-85, Math.min(85, T._alt)) };
       if (reduced) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
     }
-    S.hold = true;
+    S.hold = true; S.holds++;   // the count of holds in this visit: the note shows its hint on the first only
     if (navigator.vibrate) navigator.vibrate(30);
   } else if (S.hold && (S.zoom < 6 || !covered)) { RealSky.cancelDrag(); S.hold = false; S.snapped = false; ease = null; }
 }

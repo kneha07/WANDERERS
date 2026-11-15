@@ -209,15 +209,15 @@ test("with no connection the note gives one reason: 'No connection', not 'not re
   assert.doesNotMatch(c.note(), /not reachable/);
 });
 
-test("the hold hint shows on the first hold of a visit; later holds say only 'View held.'", async () => {
+test("the hold hint shows on the first hold of a visit (S.holds, counted by compass.js); later holds say only 'View held.'", async () => {
   const c = load();
   c.S.sensors = true; c.S.zoom = 12; c.frame(); await c.settle();
   const hint = "View held. Drag to move. Pinch out to follow the phone again.";
-  c.S.hold = true; c.frame();
+  Object.assign(c.S, { hold: true, holds: 1 }); c.frame();
   assert.ok(c.note().includes(hint), c.note());
   c.S.hold = false; c.frame();
   assert.ok(!c.note().includes("View held"), "not held: no hold text");
-  c.S.hold = true; c.frame();
+  Object.assign(c.S, { hold: true, holds: 2 }); c.frame();
   assert.ok(c.note().includes("View held.") && !c.note().includes(hint), c.note());
 });
 
