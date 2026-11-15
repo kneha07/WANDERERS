@@ -49,7 +49,12 @@ pipeline wrote (`target.json`), converts units, and labels values as Measured, C
 - Sky labels on the camera are **estimates** from the phone's compass, tilt, clock and location, computed with the Sky
   Compass maths in `sky.js` (with the World Magnetic Model declination). They are labelled "(est.)" on screen, with a
   banner, and every card made from them says "Sky labels estimated from phone sensors, not identified in the photo".
-  A "Labels look off?" slider lets the person correct the direction by ±30°.
+- Pointing uses the Sky Compass orientation engine (`orient.js`): the gyroscope drives movement and the compass only
+  sets north, so labels are steady, include roll and landscape, and survive the iPhone heading flip above 45°.
+- Two ways to correct north: "Line up on the Moon or a star" is Sky Compass's sight check (aim the gold crosshair at the
+  Moon, a planet or a bright star that is up, tap Set; an aim more than 20° off in height is rejected), and the
+  "Labels look off?" slider turns the labels by ±30°. The Sun is never offered. A card made after a line-up adds
+  "(north lined up by eye on …)" to its note.
 - Constellation figures are drawn from real J2000 star positions but are labelled "illustration" on cards.
 - Story and quiz numbers are read from each target's evidence card. A story or quiz whose fact is missing is not shown.
 - Movement rings on story cards are drawn only for targets whose evidence card says they moved.
@@ -58,11 +63,13 @@ pipeline wrote (`target.json`), converts units, and labels values as Measured, C
 
 ## Known limits
 
-- Sky labels were tested with simulated sensors (a synthetic camera stream, a fixed location and dispatched
-  orientation events). They have not yet been checked on a real phone under the sky. Phone compasses are often off by
-  10–30°; the full Sky Compass calibration (landmarks, Moon, wall) is not reused here, because Sky Compass is being
-  reworked in PR #82. A later change can share its calibration once that lands.
-- The field of view is assumed (63° landscape, 48° portrait), and roll is ignored, so labels are approximate at the
-  edges of the picture.
-- `stories.html` is not in the service-worker offline list (`sw.js` is also changed by PR #82).
+- Sky labels and the line-up were tested with simulated sensors (a synthetic camera stream, a fixed location and
+  dispatched orientation events), and with the same engine's unit tests. They have not yet been checked on a real phone
+  under the sky.
+- Sky Compass's four-way flat calibration and its landmark list (Seattle) are not offered on the camera page: the
+  line-up on a sky object covers the same need while the camera is open. Calibration is per page visit; it is not
+  shared between Sky Compass and Space Camera, because the gyroscope's frame starts afresh on every page.
+- The field of view is assumed (63° landscape, 48° portrait), so labels are approximate at the edges of the picture.
+- Offline: `sw.js` keeps `stories.html`, its scripts and every `target.json` after one visit; the NASA pictures
+  ("Use a NASA picture") still need a connection.
 - Through Webb and Starquakes get a mode-specific introduction; their own panels are unchanged.

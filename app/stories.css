@@ -35,6 +35,18 @@ html[data-mode="kids"] .sc-n { background: #E8A23A; color: #0B1422; }
 .sc-shutter:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .sc-nudge { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .86rem; color: var(--muted); }
 .sc-nudge[hidden] { display: none; }
+/* sight check (same idea as Sky Compass): a gold crosshair in the middle of the picture */
+.sc-aim { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border: 3px solid #F2B866; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px rgba(5, 11, 20, .55); }
+.sc-aim::before, .sc-aim::after { content: ""; position: absolute; background: #F2B866; }
+.sc-aim::before { left: 50%; top: -18px; bottom: -18px; width: 3px; margin-left: -1.5px; }
+.sc-aim::after { top: 50%; left: -18px; right: -18px; height: 3px; margin-top: -1.5px; }
+.sc-aim[hidden], .sc-fix[hidden], .sc-fix-list[hidden], .sc-aim-bar[hidden] { display: none; }
+.sc-fix { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.sc-fix-list { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+.sc-fix-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: .86rem; cursor: pointer; }
+.sc-fix-list button span { font-size: .74rem; color: var(--muted); }
+.sc-aim-bar { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sc-aim-bar p { flex: 1 1 220px; margin: 0; }
 
 /* design */
 .sc-design { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: clamp(16px, 3vw, 36px); align-items: start; }
