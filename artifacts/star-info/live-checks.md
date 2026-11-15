@@ -58,3 +58,11 @@ A scratch worktree with no root `.venv` ran `PORT=8041 LIVE_PORT=8042 node start
 app and started both servers. `POST /api/field {"ra": 150, "dec": 2.2}` (10h00m00s +02d12m00s) went through
 "Downloading images", "Measuring motion and spectrum" to `done`, tid `pos_150p0000_n2p2000`, with no
 `No module named 'pyvo'`. The scratch worktree was removed afterwards.
+
+## Round 2 fixes
+
+- Toast after a mark (PM M2): at 375 × 812 it says "See Candidates below." and sits at y 8-65 over the search bar;
+  the image (y 397-740) and the controls (y 846+) are free (`375-toast.png`). At 1440 × 900 it says "See the Task
+  tab." and sits at y 72-113 under the top bar, off the image (y 327-897) and the toolbar (`1440-toast.png`).
+- Position lookup (TL M1): SIMBAD rows are picked with planets last and the most studied object within 1" first;
+  a mark on a Gaia star faster than 1"/yr is also looked for at J2000 (tests in `backend/test_about.py`).

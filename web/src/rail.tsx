@@ -171,6 +171,10 @@ export function matchOf(r: Result, m: RaDec) {
   return { hit, known: !!hit && hit.sep < KNOWN_ARCSEC }
 }
 
+/** The toast after a mark. Below 1024 px the rail is under the flipbook, so "the Task tab" is two screens away. */
+export const markedText = (n: number, ra: number, dec: number, narrow: boolean) =>
+  `Candidate ${n} marked at ${raText(ra)} ${decText(dec)}. ${narrow ? 'See Candidates below.' : 'See the Task tab.'}`
+
 /** True while the tool runs on this computer only: its links do not open anywhere else (issue #24). */
 export const localOnly = (host = location.hostname) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host)
 

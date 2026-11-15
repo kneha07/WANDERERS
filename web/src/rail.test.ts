@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Result } from './data'
-import { localOnly, reportText } from './rail'
+import { localOnly, markedText, reportText } from './rail'
 
 const r = {
   query: "Kapteyn's Star",
@@ -25,5 +25,12 @@ describe('Talk report', () => {
   })
   it('knows which hosts are this computer only', () => {
     expect([localOnly('localhost'), localOnly('127.0.0.1'), localOnly('example.org')]).toEqual([true, true, false])
+  })
+})
+
+describe('the toast after a mark', () => {
+  it('points to the Task tab on a wide screen and to the list below on a phone', () => {
+    expect(markedText(1, 269.44642, 4.7676, false)).toBe('Candidate 1 marked at 17h 57m 47.14s +04° 46′ 03.4″. See the Task tab.')
+    expect(markedText(2, 269.44642, 4.7676, true)).toBe('Candidate 2 marked at 17h 57m 47.14s +04° 46′ 03.4″. See Candidates below.')
   })
 })

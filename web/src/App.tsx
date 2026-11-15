@@ -11,7 +11,7 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { brightGhosts, marksFromParam, marksToParam, titleOf } from './data'
 import type { Result } from './data'
 import { AboutCard, AlertIcon, Boundary, BrightnessPanel, FramesTable, MotionPanel, Panel, QualityPanel, Skeleton, TargetCard } from './panels'
-import { COLOUR_LINE, EXAMPLES, FieldGuide, TaskTab, Thumbs, Tutorial, reportText } from './rail'
+import { COLOUR_LINE, EXAMPLES, FieldGuide, TaskTab, Thumbs, Tutorial, markedText, reportText } from './rail'
 import SkyContext from './SkyContext'
 import SkyNow, { CITIES } from './SkyNow'
 import type { Here } from './SkyNow'
@@ -391,7 +391,7 @@ export default function App() {
     const p = pixelToSky(r, x, y)
     go({ marks: [...state.marks, { ra: +p.ra.toFixed(5), dec: +p.dec.toFixed(5) }] }, 'replace')
     setTab('task')
-    say(`Candidate ${state.marks.length + 1} marked at ${raText(p.ra)} ${decText(p.dec)}. See the Task tab.`)
+    say(markedText(state.marks.length + 1, p.ra, p.dec, matchMedia('(max-width: 1023px)').matches))
   }
 
   const onSubmit = (e: FormEvent) => {

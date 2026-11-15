@@ -1235,7 +1235,7 @@ tr[aria-current='true'] td:first-child {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  top: calc(72px + env(safe-area-inset-top, 0px)); /* under the sticky top bar: never over the flipbook or its controls */
   z-index: 10;
   max-width: calc(100% - 32px);
   padding: 8px 16px;
@@ -1355,6 +1355,11 @@ td .sub {
     scroll-snap-align: start;
   }
   .toast {
+    top: calc(8px + env(safe-area-inset-top, 0px)); /* the top bar scrolls away on a phone */
+    right: 16px;
+    left: 16px;
+    max-width: none;
+    transform: none;
     font-size: 0.87rem;
   }
 }
