@@ -327,6 +327,21 @@ test("hold mode: a selected target within 6 deg of the crosshair is centred, not
   assert.equal(c.S.snapped, true);
 });
 
+test("hold mode is checked every frame: it starts when the sensors start late, and over a live camera only while the photographs cover it", async () => {
+  const c = loadCompass({ intro: "fail", search: `?debug=1&at=${AT}&lat=${HERE.lat}&lon=${HERE.lon}` });
+  await c.flush(); await c.$("go").onclick();
+  c.setZoom(10);
+  assert.equal(c.S.hold, false, "no sensors yet");
+  aimPhone(c, 100, 20); c.frame();
+  assert.equal(c.S.hold, true, "the sensors started after the zoom");
+  c.S.camOn = true; c.RealSky.cover = () => 0.5; c.frame();
+  assert.equal(c.S.hold, false, "the camera shows through the photographs again (loading, failed, offline): let go");
+  c.frame();
+  assert.equal(c.S.hold, false, "and not held while the camera shows");
+  c.RealSky.cover = () => 1; c.frame();
+  assert.equal(c.S.hold, true, "covered again: held");
+});
+
 test("hold mode: a key press during the snap's glide stops the view where it is", async () => {
   const c = await phoneAt(337, 28);
   c.$("targets").querySelectorAll("button").find((b) => b.dataset.id === "r_dra").click();

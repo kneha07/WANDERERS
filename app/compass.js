@@ -247,12 +247,15 @@ function setZoom(z) {
 }
 $("zoomReset").onclick = () => setZoom(1);      // back to 1x in one step (Escape too, on a keyboard)
 // Hold mode (the mount): from 8x the phone's sensors jitter by more than the view, so the view stops following
-// the phone and uses S.manual, like drag mode. It lets go below 6x (the gap stops flicker).
+// the phone and uses S.manual, like drag mode. It lets go below 6x (the gap stops flicker). Over a live camera it
+// holds only while the photographs cover the camera, or the drawn sky would freeze over a moving picture.
+// Checked in setZoom and every frame (the sensors or the photographs can start after the zoom).
 // Snap: a selected target within 6 deg ("Locked on") is centred instead of the noisy phone pose. The view glides
 // there in 250 ms (glide(), in the draw loop), or jumps with reduced motion. A drag or a key press stops the glide.
 let ease = null;
 function updateHold() {
-  if (S.sensors && !S.hold && S.zoom >= 8) {
+  const covered = !S.camOn || RealSky.cover() === 1;
+  if (S.sensors && !S.hold && S.zoom >= 8 && covered) {
     const T = S.sel && S.targets.find((t) => t.id === S.sel.id), p = F.pointing();
     S.snapped = !!(T && T._sep != null && T._sep <= 6);
     if (p) S.manual = { az: p.az, alt: p.alt };
@@ -262,7 +265,7 @@ function updateHold() {
     }
     S.hold = true;
     if (navigator.vibrate) navigator.vibrate(30);
-  } else if (S.hold && S.zoom < 6) { S.hold = false; S.snapped = false; ease = null; }
+  } else if (S.hold && (S.zoom < 6 || !covered)) { S.hold = false; S.snapped = false; ease = null; }
 }
 function glide() {
   if (!ease) return;
@@ -343,7 +346,7 @@ function loop() { draw(); calibrationTick(); requestAnimationFrame(loop); }
 
 function draw() {
   const W = innerWidth, H = innerHeight, now = nowDate(), L = loc();
-  track(now, L); glide();
+  updateHold(); track(now, L); glide();
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.clearRect(0, 0, W, H);
   const P = pose(), f = focalPx(W, H), cx = W / 2, cy = H / 2;
