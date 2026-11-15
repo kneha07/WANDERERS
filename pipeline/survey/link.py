@@ -1178,6 +1178,9 @@ def select_movers(k5, vs, tracks, min_visits=6, min_pm=150.0, min_pm_snr=5.0, ma
         if (m1 is not None and not lim1 and m1 < SATURATION["w1"]) or \
                 (m2 is not None and not lim2 and m2 < SATURATION["w2"]):
             flags.append("saturated")
+            # saturated centroids shift with the scan direction, which alternates between the 6-monthly
+            # visits just like the parallax does: the parallax of a saturated star is not trustworthy
+            f["plx"] = f["plx_err"] = None
         if f["chi2r"] > 5:
             flags.append("high_chi2r")
         if scan_angle(f["ra"], f["dec"], f["pmra"], f["pmdec"]) < 10:

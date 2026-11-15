@@ -50,6 +50,7 @@ def test_kapteyn_recovered(kapteyn):
     assert abs(m["pmra"] - 6491.2) / 6491.2 < 0.02 and abs(m["pmdec"] + 5708.6) / 5708.6 < 0.02
     assert m["n_visits"] >= 18 and m["span_yr"] > 9
     assert "saturated" in m["flags"] and "fast_search" in m["flags"]
+    assert m["plx"] is None                       # not reported for saturated stars (scan-direction centroid shifts)
     # its 2016.0 position from the fit agrees with Gaia DR3 to ~1" (the saturated NEOWISE centroid)
     dt = 2016.0 - m["epoch"]
     ra16, dec16 = link.from_tangent(m["pmra"] / 1000 * dt, m["pmdec"] / 1000 * dt, m["ra"], m["dec"])
