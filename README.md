@@ -132,12 +132,27 @@ mindmap
 2. **Gaia "ghosts".** Circles show where every star Gaia knows about *should* be in each frame. Anything that
    moves without a ghost is unexplained.
 3. **Measured path.** The target's position is measured in every frame and compared with the catalogue motion.
+   What this does and does not show: the centroid is taken inside a small aperture (3–4 display pixels) placed at
+   the position Gaia predicts for that date, and only where the signal is at least 5σ there. So it answers "is the
+   object where the catalogue says, and how far has it moved?" — a real check of the catalogue, and what the five
+   missions rest on. It is **not** a blind search and cannot find an object no catalogue knows about. That is the
+   job of the mover search and of `pipeline/survey/`.
 4. **Infrared fingerprint.** Aperture photometry at the target in every SPHEREx image (up to 150 per target), each
    placed at the wavelength that image recorded there, gives a 0.75–5 µm spectrum. Water, methane and CO/CO₂
-   bands are marked.
+   band positions are marked.
+   **A usable spectrum exists for 5 of the 11 shipped targets**, because bright stars saturate SPHEREx and those
+   points are dropped: WISE 0855 (117 of 158 points usable), Epsilon Indi B (111 of 180), Luhman 16 (75 of 150),
+   RW Aurigae (10 of 150) and Wolf 359 (1 of 60). Barnard's Star, R Draconis, Lalande 21185, Proxima Centauri,
+   61 Cygni and Kapteyn's Star have none. Those panels say so instead of drawing a line through noise.
 5. **Brightness change.** The two SPHEREx sky surveys are compared wavelength by wavelength.
-6. **Evidence card.** Simple, stated rules turn the measurements into a classification and a confidence
-   ("3 of 3 checks support it"). No black-box score.
+6. **Evidence card.** Simple, stated rules turn the measurements into a classification and a confidence. No
+   machine-learnt score: the rules are the twenty lines of `pipeline/evidence.py` printed below.
+   One wrinkle to read correctly. The headline count ("3 of 3 checks support it") counts the **key checks for the
+   class the card chose**, which is not the same as the longer list printed underneath. A card can read "3 of 3"
+   while the list below shows five checks, two of them failing, because those two are not key checks for that
+   class. Two key checks are counter-intuitive and worth stating plainly: for a cold brown dwarf, *absence* from
+   Gaia counts as support (Gaia is a visible-light survey, so a very cold object should be missing from it), and
+   for a variable star, *not* moving counts as support. Read the printed list, not the headline.
 
 How the card decides (`pipeline/evidence.py`, most specific rule first). The same rules, every time:
 
@@ -421,7 +436,24 @@ parametric bootstrap, plus any acceleration too small to detect.
 
 **Validation** is written into every result and shown on the page:
 - **Gaia hold-out:** the model is retrained with no Gaia data and predicts where Gaia DR3 saw the star in 2016.0.
-  The miss is 36 mas for Groombridge 1830, 108 mas for Groombridge 34 and 176 mas for Barnard's Star.
+  Every shipped star carries its own number in `app/data/stars/pred/`. Across the **14 stars that have a
+  hold-out, the median miss is 210 mas and the full range is 21 to 2,021 mas**:
+
+  | Miss | Star | | Miss | Star |
+  |---|---|---|---|---|
+  | 21 mas | R Draconis | | 230 mas | Lalande 21185 |
+  | 36 mas | Groombridge 1830 | | 232 mas | Tau Ceti |
+  | 103 mas | Wolf 359 | | 257 mas | 61 Cygni |
+  | 108 mas | Groombridge 34 | | 766 mas | Lacaille 9352 |
+  | 116 mas | Luyten's Star | | 1,274 mas | Kapteyn's Star |
+  | 176 mas | Barnard's Star | | 1,304 mas | RW Aurigae |
+  | 190 mas | Epsilon Indi B | | 2,021 mas | Proxima Centauri |
+
+  The good cases are nearby stars with long, clean catalogue histories. The bad cases have a reason: RW Aurigae is
+  a blended binary in nebulosity (below), and Proxima and Kapteyn's Star have the largest parallaxes in the set, so
+  a model fitted to sparse ground-based positions has the most room to go wrong. A few shipped stars (Sirius,
+  Rigil Kentaurus) are fitted to only 4–6 catalogue rows and carry no hold-out at all; treat those paths as
+  illustrative.
 - **Learnt values vs Gaia DR3:** the learnt motion and parallax are compared with Gaia DR3's own. Proper motions agree
   to within a few mas/yr; Proxima's learnt parallax is 761 ± 103 mas against Gaia's 768.
 - **Barnard's Star** gets an acceleration term of +1.33 mas/yr² in Dec. That is its known perspective acceleration.
@@ -748,10 +780,17 @@ a candidate that a later survey run renumbers or drops is no longer counted.
 - Aperture photometry, not PSF fitting: good for the shape of a spectrum, not for precise absolute fluxes.
 - Only the cached targets run in the browser; new coordinates need `pipeline/fetch.py` (or `node server.js`).
   On the public site any other position shows the live sky map, which is one combined image, not a time-lapse.
-- A usable SPHEREx spectrum exists for only some targets: very bright stars (Barnard's Star, R Draconis and
-  others) saturate SPHEREx, and their spectra are left out on purpose.
-- The automatic "what else moved" search finds its own target in only some of the fields where the target moves;
-  the page says so, and an empty list means "nothing found", not "nothing there".
+- A usable SPHEREx spectrum exists for 5 of the 11 targets (WISE 0855, Epsilon Indi B, Luhman 16, and RW Aurigae
+  and Wolf 359 with a handful of points). Very bright stars (Barnard's Star, R Draconis and others) saturate
+  SPHEREx and their points are dropped on purpose; the panel says so rather than drawing a line through noise.
+- The per-field "what else moved" search re-finds the known mover in 8 of the 9 fields whose target moves, after
+  the known-path pairing fix. An empty list means "this search found nothing", not "nothing is there", and an
+  unconfirmed pair is never a discovery.
+- The measured path is a centroid inside a small aperture placed at the catalogue-predicted position, so
+  "measured motion agrees with the catalogue" is a consistency check, not an independent detection.
+- Distances on the cards are 1/parallax with no error bar. For nearby stars that is fine; for R Draconis
+  (parallax 1.25 mas, a Mira whose photocentre moves) the figure is indicative only and the digits past the
+  first two are not meaningful.
 - In single NEOWISE exposures the brightest stars saturate: their frames are marked "saturated" and give no
   position (61 Cygni, R Draconis).
 - The public static site shows only the prepared targets. With `node server.js` (or `node start.js`), new coordinates are prepared on demand, and `/explore/` shows any patch live.
