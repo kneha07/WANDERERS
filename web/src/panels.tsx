@@ -5,7 +5,7 @@ import { brightnessChange, dateOf, frameNotes, monthTicks, motionOf, motionSente
 import type { Frame, Phot, Result } from './data'
 import { decText, raText, skyToPixel } from './sky'
 import type { RaDec } from './sky'
-import { aboutUrl, gaiaSentence, historyLine, MARK_SENTENCE, measuredSentence, onTarget } from './about'
+import { aboutUrl, aboutWhere, gaiaSentence, historyLine, LICENSE_URL, MARK_SENTENCE, measuredSentence, onTarget } from './about'
 import type { About } from './about'
 
 // ---------- shared pieces ----------
@@ -95,7 +95,7 @@ const aboutAnswers = new Map<string, Promise<About>>() // url -> answer: a tab s
 function fetchAbout(url: string) {
   let p = aboutAnswers.get(url)
   if (!p) {
-    p = fetch(url).then(async (res) => {
+    p = fetch(url, { signal: AbortSignal.timeout(20_000) }).then(async (res) => {
       const body = await res.json().catch(() => null)
       if (!res.ok || !body) throw new Error(body?.detail ?? `HTTP ${res.status}`)
       return body as About
@@ -111,7 +111,8 @@ function fetchAbout(url: string) {
 export function AboutCard({ r, mark }: { r: Result; mark?: RaDec }) {
   const at = mark ? skyToPixel(r, mark) : (r.frames.find((f) => f.ring)?.ring ?? { x: r.size_px / 2, y: r.size_px / 2 })
   const self = !mark || onTarget(r, at)
-  const url = self ? (r.name ? aboutUrl({ q: r.query }) : aboutUrl(r.center)) : aboutUrl(mark!)
+  const hit = nearestGaia(r, r.gaia, at)
+  const url = self && r.name ? aboutUrl({ q: r.query }) : aboutUrl(aboutWhere(self ? r.center : mark!, hit, r.gaia))
   const [got, setGot] = useState<{ url: string; data?: About; error?: string }>({ url: '' })
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
@@ -134,7 +135,7 @@ export function AboutCard({ r, mark }: { r: Result; mark?: RaDec }) {
     : error
       ? 'The catalog facts did not load.'
       : !byName && r.gaia
-        ? gaiaSentence(nearestGaia(r, r.gaia, at), r.gaia.release)
+        ? gaiaSentence(hit, r.gaia.release)
         : failed
           ? 'The catalogs did not answer, so its facts are missing for now.'
           : byName
@@ -153,14 +154,20 @@ export function AboutCard({ r, mark }: { r: Result; mark?: RaDec }) {
               {bar(90)}
               {bar(55)}
             </>
+          ) : error ? (
+            'History unavailable right now.'
           ) : (
             <>
               {history.text}
-              {history.credit && (
+              {history.license && (
                 <>
-                  {' '}
+                  {' — '}
                   <a href={history.url} target="_blank" rel="noreferrer">
-                    {history.credit}
+                    Wikipedia
+                  </a>
+                  ,{' '}
+                  <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+                    {history.license}
                   </a>
                 </>
               )}

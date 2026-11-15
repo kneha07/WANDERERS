@@ -105,7 +105,8 @@ class Answer:
 
 @pytest.fixture
 def net(tmp_path, monkeypatch):
-    """Fake services: a dict of URL part -> answer (or an exception to raise). Records the URLs asked."""
+    """Fake services: a dict of URL part -> answer, an exception to raise, or a function (params -> answer).
+    Records the URLs asked."""
     services, asked = {}, []
     def get(url, params=None, **kw):
         asked.append((url, kw.get("headers")))
@@ -113,7 +114,7 @@ def net(tmp_path, monkeypatch):
             if part in url:
                 if isinstance(answer, Exception):
                     raise answer
-                return answer
+                return answer(params) if callable(answer) else answer
         return Answer(404)
     monkeypatch.setattr(about.requests, "get", get)
     monkeypatch.setattr(about.spherex.requests, "get", get)
@@ -154,7 +155,7 @@ def test_without_wikipedia_the_answer_says_so_and_is_not_cached(net, tmp_path):
 
 def test_a_clicked_position_asks_simbad_which_object_is_there(net):
     services, asked = net
-    services.update({"sim-tap": Answer(data={"data": [["NAME Barnard's star", 0.0001]]}),
+    services.update({"sim-tap": Answer(data={"data": [["NAME Barnard's star", "BY*", 924, 0.0001]]}),
                      "nph-sesame": Answer(content=BARNARD_XML.encode()), "page/summary/Barnard": Answer(data=BARNARD_PAGE)})
     a = about.get_about(ra=269.452077, dec=4.693365)
     assert (a["name"], a["papers"]) == ("Barnard's Star", 924)
@@ -167,3 +168,41 @@ def test_a_position_without_simbad_says_what_is_missing(net):
     a = about.get_about(ra=150.0, dec=2.2)
     assert (a["name"], a["facts_sentence"], a["history_sentence"]) == (None, None, None)
     assert a["notes"] == ["SIMBAD did not answer, so the object at this position is not known here."]
+
+
+# ---- which object a position means ----
+
+def test_a_star_wins_over_its_planet_at_the_same_position():
+    # SIMBAD puts Barnard's Star c at its star's position: a tie at 0.0". The star is what the user means.
+    rows = [["NAME Barnard's Star c", "Pl", 3, 0.0], ["NAME Barnard's star", "BY*", 924, 0.0]]
+    assert about.pick_object(rows) == "NAME Barnard's star"
+
+
+@pytest.mark.parametrize("rows, picked", [
+    ([["A b", "Pl", 1, 0.0], ["A", "*", 50, 0.2 / 3600]], "A"),  # a planet nearer by 0.2": still the star
+    ([["A", "**", 300, 0.0], ["A B", "BD*", 20, 0.5 / 3600]], "A"),  # within 1": the most studied one
+    ([["Near", "*", 2, 0.5 / 3600], ["Far", "*", 900, 3.0 / 3600]], "Near"),  # 2.5" apart: the nearest one
+    ([["A b", "Pl?", 1, 0.0]], "A b"),  # a planet when nothing else is there
+    ([], None),
+])
+def test_the_picked_object_is_near_and_not_a_planet(rows, picked):
+    assert about.pick_object(rows) == picked
+
+
+def test_a_gaia_position_moved_back_to_j2000_is_simbads_position():
+    # Barnard's Star: Gaia DR3 position at epoch 2016.0 and proper motion -> SIMBAD's J2000 position 269.452077 4.693365
+    ra, dec = about.j2000(269.44850252543836, 4.739420051112412, -801.551, 10362.394, 2016.0)
+    assert (ra, dec) == pytest.approx((269.452077, 4.693365), abs=2e-6)
+
+
+def test_a_mark_on_a_fast_mover_finds_its_star_at_the_j2000_position(net):
+    services, _ = net
+    def simbad(params):  # SIMBAD lists Barnard's Star only at its J2000 position, 47" from its Gaia 2016 position
+        here = "269.45207" in params["QUERY"] and "4.69336" in params["QUERY"]
+        return Answer(data={"data": [["NAME Barnard's star", "BY*", 924, 0.0]] if here else []})
+    services.update({"sim-tap": simbad, "nph-sesame": Answer(content=BARNARD_XML.encode()),
+                     "page/summary/Barnard": Answer(data=BARNARD_PAGE)})
+    assert about.get_about(ra=269.44850253, dec=4.73942005)["name"] is None  # the plain cone misses it
+    # the Gaia DR3 position (epoch 2016.0) and proper motion that the web app sends for a mark on Barnard's Star
+    a = about.get_about(ra=269.44850253, dec=4.73942005, pmra=-801.551, pmdec=10362.394, epoch=2016.0)
+    assert a["name"] == "Barnard's Star"

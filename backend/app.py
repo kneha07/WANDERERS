@@ -57,11 +57,17 @@ def about(
     q: str | None = Query(None, min_length=1, max_length=200),
     ra: float | None = Query(None, ge=0, lt=360),
     dec: float | None = Query(None, ge=-90, le=90),
+    pmra: float | None = Query(None, ge=-20000, le=20000),
+    pmdec: float | None = Query(None, ge=-20000, le=20000),
+    epoch: float | None = Query(None, ge=1900, le=2100),
 ):
-    """'About this star': catalog facts and one history sentence, by name (q) or by position (ra, dec)."""
+    """'About this star': catalog facts and one history sentence, by name (q) or by position (ra, dec). For a
+    position, pmra/pmdec (mas/yr) and epoch (Julian year of ra, dec) let a fast mover be found at J2000 too."""
     if not ((q is not None and ra is None and dec is None) or (q is None and ra is not None and dec is not None)):
         raise HTTPException(400, "Give a name (q) or a position (ra and dec in degrees), not both.")
-    return get_about(q=checked(q)) if q is not None else get_about(ra=ra, dec=dec)
+    if q is not None:
+        return get_about(q=checked(q))
+    return get_about(ra=ra, dec=dec, pmra=pmra, pmdec=pmdec, epoch=epoch)
 
 
 @app.get("/api/frames")

@@ -7,6 +7,7 @@ Each source can be missing; the answer then says so in notes. Cached on disk for
 """
 import hashlib
 import json
+import math
 import re
 from urllib.parse import quote
 
@@ -25,6 +26,9 @@ SIMBAD_TAP = ("https://simbad.cds.unistra.fr/simbad/sim-tap/sync", "https://simb
 WIKI_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary/"
 UA = {"User-Agent": "WANDERERS-hackathon/0.1 (https://github.com/kneha07/WANDERERS)"}  # no e-mail address
 CONE_ARCSEC, TIMEOUT_S = 5, 8
+TIE_ARCSEC = 1  # objects this close to the nearest one count as the same place (a star and its components)
+PLANET_TYPES = {"Pl"}  # SIMBAD's planet type ("Pl?": planet candidate)
+FAST_MAS_YR = 1000  # a proper motion above 1"/yr moves a star out of the 5" cone between J2000 and now
 # Identifiers worth showing, in this order (SIMBAD lists 50 or more for a famous star).
 ALIAS_ORDER = ("NAME ", "HD ", "HIP ", "GJ ", "2MASS ", "Gaia DR3 ", "WISEA ", "LHS ", "TYC ")
 
@@ -175,11 +179,35 @@ def catalog_facts(name):
             "aliases": [" ".join(a.text.split()) for a in hit.findall("alias") if a.text], "mirror": hit.get("mirror")}
 
 
+def pick_object(rows):
+    """The object that a position means, from SIMBAD rows [main_id, otype, nbref, distance in degrees], or None.
+
+    SIMBAD gives a planet its star's position (Barnard's Star c sits at Barnard's Star), so a plain nearest-first pick
+    can name the planet. A planet counts only when nothing else is in the cone; among the objects within 1" of the
+    nearest one, the most studied wins (a star before its components).
+    """
+    others = [r for r in rows if (r[1] or "").rstrip("?") not in PLANET_TYPES]
+    rows = others or rows
+    if not rows:
+        return None
+    nearest = min(r[3] for r in rows)
+    return max((r for r in rows if r[3] - nearest <= TIE_ARCSEC / 3600), key=lambda r: r[2] or 0)[0]
+
+
+def j2000(ra, dec, pmra, pmdec, epoch):
+    """A position at epoch (Julian year) moved back to J2000 by its proper motion (mas/yr; pmra includes cos dec).
+    SIMBAD lists positions at J2000, so a fast mover is found there, not where it is now."""
+    years = 2000.0 - epoch
+    dec0 = dec + pmdec * years / 3.6e6
+    return (ra + pmra * years / 3.6e6 / math.cos(math.radians(dec))) % 360, dec0
+
+
 def simbad_near(ra, dec):
-    """(main identifier or None, host) of the SIMBAD object nearest to ra, dec within CONE_ARCSEC.
+    """(main identifier or None, host) of the SIMBAD object that ra, dec means, within CONE_ARCSEC (pick_object).
     HTTPException(502) when no SIMBAD TAP host answers."""
-    query = (f"SELECT TOP 1 main_id, DISTANCE(POINT('ICRS', ra, dec), POINT('ICRS', {ra}, {dec})) AS d FROM basic "
-             f"WHERE 1 = CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, {CONE_ARCSEC / 3600})) ORDER BY d")
+    query = (f"SELECT TOP 20 main_id, otype, nbref, DISTANCE(POINT('ICRS', ra, dec), POINT('ICRS', {ra}, {dec})) AS d "
+             f"FROM basic WHERE 1 = CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, {CONE_ARCSEC / 3600})) "
+             "ORDER BY d")
     for url in SIMBAD_TAP:
         try:
             r = requests.get(url, params={"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "json", "QUERY": query},
@@ -188,7 +216,7 @@ def simbad_near(ra, dec):
             rows = r.json()["data"]
         except (requests.RequestException, ValueError, KeyError, TypeError):
             continue
-        return (rows[0][0] if rows else None), url.split("/")[2]
+        return pick_object(rows), url.split("/")[2]
     raise HTTPException(502, "SIMBAD did not answer")
 
 
@@ -224,12 +252,17 @@ def pick_aliases(aliases, shown):
     return out[:5]
 
 
-def build_about(q, ra, dec):
-    """(answer, failed): failed is True when a source did not answer (the answer is then not cached)."""
+def build_about(q, ra, dec, pm=None, epoch=None):
+    """(answer, failed): failed is True when a source did not answer (the answer is then not cached).
+    pm (pmra, pmdec in mas/yr) and epoch (Julian year of ra, dec): a fast mover is also looked for at J2000."""
     notes, sources, failed, name = [], [], False, q
     if q is None:
         try:
-            name, host = simbad_near(ra, dec)
+            fast = bool(pm) and epoch is not None and math.hypot(*pm) > FAST_MAS_YR
+            if fast:  # SIMBAD positions are J2000: look where the fast mover was then
+                name, host = simbad_near(*j2000(ra, dec, *pm, epoch))
+            if not fast or name is None:
+                name, host = simbad_near(ra, dec)
         except HTTPException:
             failed = True
             notes.append("SIMBAD did not answer, so the object at this position is not known here.")
@@ -282,14 +315,17 @@ def build_about(q, ra, dec):
     }, failed
 
 
-def get_about(q=None, ra=None, dec=None):
-    """GET /api/about: by name (q) or by position (ra, dec in degrees). Served from the disk cache for 30 days."""
-    key = ["q", " ".join(q.split()).casefold()] if q is not None else ["pos", round(ra, 5), round(dec, 5)]
+def get_about(q=None, ra=None, dec=None, pmra=None, pmdec=None, epoch=None):
+    """GET /api/about: by name (q) or by position (ra, dec in degrees, at epoch with proper motion pmra, pmdec when
+    known). Served from the disk cache for 30 days."""
+    pm = (pmra, pmdec) if pmra is not None and pmdec is not None else None
+    key = (["q", " ".join(q.split()).casefold()] if q is not None
+           else ["pos", round(ra, 5), round(dec, 5), pm and [round(pm[0]), round(pm[1])], epoch])
     path = CACHE_DIR / f"about-{hashlib.sha256(json.dumps([ABOUT_VERSION, *key]).encode()).hexdigest()[:32]}.json"
     cached, age = read_cache(path)
     if cached is not None and age <= ABOUT_MAX_AGE_S:
         return cached
-    answer, failed = build_about(q, ra, dec)
+    answer, failed = build_about(q, ra, dec, pm, epoch)
     if not failed:  # a missing source is tried again on the next request
         write_json(path, answer)
     return answer

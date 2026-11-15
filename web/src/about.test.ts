@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gaiaSentence, historyLine, measuredSentence, onTarget } from './about'
+import { aboutUrl, aboutWhere, gaiaSentence, historyLine, measuredSentence, onTarget } from './about'
 import type { About } from './about'
 
 // Barnard's Star, cached answer of 2026-11-14: frames 1 and 6 are 391.9 days apart.
@@ -57,7 +57,7 @@ describe('sentence 3: history', () => {
   const a = { history_sentence: null, history_source: null, papers: null } as unknown as About
   it('quotes the Wikipedia sentence with its licence', () => {
     const line = historyLine({ ...a, history_sentence: 'RW Aurigae B was discovered in 1944.', history_source: { title: 'RW Aurigae', url: 'u', license: 'CC BY-SA 4.0' } })
-    expect(line).toEqual({ text: '“RW Aurigae B was discovered in 1944.”', credit: '— Wikipedia, CC BY-SA 4.0', url: 'u' })
+    expect(line).toEqual({ text: '“RW Aurigae B was discovered in 1944.”', url: 'u', license: 'CC BY-SA 4.0' })
   })
   it('else counts the SIMBAD papers', () => {
     expect(historyLine({ ...a, papers: 924 }).text).toBe('SIMBAD lists 924 papers about it.')
@@ -65,6 +65,21 @@ describe('sentence 3: history', () => {
   it('else says the history is unknown', () => {
     expect(historyLine({ ...a }).text).toBe('Its history is unknown here.')
     expect(historyLine(null).text).toBe('Its history is unknown here.')
+  })
+})
+
+describe('where to ask about a position', () => {
+  const gaia = { release: 'Gaia DR3', epoch_mjd: 57388.5, stars: [] }
+  const barnard = { source_id: '4472832130942575872', ra: 269.4485025, dec: 4.739420, pmra: -801.551, pmdec: 10362.394, gmag: 8.2, xy: [] }
+  it('sends the Gaia position, epoch and proper motion of a star faster than 1″ per year', () => {
+    expect(aboutUrl(aboutWhere({ ra: 269.44642, dec: 4.7676 }, { star: barnard, sep: 0.5 }, gaia))).toBe(
+      '/api/about?ra=269.4485025&dec=4.73942&pmra=-801.551&pmdec=10362.394&epoch=2016',
+    )
+  })
+  it('sends the mark itself for a slow star or none', () => {
+    const slow = { ...barnard, pmra: 5, pmdec: -3 }
+    expect(aboutUrl(aboutWhere({ ra: 10.5, dec: -2 }, { star: slow, sep: 0.5 }, gaia))).toBe('/api/about?ra=10.5&dec=-2')
+    expect(aboutUrl(aboutWhere({ ra: 10.5, dec: -2 }, null, gaia))).toBe('/api/about?ra=10.5&dec=-2')
   })
 })
 

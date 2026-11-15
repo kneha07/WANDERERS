@@ -57,9 +57,11 @@ def test_resolve_says_plainly_when_no_object_has_the_name(monkeypatch):
 
 
 def test_about_needs_a_name_or_a_position(monkeypatch):
-    monkeypatch.setattr(api, "get_about", lambda q=None, ra=None, dec=None: {"asked": [q, ra, dec]})
-    assert get("/api/about", q="R Dra") == (200, {"asked": ["R Dra", None, None]})
-    assert get("/api/about", ra="10.5", dec="-2") == (200, {"asked": [None, 10.5, -2.0]})
+    monkeypatch.setattr(api, "get_about", lambda q=None, ra=None, dec=None, **pm: {"asked": [q, ra, dec, pm]})
+    assert get("/api/about", q="R Dra") == (200, {"asked": ["R Dra", None, None, {}]})
+    assert get("/api/about", ra="10.5", dec="-2") == (200, {"asked": [None, 10.5, -2.0, {"pmra": None, "pmdec": None, "epoch": None}]})
+    status, body = get("/api/about", ra="269.4485", dec="4.7394", pmra="-801.6", pmdec="10362.4", epoch="2016")
+    assert body["asked"][3] == {"pmra": -801.6, "pmdec": 10362.4, "epoch": 2016.0}  # a fast mover: also looked for at J2000
     for params in ({}, {"ra": "10"}, {"q": "R Dra", "ra": "1", "dec": "2"}, {"ra": "400", "dec": "0"}, {"q": "R\x07Dra"}):
         status, body = get("/api/about", **params)
         assert (status, isinstance(body["detail"], str)) == (400, True), params

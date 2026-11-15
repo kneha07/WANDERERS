@@ -1,8 +1,8 @@
 // "About this star": the answer of GET /api/about (docs/blink/api.md) and the three sentences of the card.
 // Sentence 1 and 3 come from catalogs and Wikipedia (backend/about.py); sentence 2 comes from our own SPHEREx
 // measurements in the frames answer. Pure functions, so the card can be tested without a browser.
-import { brightnessChange, compass, measuredMotion, scatteredLight } from './data'
-import type { Frame, GaiaStar, Result } from './data'
+import { brightnessChange, compass, KNOWN_ARCSEC, measuredMotion, scatteredLight, yearOf } from './data'
+import type { Frame, Gaia, GaiaStar, Result } from './data'
 
 export type About = {
   name: string | null
@@ -57,16 +57,28 @@ export function gaiaSentence(hit: { star: GaiaStar; sep: number; frame: number }
 }
 
 /** Sentence 3: the quoted Wikipedia sentence, else the SIMBAD paper count, else "unknown". */
+export const LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
+
 export function historyLine(a: Pick<About, 'history_sentence' | 'history_source' | 'papers'> | null) {
   if (a?.history_sentence && a.history_source)
-    return { text: `“${a.history_sentence}”`, credit: `— Wikipedia, ${a.history_source.license}`, url: a.history_source.url }
-  if (a?.papers) return { text: `SIMBAD lists ${a.papers.toLocaleString('en-US')} papers about it.`, credit: '', url: '' }
-  return { text: 'Its history is unknown here.', credit: '', url: '' }
+    return { text: `“${a.history_sentence}”`, url: a.history_source.url, license: a.history_source.license }
+  if (a?.papers) return { text: `SIMBAD lists ${a.papers.toLocaleString('en-US')} papers about it.`, url: '', license: '' }
+  return { text: 'Its history is unknown here.', url: '', license: '' }
 }
 
 /** The request for a target (by its typed name, or by position for typed coordinates) or for a marked candidate. */
-export const aboutUrl = (p: { q?: string; ra?: number; dec?: number }) =>
-  `/api/about?${new URLSearchParams(p.q ? { q: p.q } : { ra: String(p.ra), dec: String(p.dec) })}`
+type Where = { q?: string; ra?: number; dec?: number; pmra?: number; pmdec?: number; epoch?: number }
+export const aboutUrl = (p: Where) =>
+  `/api/about?${new URLSearchParams(Object.entries(p).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))}`
+
+/** Where to ask about a position. On a Gaia star faster than 1″/yr, send its Gaia position, epoch and proper motion:
+ * SIMBAD lists positions at J2000, and such a star has moved out of the 5″ cone since then (Barnard's Star: 270″). */
+export function aboutWhere(p: { ra: number; dec: number }, hit: { star: GaiaStar; sep: number } | null, gaia: Gaia | null | undefined): Where {
+  const s = hit?.star
+  if (gaia && s && hit.sep < KNOWN_ARCSEC && s.pmra != null && s.pmdec != null && Math.hypot(s.pmra, s.pmdec) > 1000)
+    return { ra: s.ra, dec: s.dec, pmra: s.pmra, pmdec: s.pmdec, epoch: +yearOf(gaia.epoch_mjd).toFixed(2) }
+  return { ra: p.ra, dec: p.dec }
+}
 
 /** True when a candidate mark is on the target (within 1.5 px of its predicted or measured position, or the view
  * center for typed coordinates): then the card tells about the target itself. */

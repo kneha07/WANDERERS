@@ -142,7 +142,11 @@ candidate), not both; else HTTP 400. No language model writes these facts.
 | `notes` | [string] | What is missing and why, e.g. "Wikipedia did not answer, so the history is missing." |
 
 Sources: CDS Sesame `-oxpI` (CDS, then the CfA mirror) for a name. For a position, SIMBAD TAP (CDS, then CfA)
-names the object within 5″ first. A Wikipedia page is used only when it is about the object: its title is one of the
+names the object within 5″ first: the nearest one, but a planet only when nothing else is there, and among objects
+within 1″ of the nearest the most studied one (SIMBAD gives a planet its star's position). Optional `pmra`, `pmdec`
+(mas/yr) and `epoch` (Julian year of `ra`, `dec`): for a proper motion above 1″/yr the cone is first moved back to
+J2000, where SIMBAD lists the star. The web app sends them for a mark on a Gaia star faster than 1″/yr (its Gaia
+DR3 position, epoch 2016.0). A Wikipedia page is used only when it is about the object: its title is one of the
 object's names, or its text has one, or it places the object in its constellation (astropy). Requests send the
 User-Agent `WANDERERS-hackathon/0.1 (https://github.com/kneha07/WANDERERS)`. Each source fails soft; an answer is
 cached 30 days, but not when a source failed.
