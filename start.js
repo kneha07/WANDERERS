@@ -108,15 +108,20 @@ function openBrowser(url) {
     run(py[0], [...py[1], "-m", "venv", path.join("backend", ".venv")]);
     run(VENV_PY, ["-m", "pip", "install", "-r", path.join("backend", "requirements.txt")]);
   }
-  // The root .venv: without it a field job for new coordinates fails ("No module named 'pyvo'"). Checked by
-  // importing pyvo, so a broken or half-done install is repaired on the next start.
+  // The root .venv: without it a field job for new coordinates fails ("No module named 'pyvo'") and Star Fix
+  // cannot read photos. Checked by importing pyvo, pillow_heif and tetra3, so a broken, half-done or older
+  // install is repaired on the next start.
   if (!fs.existsSync(PIPE_REQ)) console.log("\n(No pipeline/requirements.txt: skipping the root .venv; on-demand fields are off.)");
-  else if (!fs.existsSync(PIPE_PY) || spawnSync(PIPE_PY, ["-c", "import pyvo"], { stdio: "ignore" }).status !== 0) {
-    step("Setting up the Python environment for on-demand fields (.venv, pipeline/requirements.txt), once");
+  else if (!fs.existsSync(PIPE_PY) || spawnSync(PIPE_PY, ["-c", "import pyvo, pillow_heif, tetra3"], { stdio: "ignore" }).status !== 0) {
+    step("Setting up the Python environment for on-demand fields and Star Fix (.venv, pipeline/requirements.txt), once");
     const py = fs.existsSync(PIPE_PY) ? [PIPE_PY, []] : findPython();
     if (!py) console.log("(Python 3.11 or newer is needed for on-demand fields; the rest works without it.)");
-    else if (py[0] === PIPE_PY || run(py[0], [...py[1], "-m", "venv", ".venv"], { soft: true }))
+    else if (py[0] === PIPE_PY || run(py[0], [...py[1], "-m", "venv", ".venv"], { soft: true })) {
       run(PIPE_PY, ["-m", "pip", "install", "-r", PIPE_REQ], { soft: true });
+      // The Star Fix solver. Its old Pillow pin makes pip build Pillow from source, which fails on Windows;
+      // what it really needs (numpy, scipy, pillow) is in requirements.txt.
+      run(PIPE_PY, ["-m", "pip", "install", "--no-deps", "cedar-solve==0.5.1"], { soft: true });
+    }
   }
   if (!fs.existsSync(path.join(WEB, "node_modules"))) {
     step("Installing the web app packages (web/node_modules), once");
