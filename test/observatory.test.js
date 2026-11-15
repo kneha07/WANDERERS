@@ -74,6 +74,36 @@ test("?ch= only picks a channel the target really has frames in", async () => {
   }
 });
 
+// ---------- keyboard ----------
+test("Space and the arrow keys blink the time-lapse, but leave buttons, selects and other tabs alone", async (t) => {
+  const p = open("?target=barnard");
+  t.after(p.close);
+  await p.settle(150);
+  const playing = () => p.$("play").textContent !== "▶ Blink", frame = () => p.$("frameLbl").textContent;
+  const f0 = frame();
+
+  let ev = p.key(p.$("copyLink"), " ");                        // Space on a focused button presses that button
+  assert.equal(ev.defaultPrevented, false); assert.equal(playing(), false);
+  ev = p.key(p.$("mA"), " ");                                  // ... opens a select
+  assert.equal(ev.defaultPrevented, false); assert.equal(playing(), false);
+  p.key(p.$("mA"), "ArrowRight");                              // arrows change the select, not the frame
+  assert.equal(frame(), f0);
+  p.key(p.$("sky"), "ArrowRight", { metaKey: true });          // browser shortcuts pass through
+  assert.equal(frame(), f0);
+
+  p.key(p.document.body, "ArrowRight");                        // nothing focused: step the time-lapse
+  assert.notEqual(frame(), f0);
+  ev = p.key(p.document.body, " ");
+  assert.equal(ev.defaultPrevented, true); assert.equal(playing(), true);
+  p.key(p.document.body, " "); assert.equal(playing(), false);
+
+  p.window.WANDERERS.selectTab("stars");                       // hidden time-lapse: keys belong to the Star database
+  const f1 = frame();
+  p.key(p.document.body, "ArrowRight"); p.key(p.document.body, "ArrowLeft");
+  assert.equal(frame(), f1);
+  p.key(p.document.body, " "); assert.equal(playing(), false);
+});
+
 // ---------- the coordinate box ----------
 function typeCoords(p, ra, dec) {
   p.$("raIn").value = ra; p.$("decIn").value = dec;

@@ -113,16 +113,21 @@ function openPage(page, query = "", opts = {}) {
     for (const [k, v] of Object.entries(d)) if (url.includes(k)) return typeof v === "function" ? v(url, fetched.filter((f) => f.includes(k)).length) : v;
     return 0;
   };
+  // the page's own timers, cleared on close() so a test that fails mid-blink still lets Node exit
+  const timers = new Set();
+  const later = (f, ms, ...a) => { const id = setTimeout(() => { timers.delete(id); f(...a); }, ms); timers.add(id); return id; };
+  const every = (f, ms, ...a) => { const id = setInterval(f, ms, ...a); timers.add(id); return id; };
+  const cancel = (id) => { timers.delete(id); clearTimeout(id); };
   const location = new FakeLocation("http://localhost/" + page + query);
   const fileOf = (url) => path.join(APP, decodeURIComponent(new URL(url, location.href).pathname));
   const win = {
     document: doc, location, console, URL, URLSearchParams, Promise, Math, JSON, Date, Number, String, Array, Object, Set, Map,
     Float32Array, Float64Array, Uint8Array, Uint8ClampedArray, Error, TypeError, RangeError, SyntaxError, Symbol, Proxy, Reflect, isFinite, isNaN,
-    setTimeout, clearTimeout, setInterval, clearInterval, performance,
+    setTimeout: later, clearTimeout: cancel, setInterval: every, clearInterval: cancel, performance,
     devicePixelRatio: 1, navigator: { clipboard: { writeText: async () => {} } }, prompt: () => null,
     history: { replaceState: (s, t, u) => { location.u = new URL(String(u), location.href); }, pushState: () => {} },
     matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
-    requestAnimationFrame: (f) => setTimeout(() => f(performance.now()), 16), cancelAnimationFrame: (id) => clearTimeout(id),
+    requestAnimationFrame: (f) => later(() => f(performance.now()), 16), cancelAnimationFrame: cancel,
     addEventListener: (t, f) => (winListeners[t] = winListeners[t] || []).push(f), removeEventListener() {},
     CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o && o.detail; } },
     ImageData: class { constructor(d, w, h) { this.data = d; this.width = w; this.height = h; } },
@@ -165,7 +170,7 @@ function openPage(page, query = "", opts = {}) {
     key: (target, key, extra = {}) => { const ev = { type: "keydown", key, bubbles: true, target, ...extra }; (target || body).dispatchEvent(ev); doc.dispatchEvent(ev); return ev; },
     fire: (target, type) => target.dispatchEvent({ type, bubbles: true, target }),
     settle: (ms = 50) => new Promise((r) => setTimeout(r, ms)),
-    close: () => process.off("unhandledRejection", onRejection),
+    close: () => { process.off("unhandledRejection", onRejection); timers.forEach(cancel); },
   };
 }
 
