@@ -27,7 +27,7 @@ median of a session is 3, 61 and 10 km off. Say "about 50 to 150 km, the accurac
 
 | In (build this) | Out (do not build) |
 |---|---|
-| New page `app/starfix.html`: upload, per-photo result, session fix, map | Taking the photo in the browser (owner decision, `star-fix.md` 2a) |
+| New page `app/starfix.html`: upload, one-sentence answer, map, a built-in example | Taking the photo in the browser (owner decision, `star-fix.md` 2a) |
 | `POST /api/star-fix` in `server.js`: one photo in, one JSON result out | Sky-glow "up", compass heading, hand-drawn horizon (measured: unusable) |
 | `pipeline/star_fix.py`: metadata, plate solve, position | Sun, Moon, planet sights; skyline matching; building edges |
 | Combine several photos into one fix per session, in the browser | Android "up" (those files carry no gravity vector): they give `sky_only` |
@@ -85,7 +85,8 @@ The photo never touches the disk and never leaves the machine. Nothing is stored
 | `start.js` | Install and check the solver packages (section 9). |
 | `app/starfixcore.js` | New. Pure maths, no DOM, same export pattern as `app/starcore.js`. Section 8. |
 | `app/starfix.html`, `app/starfix.js`, `app/starfix.css` | New page. Section 10. Use `brand.css` and `theme.js` like `compass.html`. |
-| `app/index.html`, `app/home.css` | Hero doors (section 10.1). Footer link to `starfix.html`. |
+| `app/data/starfix-sample.json` | New. The example that the page shows first (section 10.2). No photo is shipped. |
+| `app/index.html`, `app/home.css` | Hero: three doors (section 10.1). Footer link to `starfix.html`. |
 | `test/compass-cta.test.js` | Update the expected hero link list (section 10.1). |
 | `tests/test_star_fix.py`, `test/starfixcore.test.js`, `test/starfix-server.test.js` | New. Section 11. |
 | `docs/architecture.md`, `README.md` | Add the route, the page and the test commands. Short. |
@@ -112,6 +113,7 @@ Result JSON (Python prints exactly one line; the server relays the last stdout l
   "status": "fix",
   "lat": -38.21, "lon": 145.52,
   "utc": "2026-06-14T08:20:51Z",
+  "local": "2026-06-14T18:20:51+10:00",
   "sky": { "ra": 139.1, "dec": -72.2, "matches": 53, "constellation": "Carina" },
   "camera_alt": 52.0,
   "model": "iPhone 17 Pro",
@@ -130,6 +132,7 @@ Result JSON (Python prints exactly one line; the server relays the last stdout l
 - `gps` is the position in the file's own EXIF, rounded to 0.01 degree, or `null`. It is for the comparison only. It never feeds the estimate.
 - `warnings`: `"zone_mismatch"` when `abs(lon - 15 * offset_hours) > 45` degrees (the photo time or the file is suspect);
   `"untested_lens"` when `FocalLengthIn35mmFilm` is not between 20 and 30 (only the main camera is tested).
+- `local` is the photo's own clock time with its offset. The page shows its date.
 - Round `lat`, `lon` to 0.01 and the angles to 0.1.
 
 Server notes:
@@ -232,11 +235,13 @@ Input: the `fix` results of the page. Functions:
 | `sessions(fixes)` | Sort by `utc`. A gap of more than 60 minutes starts a new session. |
 | `combine(fixes)` | Unit vectors of the fixes; the median of each component; normalise. Returns `{lat, lon, radiusKm, outliers}`. |
 | `radiusKm` | 1 photo: `150`. 2 or more: `max(50, median distance of the photos from the combined fix)`. |
-| `outliers` | Only with 3 or more photos: a photo more than 300 km from the combined fix. Shown grey. The median already ignores it. |
+| `outliers` | Only with 3 or more photos: a photo more than 300 km from the combined fix. Its row says "Not used". The median already ignores it. |
 | `circle(lat, lon, km, n = 64)` | Points of the error circle, by the destination-point formula, for the map |
+| `describe(result, isOutlier)` | The row text for one photo: the exact sentences of the table in section 10.2 |
+| `headline(combined, city, gps, count)` | The headline, the "Usually right to about N km" line and the check line, by the rules in section 10.2 |
 
 The radius rule covers the truth in all three sample sessions (radius 53, 65 and 107 km; truth at 3, 61 and 10 km).
-Three sessions are a sanity check, not a calibration. Label the circle "typical error", not "guaranteed".
+Three sessions are a sanity check, not a calibration. So the page says "Usually right to about N km", never "within N km".
 
 ## 9. Windows rules (all verified on this machine)
 
@@ -253,48 +258,164 @@ Three sessions are a sanity check, not a calibration. Label the circle "typical 
 
 ## 10. Page design
 
+### 10.0 UX rules (the complexity budget)
+
+The feature must not make the app harder to understand. These rules decide every detail below.
+
+1. **One question per screen.** Home asks "where do you start?". Star Fix asks "which photos?". Nothing else competes.
+2. **Answer first.** The result is one sentence with a place name, then the map. Numbers and per-photo detail come after, closed by default.
+3. **Show, do not explain.** The page opens with a finished example, so nobody has to read instructions to know what will happen.
+4. **Help at the point of need.** A photo that cannot be used says why and what to do, in its own row. There is no up-front manual.
+5. **No settings, no modes, no new words.** The user never sees: plate, solve, zenith, session, outlier, EXIF, MakerNote, gravity, or "fix" outside the name "Star Fix".
+6. **Native controls.** `<input type="file">`, `<details>`, `<progress>`. No custom widgets, no library.
+7. **Never a dead end.** Without the local server the page still shows the example and says in one line how to use your own photos.
+8. **It looks like WANDERERS.** Only `brand.css` tokens and the brand typefaces. One strong element per screen; the rest stays quiet (section 10.3).
+
 ### 10.1 Entry: the home hero is the chooser (decision D1)
 
 Star Fix is a separate page, not a tab of the Observatory: it has its own task, its own input (a file) and it needs the local server.
 The entry is the existing home page. There is no extra "choose a page" screen in front of it.
 Reason: a gate adds one tap to every visit, hides the project pitch from a first-time visitor, and the hero already is that screen.
 
-Change the hero buttons (`<div class="cta">` in `app/index.html`) into three equal doors plus the "How It Works" link:
+Replace the hero buttons (`<div class="cta">` in `app/index.html`) by exactly three doors. Three equal choices, nothing else in the row.
 
-| Door | Line 1 | Line 2 | Link |
+```
+┌───────────────────────┐ ┌───────────────────────┐ ┌───────────────────────┐
+│ ◎ Explore the Sky     │ │ ◈ See it in the sky   │ │ ✦ Find where you were │
+│ Observatory · watch   │ │ Sky Compass · point   │ │ Star Fix · upload a   │
+│ 16 years of sky change│ │ your phone up         │ │ star photo            │
+└───────────────────────┘ └───────────────────────┘ └───────────────────────┘
+```
+
+| Door | Line 1 (what you get) | Line 2 (name · what you need) | Link |
 |---|---|---|---|
-| 1 | Explore the Sky | Observatory · 16 years of infrared images | `observatory.html` |
+| 1 | Explore the Sky | Observatory · watch 16 years of sky change | `observatory.html` |
 | 2 | See it in the sky | Sky Compass · point your phone up | `compass.html` (keep class `compass-cta` and its text) |
-| 3 | Find where you are | Star Fix · upload a star photo | `starfix.html` |
+| 3 | Find where you were | Star Fix · upload a star photo | `starfix.html` |
 
-All three use the two-line button style that the Sky Compass button has now (`cc-icon`, `cc-text`). Door 1 keeps `btn-primary`.
-Update the expected list in `test/compass-cta.test.js` to `["observatory.html", "compass.html", "starfix.html", "#how"]`.
-On a phone the doors stack. Each door is at least 44 px high.
+- Line 1 is the result. Line 2 is the name and the one thing the person needs. A visitor can choose without a trial click.
+- All three use the two-line button style that the Sky Compass button has now (`cc-icon`, `cc-text`), the same size. Door 1 keeps `btn-primary`: it is the default for a person who does not want to choose.
+- Move "How It Works" out of this row. It stays in the top navigation, where it is already. Four mixed buttons become three like ones.
+- No label above the row: three buttons that say what they do need no heading. On a phone the doors stack. Each door is at least 44 px high.
+- Update the expected list in `test/compass-cta.test.js` to `["observatory.html", "compass.html", "starfix.html"]`.
 
-### 10.2 `starfix.html`
+### 10.2 `starfix.html`: one column, three states
 
-One column, top to bottom:
+```
+ 1. First visit                      2. Working                         3. Done
+┌──────────────────────────────┐   ┌──────────────────────────────┐   ┌──────────────────────────────┐
+│ ◯ WANDERERS          [theme] │   │ ◯ WANDERERS          [theme] │   │ ◯ WANDERERS          [theme] │
+│ Star Fix                     │   │ Star Fix                     │   │ Star Fix                     │
+│ Find where you were, from the│   │ Find where you were, ...     │   │ Find where you were, ...     │
+│ stars in your photo.         │   │                              │   │                              │
+│ ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐  │   │ ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐  │   │ ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐  │
+│ │  [ Choose star photos ] │  │   │ │  [ Add more photos ]    │  │   │ │  [ Add more photos ]    │  │
+│ │  or drop them here      │  │   │ └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘  │   │ └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘  │
+│ └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘  │   │ Reading photo 2 of 4         │   │ 14 June 2026                 │
+│ Your photos stay on this     │   │ [=========>            ]     │   │ The stars place these photos │
+│ computer.                    │   │                              │   │ 130 km south-east of Geelong.│
+│ ▸ Which photos work?         │   │ 14 June 2026                 │   │ Usually right to about 65 km.│
+│                              │   │ The stars place this photo   │   │ ✓ Your phone's GPS recorded  │
+│ Example · 14 June 2026       │   │ 130 km south-east of Geelong.│   │   a spot 61 km from here.    │
+│ The stars place these photos │   │ Usually right to about 150 km│   │ ┌──────────────────────────┐ │
+│ 130 km south-east of Geelong.│   │ ┌──────────────────────────┐ │   │ │ map  ⌖ stars  ○ phone GPS│ │
+│ Usually right to about 65 km.│   │ │ map                      │ │   │ └──────────────────────────┘ │
+│ ✓ The phone's GPS recorded a │   │ └──────────────────────────┘ │   │ Open in OpenStreetMap        │
+│   spot 61 km from here.      │   │ ▾ Photos                     │   │ ▸ 4 photos used              │
+│ ┌──────────────────────────┐ │   │   IMG_1 ✓ Used · Carina      │   │                              │
+│ │ map  ⌖ stars  ○ phone GPS│ │   │   IMG_2 … reading            │   │ ▸ How does this work?        │
+│ └──────────────────────────┘ │   │   IMG_3   waiting            │   │ Remove my photos             │
+│ ▸ 4 photos used              │   │   IMG_4   waiting            │   │                              │
+│ ▸ How does this work?        │   │                              │   │                              │
+└──────────────────────────────┘   └──────────────────────────────┘   └──────────────────────────────┘
+```
 
-1. Header: logo link to home, theme toggle (copy from `compass.html`), title "Star Fix", one line: "Find where a photo was taken, from its stars."
-2. Upload box: a `<label>` around `<input type="file" multiple accept=".heic,.heif,.jpg,.jpeg,image/heic,image/jpeg">`, also a drop target.
-   Under it, the tip: "Use the original file from an iPhone (AirDrop, cable or iCloud). Chat apps remove the data that this needs."
-3. Photo list, one row per file: name, status, and for a fix the constellation, the position and the distance from the session fix.
-   States: waiting, solving (with elapsed seconds), fix, sky only (say what is missing), no solve ("too few stars: twilight or cloud"), error.
-4. One card per session: the date and time, "You were about here: 38.2 S, 145.5 E", the nearest city from `data/earth/cities.json`
-   (same rule as `nearestCity` in `compass.js`), "Typical error: about 60 km (4 photos)", and when the files hold GPS:
-   "Your phone's GPS says 61 km from here."
-5. Map: a `<canvas>` that draws a 40 x 20 degree window of `data/earth/day.jpg` (2048 x 1024, plate carree) centred on the fix.
-   Draw the error circle from `circle()`, a dot per photo (grey for outliers), a cross for the GPS position.
-   Under it a link "Open in OpenStreetMap" (`https://www.openstreetmap.org/?mlat=..&mlon=..#map=7/../..`, `rel="noopener noreferrer"`).
-   Mark the code: `// ponytail: 20 km per pixel and no wrap at 180 degrees; use map tiles if a sharper map is needed`.
-6. Footer line: "The stars give the place to about 50 to 150 km. GPS is 10 000 times better. This is how navigators worked before GPS."
+The example values are real (Windows probe, the four `20260614_*` photos): combined answer 39.02 S, 145.43 E, radius 66 km (shown as 65),
+61 km from the true place, nearest listed city Geelong at 134 km. The wireframe shortens the headline to fit.
+
+Parts, top to bottom:
+
+1. **Header.** Logo link to home and the theme toggle (copy from `compass.html`). Title "Star Fix". One line: "Find where you were, from the stars in your photo." The door on the home page uses the same words.
+2. **Upload.** One control: a `<label>` styled as the primary button around
+   `<input type="file" multiple accept=".heic,.heif,.jpg,.jpeg,image/heic,image/jpeg">`. The whole page is the drop target.
+   Text under it: "Your photos stay on this computer." After the first photo the button text becomes "Add more photos".
+   One closed `<details>` "Which photos work?": "Night-sky photos from an iPhone, with many stars. Use the original file (AirDrop, cable or iCloud). Chat apps remove the data that this needs."
+3. **Progress**, only while photos are read: "Reading photo 2 of 4" and a native `<progress>`. It is an `aria-live="polite"` region.
+4. **Answer block**, one per night (a "session" in the code; the user sees only the date). Newest first. Content in this order:
+   - the date of the photos, from `local`;
+   - the headline: "The stars place these photos about 130 km south-east of Geelong, Australia." (rule below);
+   - "Usually right to about 65 km." (the radius, rounded to 5 km);
+   - the check line, only when the files hold GPS (rule below);
+   - the map; then the link "Open in OpenStreetMap";
+   - a `<details>` "4 photos used" (or "3 of 4 photos used") with one row per photo. Closed when every photo was used. Open when one was not, so the reason is visible without a click.
+   - with 1 or 2 photos, one hint: "Add 2 or more photos from the same night for a better result."
+   The block appears after the first photo and updates as more arrive.
+5. **Example.** Before the user's first result, the page shows the answer block built from `app/data/starfix-sample.json`,
+   with the word "Example" before the date and a dashed rule above it. It uses the same render code. It is removed when the first real result arrives.
+6. **"How does this work?"**, one closed `<details>` at the bottom, three lines:
+   "1. The app recognises the stars in your photo. 2. Your phone stored which way was down and the exact time. 3. Together they give the one place on Earth where those stars were overhead."
+   Then: "Stars give the place to about 50 to 150 km. GPS is 10 000 times better. Navigators worked like this before GPS."
+7. **"Remove my photos"**, a text button, only after a result. It removes the user's photos and shows the example again.
+
+Words (all user text comes from `describe()` and `headline()` in `starfixcore.js`, so that one test can check it):
+
+| Case | Row text |
+|---|---|
+| `fix`, used | "Used · stars of Carina" |
+| `fix`, more than 300 km from the others | "Not used: it disagrees with the other photos" |
+| `sky_only`, `gravity` missing | "Stars recognised (Carina), but the file has no tilt data. Use the original iPhone file." |
+| `sky_only`, `time` missing | "Stars recognised (Carina), but the file has no time data. Use the original iPhone file." |
+| `sky_only`, `rear_camera` missing | "Stars recognised (Carina), but this camera is not supported. Use the main rear camera." |
+| `no_solve` | "Too few stars to recognise. Use a darker, clearer photo." |
+| `bad_file` | "This file is not a photo." |
+| above 30 MB (checked in the page) | "This file is too large (30 MB limit)." |
+| 409, 500, 504 or network error | "Could not read this photo. Add it again." |
+| warning `zone_mismatch` (added to the row) | "The place does not match the photo's time zone. The file may be edited." |
+| warning `untested_lens` (added to the row) | "Zoom or wide lens: the result may be less exact." |
+
+| Line | Rule |
+|---|---|
+| Headline | "The stars place these photos {where}." Nearest city from `data/earth/cities.json` (6204 large cities). City inside the radius: "near {city}, {country}". Else: "about {d} km {direction} of {city}, {country}", `d` rounded to 10 km, `direction` one of the 8 compass words (north, north-east, ...) from the city to the answer. One photo: "this photo"; more: "these photos". |
+| Exact position | Small text under the headline: "38.2° S, 145.5° E". |
+| Check line, GPS inside the radius | "✓ Your phone's GPS recorded a spot {d} km from here." |
+| Check line, GPS outside the radius | "Your phone's GPS recorded a spot {d} km from here. Add more photos from the same night." |
+| GPS used for the check | The `gps` of the first photo of that night that has one. |
+| Example block | Same lines, but "Your phone's GPS" reads "The phone's GPS". |
+
+Map: a `<canvas>` that draws a 40 x 20 degree window of `data/earth/day.jpg` (2048 x 1024, plate carree) centred on the answer.
+Draw only two marks, in the language of the WANDERERS emblem (`BRAND.md`): the star answer is the solid point with the four-tick reticle
+("the position measured now") inside the circle from `circle()`; the phone's GPS is a hollow ring ("recorded"). The legend is two words on the map: "stars", "phone GPS".
+No dot per photo: it adds a third mark and no decision. Give the canvas an `aria-label` that repeats the headline.
+The link under it: `https://www.openstreetmap.org/?mlat=..&mlon=..#map=7/../..`, `rel="noopener noreferrer"`.
+Mark the code: `// ponytail: 20 km per pixel and no wrap at 180 degrees; use map tiles if a sharper map is needed`.
 
 Behaviour:
 
-- Send the files one at a time, in order. A file above 30 MB is refused in the page before upload.
-- On load, `fetch("/api/health")`. When it fails, show "Star Fix needs the local server. Start it with start.cmd." and disable the upload.
-- The status row is an `aria-live="polite"` region. Everything works with the keyboard.
-- Privacy line near the upload box: "Your photos stay on this computer."
+- Send the files one at a time, in order. Adding photos during a run appends them to the queue.
+- On load, `fetch("/api/health")`. When it fails: keep the example, disable the upload button, and show next to it
+  "To use your own photos, start WANDERERS on a computer (start.cmd)."
+- Never show a status by colour alone: each row has a mark and words. Everything works with the keyboard. Both themes use the `brand.css` tokens.
+- One motion only: when a new photo changes the answer, the circle moves and resizes to its new place in about 400 ms.
+  The person sees the circle tighten as photos arrive. Skip it under `prefers-reduced-motion`. Build it last; leave it out if it needs more than about 20 lines.
+
+### 10.3 Visual direction
+
+The page is part of WANDERERS (`BRAND.md`): no new colour, typeface or component style.
+
+| Part | Rule |
+|---|---|
+| The strong element | The answer: the headline sentence and the map. Everything else is quiet. |
+| Headline | `--f-display` (Manrope), large (about `clamp(1.6rem, 4vw, 2.4rem)`), weight 700, sentence case. The place name has the same colour and weight as the rest of the sentence; do not accent one word. |
+| Other text | `--f-ui` (Inter). The exact position and the km values in `--f-mono`, as the Observatory shows measured values. |
+| Layout | One column, left aligned, `max-width: 38rem`, so that lines stay below about 70 characters. Not centred. |
+| Map | Sits on `--viewer` in both themes (brand rule: imagery sits on the viewer colour and is never recoloured). Circle and reticle in the accent colour, 1.5 px line; GPS ring in `--viewer-ink`. Ratio 2:1, full column width. |
+| Blocks | No card boxes and no shadows. A block starts with a `--line` rule and its date. The example has a dashed rule. Photo rows are a plain list with hairlines. |
+| Labels | Sentence case everywhere. No all-caps labels, no label above a heading. |
+| Buttons | The existing `btn btn-primary` for the upload; text buttons for the rest. One primary button per screen. |
+| Focus and contrast | Visible keyboard focus on every control; text contrast as the rest of the site (the tokens already meet it). |
+
+`app/data/starfix-sample.json`: the four `fix` results of the `20260614_*` photos, as `star_fix.py` returns them,
+but with `gps` set to the public value `{"lat": -38.5, "lon": 145.2}` in every entry. No photo is shipped.
 
 ## 11. Tests and acceptance criteria
 
@@ -320,8 +441,12 @@ Do not write a GPS coordinate of a sample photo into the repo. Only Phillip Isla
 | A8 | Server: empty body gives 400; a 31 MB body gives 413 or a closed connection, and `/api/health` answers after it; random bytes give 200 `bad_file` (skip when the packages are absent); no response text holds a file path | not yet built |
 | A9 | `server.js` holds no `python3` literal; `/api/star-predict` uses the same lookup as `fields.js` | #27 open |
 | A10 | Every test file that passed before still passes | run the full list |
-| A11 | In a browser at `http://localhost:8000/starfix.html`: upload the four `20260614_*` files; the page shows one session, a map with a circle, and a GPS distance. Save a screenshot to `artifacts/star-fix/page.png`. | not yet built |
-| A12 | The home hero shows three doors and each opens its page | not yet built |
+| A11 | In a browser at `http://localhost:8000/starfix.html`: upload the four `20260614_*` files. The page shows one answer block: headline with a place name, "Usually right to about N km", the GPS check line, the map with two marks. The answer is above the photo list and the list is closed. Save `artifacts/star-fix/page.png` (wide) and `page-phone.png` (390 px wide), in both themes. | not yet built |
+| A12 | The home hero row holds exactly three links, in this order: `observatory.html`, `compass.html`, `starfix.html`. "How It Works" is still in the top navigation. Each door opens its page. | not yet built |
+| A13 | First visit: the example block is visible and has the word "Example". After the first result it is gone; "Remove my photos" brings it back. With `/api/health` unreachable (open `app/starfix.html` from a static server): the example shows, the upload is disabled, and the one-line reason is visible. | not yet built |
+| A14 | `describe()` returns the exact text of section 10.2 for every case. No text from `describe()`, `headline()` or `starfix.html` holds one of: plate, solve, zenith, session, outlier, EXIF, MakerNote, gravity, or "fix" outside "Star Fix" (case-insensitive test). | not yet built |
+| A15 | `app/data/starfix-sample.json`: four entries, every `gps` is exactly `{"lat": -38.5, "lon": 145.2}`, and `combine()` of them is within 120 km of that point | not yet built |
+| A16 | `starfix.html` before upload has one primary button; the page has no horizontal scroll at 390 px; every control is reachable by Tab and shows focus | not yet built |
 
 ## 12. Build order
 
@@ -329,7 +454,7 @@ Do not write a GPS coordinate of a sample photo into the repo. Only Phillip Isla
 2. `app/starfixcore.js` + `test/starfixcore.test.js` (A6, A7).
 3. `server.js` route, `pickPython`, `test/starfix-server.test.js` (A8, A9).
 4. `start.js` and `pipeline/requirements.txt` (section 9).
-5. `app/starfix.*` page (A11).
+5. `app/starfix.*` page and `app/data/starfix-sample.json` (A11, A13 to A16). The circle motion comes last.
 6. Home hero doors, footer link, `test/compass-cta.test.js` (A12).
 7. `docs/architecture.md`, `README.md`. Full test run (A10).
 
@@ -337,7 +462,7 @@ Commit after each step.
 
 ## 13. Report format (end of the build)
 
-At most 15 lines. Line 1: `DONE` or `BLOCKED`. Then one line per criterion A1 to A12: `PASS` or `FAIL` with the command and its exit code,
+At most 25 lines. Line 1: `DONE` or `BLOCKED`. Then one line per criterion A1 to A16: `PASS` or `FAIL` with the command and its exit code,
 or the measured km. Then the commit list. Put anything longer in `artifacts/star-fix/build-report.md` and name the path.
 Report a failure as a failure.
 
@@ -349,6 +474,9 @@ Report a failure as a failure.
 | D2 | The page shows the phone's GPS next to the star fix. It is the proof that the method works. | Hide GPS fully. Then the user cannot see the error. |
 | D3 | Only original iPhone files give a fix. Other files give "sky only" with the reason. | A typed time and a hand-drawn horizon: measured 150 to 400 km at best, and more UI. |
 | D4 | The map is the Blue Marble picture that the app already ships. No map library, no tile server. | Leaflet + OpenStreetMap tiles: sharper, but a new dependency and tile requests that show the area to a third party. |
+| D5 | The page opens with a finished example (Phillip Island) instead of instructions. It also keeps the page useful on the static site. | An empty page with a how-to text: more to read, and a dead end without the server. |
+| D6 | The hero row holds only the three doors. "How It Works" stays in the top navigation. | Keep it as a fourth button: four unlike choices instead of three like ones. |
+| D7 | The user sees a place in words first ("about 130 km south-east of Geelong, Australia"); coordinates and per-photo detail are secondary and closed. | Coordinates and a table first: exact, but the person must translate them. |
 
 Open point (privacy, not part of the build): commit `72ba60f` put the 14 original photos in `star_image/` on the public `main`.
 Each file holds the exact GPS position. The tests in section 11 use these files. If the owner removes the files or strips their GPS,
