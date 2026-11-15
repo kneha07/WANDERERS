@@ -8,7 +8,9 @@
 #  - a push to main (every merged pull request);
 #  - the "classifications" workflow finishing: it commits new vote counts to main with GITHUB_TOKEN, and pushes made
 #    with that token do not start other workflows, so its completion is the signal instead;
-#  - by hand (Actions → pages → Run workflow).
+#  - by hand (Actions → pages → Run workflow);
+#  - a pull request that touches app/ or this file: it only builds and checks the Pages bundle (no deploy), so a PR
+#    shows before merging that the site packs and its entry pages are in it.
 # Only app/ is published: no pipeline, backend, tests or secrets. app/ is plain static files (no build step).
 name: pages
 on:
@@ -19,16 +21,34 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+  pull_request:
+    paths: ["app/**", ".github/workflows/pages.yml"]
 permissions:
   contents: read
 concurrency:
-  group: pages
-  cancel-in-progress: false   # never stop a deploy half-way; the next one follows
+  # deploys queue one after another and are never stopped half-way; a PR's check runs in its own group, so it can
+  # never replace a waiting deploy
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.event.number) || 'pages' }}
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Publish app/ to GitHub Pages
+  build:
+    name: Build the Pages bundle (app/)
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # workflow_run would otherwise check out the commit before the vote update; a PR checks its own commit
+        with: { ref: "${{ github.event_name == 'pull_request' && github.sha || 'main' }}" }
+      - name: Check the site's entry pages are in app/
+        run: for f in index.html observatory.html compass.html stories.html survey.html sw.js data/index.json; do test -s "app/$f" || { echo "missing app/$f"; exit 1; }; done
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: app }
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -37,10 +57,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-        with: { ref: main }    # workflow_run would otherwise check out the commit before the vote update
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: app }
       - id: deployment
         uses: actions/deploy-pages@v4
