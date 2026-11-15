@@ -60,7 +60,11 @@ test("classify.js points at the team repo's issue form and the snapshot the work
   const snap = JSON.parse(read("app/" + C.DATA_URL));
   assert.deepEqual(snap.classes, C.KEYS);
   assert.equal(snap.min_voters, C.MIN_VOTERS); assert.equal(snap.min_agreement, C.MIN_AGREEMENT);
-  assert.deepEqual(snap.objects, {}, "the shipped snapshot holds no invented votes");
+  // The workflow writes real votes here (#79); every vote names its issue, and the totals add up.
+  const votes = Object.values(snap.objects).flatMap((o) => o.votes);
+  assert.equal(snap.votes_counted, votes.length, "votes_counted matches the votes in the file");
+  assert.ok(votes.every((v) => Number.isInteger(v.issue) && v.issue > 0 && v.issue <= snap.last_issue && C.KEYS.includes(v.class)),
+    "each shipped vote comes from a numbered issue");
   assert.match(read(".github/workflows/classifications.yml"), /--out app\/data\/classifications\.json/);
 });
 
