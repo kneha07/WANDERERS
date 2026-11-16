@@ -92,7 +92,7 @@ The owner asked to fix the 3 Highs. Fixes on `feature/compass-pullout-bars`: c9a
 
 | Branch | State | Action |
 |---|---|---|
-| `feature/chinese-version` | 11 commits, no PR; Hong Kong wording check by the owner | owner decision: open a PR and review |
+| `feature/chinese-version` | 11 commits, no PR; Hong Kong wording check by the owner | owner decision: open a PR and review (#110) |
 | `docs/paid-features-plan` | local only by decision | leave |
 | `origin/docs/submission-and-credits`, `origin/docs/architecture-diagram`, `origin/chore/unify-tests` | PRs #29, #30, #20 closed without merge | leave |
 | `origin/docs/readme-honest` | older copy of `docs/readme-accuracy` (#67, merged) | superseded |
