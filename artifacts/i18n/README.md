@@ -17,7 +17,7 @@ Changing the language reloads the page. Hindi (हिन्दी) is the Indian
 
 ## Dictionary
 
-1. `en-*.json`: `en-0…3` are 1,169 strings seen at page load; `en-4…7` are 756 strings and number templates seen only after clicks (all 4 visitor modes); `en-8` is one loading message added by hand; `en-9` is 183 strings and number templates that main added after the branch base 58722d9 (Sky Compass pull-out bars and search pane, 🎓 Learn menu and its 7 modes, sight check, distance and "For scale" lines, HEASARC credits), written at the merge into main on 2026-11-15 by `.probe`-style click checks (`<lang>-9.json`).
+1. `en-*.json`: `en-0…3` are 1,169 strings seen at page load; `en-4…7` are 756 strings and number templates seen only after clicks (all 4 visitor modes); `en-8` is one loading message added by hand; `en-9` is 183 strings and number templates that main added after the branch base 58722d9 (Sky Compass pull-out bars and search pane, 🎓 Learn menu and its 7 modes, sight check, distance and "For scale" lines, HEASARC credits), written at the merge into main on 2026-11-15 from a click check of each Learn mode (`<lang>-9.json`).
 2. `<lang>-*.json`: translations by parallel translator agents; every key checked present.
 3. `python scripts/build_i18n.py` writes `app/i18n-<lang>.js` for every language found.
    Entries (strings that stay the same are dropped): zh 1,975 · ko 1,966 · vi 1,963 · hi 1,865 (Hindi keeps the 88 constellation names in English).
