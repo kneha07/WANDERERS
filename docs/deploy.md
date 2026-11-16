@@ -1,37 +1,32 @@
 # Deploy WANDERERS
 
-WANDERERS has two parts. Each part deploys in a different way.
+The site in `app/` is plain static files with committed data. It has no build step. Deploy it in one of two ways:
+
+| | 1. GitHub Pages | 2. Cloudflare Worker |
+|---|---|---|
+| Command | `node scripts/deploy.js pages` | `node scripts/deploy.js cloudflare` |
+| Updates | By itself on each merge to `main` | When you run the command |
+| Address | `https://kneha07.github.io/WANDERERS/` | `https://wanderers.<account>.workers.dev`, and your own hostname (for example `https://wanderer.johnyc.com`) |
+| Config | `.github/workflows/pages.yml` | `wrangler.jsonc` |
+| Needs | `gh`, logged in; Pages turned on once by a repo admin | A Cloudflare login (wrangler asks for it the first time) |
+| Cost | Free | Free (static asset requests are not billed) |
 
 ```mermaid
 flowchart LR
-  subgraph S["Static site: app/ (free anywhere)"]
-    H["pages, JS, committed data"]
-  end
-  subgraph L["Live server (needs a computer)"]
-    N["server.js :8000"] --> B["backend/ FastAPI :8001"]
-    N --> P["python pipeline/"]
-    N --> C["claude -p (Ask)"]
-  end
-  H -- "api/* (same address)" --> N
+  M["main (reviewed)"] --> C["node scripts/deploy.js check"]
+  C --> P["pages: gh workflow run pages.yml"] --> GP["GitHub Pages"]
+  C --> W["cloudflare: wrangler deploy"] --> CF["Cloudflare Worker 'wanderers'"]
+  M -. "each push" .-> P
 ```
 
-The pages call the server with relative paths (`fetch("api/...")`). So the live features work only when the pages
-and the server come from the same address. On a static host, `api/health` gives 404, and the page hides Ask,
-Lookup, Star Fix, new fields and the live Explore.
+Both methods publish `app/` only. They do not publish the pipeline, the backend, tests or secrets.
 
-## Pick a way
+## What a static site does not do
 
-| Way | What works | Cost | Address | Updates |
-|---|---|---|---|---|
-| **A. GitHub Pages** | Static site | Free | `https://kneha07.github.io/WANDERERS/` | By itself on each merge to `main` |
-| **B. Cloudflare Worker** | Static site | Free | `https://wanderer.johnyc.com` and `https://wanderers.<account>.workers.dev` | When you run the script |
-| **C. Your computer + tunnel** | Everything | Free | Random `*.trycloudflare.com`, or your own hostname | Live; up only while the computer runs |
-
-Use A or B for the permanent link. Use C only for a demo of the live features.
-
-Do not host the server on Vercel or a normal Worker. The server starts Python jobs, keeps jobs in memory and
-writes into `app/data/`. Serverless hosts cannot do this. Cloudflare Containers can run it, but they need the paid
-Workers plan. Get the owner's approval before you use a paid plan.
+The pages call the live server with relative paths (`fetch("api/...")`). On a static host, `api/health` gives
+404, so the page hides these features: Ask, Lookup of new coordinates, Star Fix upload, new fields, and the live
+Explore. All committed targets, stars, stories and the Sky Compass work. To use the live features, run
+`node start.js` on your computer and open `http://localhost:8000`.
 
 ## Before every deploy
 
@@ -44,86 +39,77 @@ Workers plan. Get the owner's approval before you use a paid plan.
    ```bash
    node scripts/deploy.js check
    ```
-   The script checks the same entry pages as `.github/workflows/pages.yml`.
+   This checks the entry pages that `.github/workflows/pages.yml` also checks. Both deploy commands run it first.
 
-## A. GitHub Pages (automatic)
+## 1. GitHub Pages
 
-`.github/workflows/pages.yml` publishes `app/` on each push to `main`. It also publishes after each vote count,
-and when you start it by hand (Actions → pages → Run workflow).
+`.github/workflows/pages.yml` publishes `app/` by itself:
+- on each push to `main` (each merged pull request);
+- after each vote count (the `classifications` workflow);
+- on a pull request that changes `app/`, it only builds and checks the bundle, with no publish.
 
-One-time setup by a repository admin: Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-Until then, the deploy step fails with "Pages site not found".
+### One-time setup (repository admin)
 
-The fork copy `rajryadav4.github.io/wanderers` does not update by itself. Its owner must sync the fork.
+Settings → Pages → Build and deployment → Source: **GitHub Actions**.
+Until then, the publish step fails with "Pages site not found", and `node scripts/deploy.js pages` stops with
+the same instruction.
 
-## B. Cloudflare Worker (static)
+### Deploy now
 
-`wrangler.jsonc` makes a Worker named `wanderers` that serves `app/` as static assets.
-
-1. Deploy:
+1. Start the workflow for `main`:
    ```bash
-   node scripts/deploy.js static
+   node scripts/deploy.js pages
+   ```
+2. Follow the run until it ends:
+   ```bash
+   gh run watch
+   ```
+3. Open the address in Settings → Pages.
+
+You can also start it in the browser: Actions → pages → Run workflow.
+
+The fork copy `rajryadav4.github.io/wanderers` is a different site. Its owner must sync the fork to update it.
+
+## 2. Cloudflare Worker
+
+`wrangler.jsonc` makes a Worker named `wanderers` that serves `app/` as static assets, with no server code.
+
+### Deploy
+
+1. Publish `app/`:
+   ```bash
+   node scripts/deploy.js cloudflare
    ```
    The first time, wrangler opens a browser to log in to Cloudflare.
-2. Check the address that wrangler prints (`https://wanderers.<account>.workers.dev`).
-3. Optional, one time: attach your own hostname. In the Cloudflare dashboard, open Workers → `wanderers` →
-   Settings → Domains & Routes → Add → Custom domain. The zone must be on Cloudflare. Delete any old DNS record
-   on that hostname first. The custom domain stays across deploys.
+2. Open the address that wrangler prints, for example `https://wanderers.<account>.workers.dev`.
 
-Notes:
+### Own hostname (one time)
+
+1. Make sure the domain's zone is on Cloudflare.
+2. Delete any old DNS record on the hostname.
+3. In the Cloudflare dashboard, open Workers → `wanderers` → Settings → Domains & Routes → Add → Custom domain.
+4. Type the hostname, for example `wanderer.johnyc.com`.
+
+The custom domain stays across deploys.
+
+### Undo a bad deploy
+
+```bash
+npx wrangler@4 rollback
+```
+
+### Notes
+
 - A link that ends in `.html` redirects to the clean path, for example `/compass.html` → `/compass`.
 - Each file must be 25 MiB or less. The free plan allows 20,000 files.
-- To undo a bad deploy, run `npx wrangler@4 rollback`.
 
-## C. Your computer + Cloudflare tunnel (full app)
+## Check a deploy
 
-Use this for a demo of Ask, Lookup, Star Fix and Explore, for example from a phone.
+| Check | Expected |
+|---|---|
+| `/` | 200, title "WANDERERS · The sky is never still" |
+| `/compass.html` (Pages) or `/compass` (Cloudflare) | 200 |
+| `/api/health` | 404 (static site, live features hidden) |
 
-1. Install `cloudflared` once:
-   ```bash
-   winget install Cloudflare.cloudflared
-   ```
-   On macOS, use `brew install cloudflared`.
-2. Start the app and keep its window open:
-   ```bash
-   node start.js
-   ```
-3. In a second window, start the tunnel:
-   ```bash
-   node scripts/deploy.js tunnel
-   ```
-4. Open the `https://….trycloudflare.com` address that it prints, on any device.
-
-The address is HTTPS, so the phone compass and motion sensors work. The address changes each time.
-
-### A fixed hostname (named tunnel)
-
-1. In the Cloudflare dashboard, open Zero Trust → Networks → Tunnels → Create a tunnel (type Cloudflared).
-2. Add a public hostname, for example `wanderer.example.com`, with service `http://localhost:8000`.
-3. Copy the tunnel token into a file outside the repo, for example `~/.cloudflared/wanderers.token`.
-   Never commit the token.
-4. Run the tunnel with the token file:
-   ```bash
-   TUNNEL_TOKEN_FILE=~/.cloudflared/wanderers.token node scripts/deploy.js tunnel
-   ```
-
-A hostname can point at a tunnel or at a Worker, not at both. To change from way B to way C, remove the Worker's
-custom domain first. To change back, delete the tunnel's DNS record first.
-
-### Know before you share the address
-
-- The site is up only while the computer is awake, online, and both windows run. A closed lid stops it.
-- Anyone with the address can use the Ask box. Each question uses the Claude login on that computer.
-- Anyone with the address can start Python jobs on that computer. Jobs run one at a time, so others get `409`.
-  See issue #81.
-- To stop, press Ctrl+C in both windows. For a named tunnel you do not need again, delete it in the dashboard.
-
-## Problems
-
-| What you see | Cause | Fix |
-|---|---|---|
-| Star Fix says "Could not read this photo." for a good photo | The server started before a merge, so `/api/star-fix` gives 404 (issue #84). | Stop `start.js` and start it again after each pull. |
-| Star Fix fails with `No module named 'pillow_heif'` or `'tetra3'` | The root `.venv` setup stopped half way. | Run `node start.js` again. It repairs the `.venv`. |
-| The live features do not show | The page cannot reach `api/health`. | On way A or B this is normal. On way C, check that `start.js` runs. |
-| New pages do not show on the phone | The browser has the old page. | Reload the page. The service worker gets pages from the network first. |
-| `cloudflared` is not found in an open window | A new install is not yet on the PATH. | Open a new window. The script also looks in `C:/Program Files (x86)/cloudflared/`. |
+New pages show on phones at once. The service worker gets pages from the network first. If a phone shows an old
+page, reload it.

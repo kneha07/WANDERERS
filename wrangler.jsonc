@@ -1,4 +1,4 @@
-// Cloudflare Worker that serves the static site (app/) with no server code. Deploy: node scripts/deploy.js static
+// Cloudflare Worker that serves the static site (app/) with no server code. Deploy: node scripts/deploy.js cloudflare
 // Free: static asset requests on Workers are not billed. The api/ routes answer 404, so the page hides the live features.
 // A custom domain (for example wanderer.johnyc.com) is attached once in the Cloudflare dashboard and stays across deploys.
 // See docs/deploy.md.

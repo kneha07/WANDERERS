@@ -1,51 +1,50 @@
 #!/usr/bin/env node
-// Deploy WANDERERS. See docs/deploy.md for which way to pick.
-//   node scripts/deploy.js check              check that app/ has its entry pages (no network)
-//   node scripts/deploy.js static             publish app/ to the Cloudflare Worker in wrangler.jsonc (free)
-//   node scripts/deploy.js tunnel [port]      share the full app on this computer through a Cloudflare tunnel
-// For tunnel, start the app first (node start.js). With no TUNNEL_TOKEN_FILE it makes a free quick tunnel with a
-// random https://*.trycloudflare.com address; with TUNNEL_TOKEN_FILE it runs your named tunnel (fixed hostname).
+// Deploy the WANDERERS static site (app/). Two methods; see docs/deploy.md.
+//   node scripts/deploy.js check         check that app/ has its entry pages (no network)
+//   node scripts/deploy.js pages         start the GitHub Pages workflow for main (needs gh, logged in)
+//   node scripts/deploy.js cloudflare    publish app/ to the Cloudflare Worker in wrangler.jsonc (needs a Cloudflare login)
 "use strict";
 const { spawnSync } = require("child_process"), fs = require("fs"), path = require("path");
-const ROOT = path.join(__dirname, ".."), WIN = process.platform === "win32";
+const ROOT = path.join(__dirname, "..");
 // The same list as .github/workflows/pages.yml
 const ENTRY = ["index.html", "observatory.html", "compass.html", "stories.html", "survey.html", "sw.js", "data/index.json"];
 
 const missing = (appDir = path.join(ROOT, "app")) =>
   ENTRY.filter((f) => !(fs.existsSync(path.join(appDir, f)) && fs.statSync(path.join(appDir, f)).size > 0));
 
-function cloudflared() {   // winget puts it here and the PATH of an open shell does not have it yet
-  const win = ["C:/Program Files (x86)/cloudflared/cloudflared.exe", "C:/Program Files/cloudflared/cloudflared.exe"];
-  return (WIN && win.find((p) => fs.existsSync(p))) || "cloudflared";
-}
-
 // npx is npx.cmd on Windows and needs a shell: pass one string (fixed words only, so nothing to escape), as start.js does
-const run = (cmd, args) => (cmd === "npx"
-  ? spawnSync(`npx ${args.join(" ")}`, { cwd: ROOT, stdio: "inherit", shell: true })
-  : spawnSync(cmd, args, { cwd: ROOT, stdio: "inherit" })).status ?? 1;
+const run = (cmd, args, quiet = false) => {
+  const io = quiet ? "ignore" : "inherit";
+  const r = cmd === "npx" ? spawnSync(`npx ${args.join(" ")}`, { cwd: ROOT, stdio: io, shell: true })
+    : spawnSync(cmd, args, { cwd: ROOT, stdio: io });
+  return r.error ? 127 : r.status ?? 1;
+};
 
-async function main([mode, port = "8000"]) {
-  if (mode === "check" || mode === "static") {
-    const m = missing();
-    if (m.length) { console.error("app/ is missing: " + m.join(", ")); return 1; }
-    console.log("app/ has its entry pages.");
-    if (mode === "check") return 0;
-    return run("npx", ["-y", "wrangler@4", "deploy"]);   // reads wrangler.jsonc; asks you to log in the first time
+function pages() {
+  if (run("gh", ["--version"], true) === 127) { console.error("Install the GitHub CLI (gh) and run: gh auth login"); return 1; }
+  if (run("gh", ["api", "repos/{owner}/{repo}/pages"], true) !== 0) {
+    console.error("GitHub Pages is not on for this repository. A repository admin turns it on once:\n" +
+      "  Settings -> Pages -> Build and deployment -> Source: GitHub Actions");
+    return 1;
   }
-  if (mode === "tunnel") {
-    const url = `http://localhost:${port}`;
-    const up = await fetch(url + "/api/health").then((r) => r.ok, () => false);
-    if (!up) { console.error(`Nothing answers at ${url}/api/health. Start the app first: node start.js`); return 1; }
-    const tok = process.env.TUNNEL_TOKEN_FILE;
-    const args = tok ? ["tunnel", "--no-autoupdate", "run", "--token-file", tok] : ["tunnel", "--no-autoupdate", "--url", url];
-    console.log(tok ? "Running your named tunnel. Ctrl+C stops it." : "Look for the https://….trycloudflare.com line below. Ctrl+C stops it.");
-    const code = run(cloudflared(), args);
-    if (code !== 0 && code !== 130) console.error("cloudflared failed. Install it: winget install Cloudflare.cloudflared (or brew install cloudflared)");
-    return code;
-  }
-  console.error("Usage: node scripts/deploy.js check | static | tunnel [port]");
-  return 2;
+  // The workflow also runs by itself on each push to main; this starts it now, for main
+  if (run("gh", ["workflow", "run", "pages.yml", "--ref", "main"]) !== 0) return 1;
+  console.log("Started. Follow it with: gh run watch   (the site is at the address in Settings -> Pages)");
+  return 0;
 }
 
-if (require.main === module) main(process.argv.slice(2)).then((c) => process.exit(c));
+function main([mode]) {
+  if (!["check", "pages", "cloudflare"].includes(mode)) {
+    console.error("Usage: node scripts/deploy.js check | pages | cloudflare");
+    return 2;
+  }
+  const m = missing();
+  if (m.length) { console.error("app/ is missing: " + m.join(", ")); return 1; }
+  console.log("app/ has its entry pages.");
+  if (mode === "pages") return pages();
+  if (mode === "cloudflare") return run("npx", ["-y", "wrangler@4", "deploy"]);   // reads wrangler.jsonc
+  return 0;
+}
+
+if (require.main === module) process.exit(main(process.argv.slice(2)));
 module.exports = { missing, ENTRY };
