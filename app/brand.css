@@ -165,3 +165,12 @@ a { color: var(--accent); }
 }
 /* Uppercase labels: keep units such as µm lower-case (an uppercased µ reads as "M") */
 .keep-case, .eyebrow .u, .tag-chip .u { text-transform: none; letter-spacing: .04em; }
+/* English / 中文 switch, made by i18n.js next to each theme toggle */
+.lang-toggle { height: 32px; min-width: 44px; padding: 0 10px; margin-right: 8px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: transparent; color: inherit; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.lang-toggle:hover { border-color: var(--accent); }
+@media (max-width: 480px) { .lang-toggle { min-width: 0; padding: 0 5px; margin-right: 0; } }
+@media (max-width: 420px) { .bar .wordmark { font-size: .85rem; } .head-tools { gap: 4px; } .bar .logo { gap: 6px; } .bar { gap: 8px; } }
+select.lang-toggle { appearance: none; -webkit-appearance: none; text-align: center; background: var(--surface); color: var(--text); }
+/* Devanagari has marks above and below the letters: give headings room so lines do not touch. */
+:root:lang(hi) :is(h1, h2, h3) { line-height: 1.35; }
