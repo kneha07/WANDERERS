@@ -487,7 +487,8 @@ function draw() {
   const T = S.sel && S.targets.find((t) => t.id === S.sel.id);
   if (T && T._v) {
     // keep the arrow inside the clear part of the screen (below the readouts, above the guide panel)
-    const top = (S.sat || 0) + 175, bottom = H - 250, left = 26, right = W - 72;
+    const cl = $("ar").classList;   // the bars only take room while they are pulled out
+    const top = (S.sat || 0) + (cl.contains("top-open") ? 175 : 70), bottom = H - (cl.contains("bottom-open") ? 250 : 60), left = 26, right = W - 72;
     const q = proj(T._v), inside = q && q[0] > left && q[0] < right && q[1] > top && q[1] < bottom;
     if (!inside) {
       const x = dot(T._v, P.right), y = dot(T._v, P.up), ang = Math.atan2(x, y);
@@ -837,6 +838,16 @@ $("lmUse").onclick = () => {
 };
 $("northReset").onclick = () => { F.clearFineTune(); $("northMsg").textContent = "Sight check cleared: back to the compass."; };
 $("northClose").onclick = () => { $("north").hidden = true; };
+
+// ---------- pull-out bars ----------
+// Tap a tab, or swipe it, to show or hide its bar. The top tab opens down, the bottom tab opens up.
+for (const [id, cls, dir, what] of [["pullTop", "top-open", 1, "the top controls"], ["pullBottom", "bottom-open", -1, "the targets and search"]]) {
+  const b = $(id); let y0 = null, swiped = false;
+  const set = (on) => { $("ar").classList.toggle(cls, on); b.setAttribute("aria-expanded", on); b.setAttribute("aria-label", `${on ? "Hide" : "Show"} ${what}`); };
+  b.onpointerdown = (e) => { y0 = e.clientY; swiped = false; b.setPointerCapture(e.pointerId); };
+  b.onpointerup = (e) => { if (y0 == null) return; const dy = (e.clientY - y0) * dir; y0 = null; if (Math.abs(dy) >= 12) { swiped = true; set(dy > 0); } };
+  b.onclick = () => { if (swiped) { swiped = false; return; } set(!$("ar").classList.contains(cls)); };
+}
 
 // ---------- info ----------
 $("infoBtn").onclick = () => { $("info").hidden = false; renderInfo(new Date(), loc(), null, Intl.DateTimeFormat().resolvedOptions().timeZone); };

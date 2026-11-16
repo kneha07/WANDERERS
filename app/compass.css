@@ -241,3 +241,16 @@ p.pv-dim { font-size: .8rem; }
 .saved-list { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; font-size: .85rem; }
 .saved-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .saved-list .btn { padding: 4px 10px; font-size: .8rem; }
+
+/* pull-out bars: the top controls and the bottom guide stay hidden until the user pulls a tab, so the sky fills the screen */
+.ar .telemetry, .ar .hud-buttons, .ar .skybar, .ar .radar, .ar .guide { transition: transform .25s ease, opacity .25s, visibility .25s; }
+.ar:not(.top-open) :is(.telemetry, .hud-buttons, .skybar) { opacity: 0; visibility: hidden; transform: translateY(-14px); }
+.ar:not(.bottom-open) .radar { opacity: 0; visibility: hidden; }
+.ar:not(.bottom-open) .guide { transform: translateY(100%); visibility: hidden; }
+.pull { position: absolute; left: 50%; width: 76px; height: 30px; margin-left: -38px; padding: 0; border: 0; background: transparent;
+  cursor: pointer; touch-action: none; pointer-events: auto; visibility: visible; }
+.pull i { display: block; width: 46px; height: 6px; margin: auto; border-radius: 3px; background: rgba(232, 238, 251, .75);
+  box-shadow: 0 0 0 1px rgba(4, 9, 20, .55), 0 1px 4px rgba(0, 0, 0, .6); }   /* light grabber with a dark rim: readable on any sky */
+.pull-top { top: calc(env(safe-area-inset-top) + 74px); height: 24px; }
+.pull-bottom { bottom: 100%; }
+.pull:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; border-radius: 10px; }

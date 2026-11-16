@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="compass.css?v=20261117b">
+<link rel="stylesheet" href="compass.css?v=20261118a">
 </head>
 <body>
 <video id="cam" playsinline muted autoplay hidden></video>
@@ -75,6 +75,7 @@
 <!-- 3. AR HUD (drawn on the canvas, plus these controls) -->
 <section id="ar" class="ar" hidden>
   <div class="telemetry mono" id="telemetry"></div>
+  <button id="pullTop" class="pull pull-top" aria-expanded="false" aria-label="Show the top controls"><i></i></button>
   <button id="zoomReset" class="btn hud zoom-reset" aria-label="Zoom back to 1×" hidden>1×</button>
   <span id="heldMark" class="held-mark" hidden>HELD</span>
   <p id="holdHint" class="hold-hint" role="status" hidden>View held. Drag to move. Pinch out to follow the phone again.</p>
@@ -115,6 +116,7 @@
     <div class="row-btns"><button id="aimCancel" class="btn ghost">Cancel</button><button id="aimGo" class="btn primary">Calibrate</button></div>
   </div>
   <div class="guide">
+    <button id="pullBottom" class="pull pull-bottom" aria-expanded="false" aria-label="Show the targets and search"><i></i></button>
     <button id="webbChip" class="webb-chip" hidden></button>
     <div id="guideMain" class="guide-main">Pick a target</div>
     <div id="guideSub" class="small"></div>
@@ -215,6 +217,6 @@
 <script src="skyview.js?v=20261117a"></script>
 <script src="hips.js?v=20261117a"></script>
 <script src="realsky.js?v=20261117b"></script>
-<script type="module" src="compass.js?v=20261117b"></script>
+<script type="module" src="compass.js?v=20261118a"></script>
 </body>
 </html>
