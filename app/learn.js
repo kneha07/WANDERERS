@@ -72,7 +72,7 @@ async function open(m) {
   close();
   const me = ++opening;   // a second open() while the first still loads wins; the first stops
   mode = m; document.body.classList.add("learning"); $("learnMenu").hidden = true; $("learnPanel").hidden = false;
-  if (m === "tour" || m === "quiz") { panel(`${closeBtn}<p class="small">Loading the sky…</p>`); await ready(); if (opening !== me) return; }
+  if (m === "tour" || m === "quiz") { panel(`${closeBtn}<p class="small">Loading the sky…</p>`); await ready(); if (opening !== me || mode !== m) return; }   // closed, or opened again, while it loaded
   ({ time: startTime, tour: startTour, quiz: startQuiz, infrared: startInfrared, class: startClass, log: startLog, near: startNear })[m]();
 }
 function close() {

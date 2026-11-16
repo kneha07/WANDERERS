@@ -303,7 +303,15 @@ async function main() {
     $("details").hidden = false; await wait(); $("details").hidden = true; $("webb").hidden = false; await wait();
     out.webbEntry = !!(history.state && history.state.layer);
     history.back(); await wait(); out.webbBack = $("webb").hidden; out.webbPage = location.pathname; out.endState = history.state;
+    // a tour closed while it loads does not start; "I saw it" twice on one day counts once
+    WanderersLearn.open("tour"); WanderersLearn.close(); await new Promise((ok) => setTimeout(ok, 1500));
+    out.tourAfterClose = { mode: WanderersLearn.mode, panel: $("learnPanel").innerHTML.length };
+    const was = localStorage.getItem("wanderers.skyLog"); localStorage.removeItem("wanderers.skyLog");
+    WanderersLearn.log("Vega", "star"); WanderersLearn.log("Vega", "star"); out.vegaN = WanderersLearn.readLog().Vega.n;
+    if (was === null) localStorage.removeItem("wanderers.skyLog"); else localStorage.setItem("wanderers.skyLog", was);
     return out; })()`);
+  check("learn: a tour closed while it loads does not start", layers.tourAfterClose.mode === null && layers.tourAfterClose.panel === 0, JSON.stringify(layers.tourAfterClose));
+  check("learn: a double tap on 'I saw it' logs one sighting", layers.vegaN === 1, `n = ${layers.vegaN}`);
   check("layers: the Learn menu closes when the search opens", layers.one === "searchPane", JSON.stringify(layers));
   check("layers: back closes the search and stays on the compass", layers.afterBack === "" && /compass\.html$/.test(layers.page), JSON.stringify(layers));
   check("layers: a sheet over the time machine closes first, then the time machine",
