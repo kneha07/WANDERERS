@@ -24,9 +24,14 @@
     if (PATHS) return Promise.resolve(PATHS);
     return fetch(base + "paths.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((j) => (PATHS = j));
   }
+  // Only about 20 stars have a prediction file. pred/index.json (written by pipeline/star_ml.py after each run) lists
+  // them, so a star without one is not fetched (it was a 404 for every other star). If the list cannot load, try anyway.
+  let predList = null;
   function pred(key) {
     if (!key) return Promise.resolve(null);
-    if (!preds[key]) preds[key] = fetch(`${base}stars/pred/${encodeURIComponent(key)}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!predList) predList = fetch(`${base}stars/pred/index.json`).then((r) => (r.ok ? r.json() : null)).then((a) => (Array.isArray(a) ? new Set(a) : null)).catch(() => null);
+    if (!preds[key]) preds[key] = predList.then((have) => (have && !have.has(key) ? null
+      : fetch(`${base}stars/pred/${encodeURIComponent(key)}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
     return preds[key];
   }
 

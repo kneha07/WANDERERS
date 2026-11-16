@@ -1,6 +1,6 @@
 {
- "when": "2026-11-15T20:35:32.651Z",
- "browser": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+ "when": "2026-11-16T04:30:55.582Z",
+ "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
   "height": 844,
@@ -239,7 +239,7 @@
   {
    "name": "a reissued survey: its recent pictures are dropped and the new date is recorded",
    "ok": true,
-   "detail": "8 → 0, {\"at\":1794774991217,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "8 → 0, {\"at\":1794803514799,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "Eye, dark site: about 2,500 stars above the horizon",
@@ -259,7 +259,7 @@
   {
    "name": "drag the sky: the grabbed point follows the finger",
    "ok": true,
-   "detail": "moved 60.0, 40.0 px for a drag of 60, 40"
+   "detail": "moved 59.9, 40.0 px for a drag of 60, 40"
   },
   {
    "name": "drag the sky: Done keeps it as the sight check",
@@ -332,6 +332,46 @@
    "detail": ""
   },
   {
+   "name": "learn: a tour closed while it loads does not start",
+   "ok": false,
+   "detail": "{\"mode\":null,\"panel\":582}"
+  },
+  {
+   "name": "learn: a double tap on 'I saw it' logs one sighting",
+   "ok": true,
+   "detail": "n = 1"
+  },
+  {
+   "name": "layers: the Learn menu closes when the search opens",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null,\"tourAfterClose\":{\"mode\":null,\"panel\":582},\"vegaN\":1}"
+  },
+  {
+   "name": "layers: back closes the search and stays on the compass",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null,\"tourAfterClose\":{\"mode\":null,\"panel\":582},\"vegaN\":1}"
+  },
+  {
+   "name": "layers: a sheet over the time machine closes first, then the time machine",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null,\"tourAfterClose\":{\"mode\":null,\"panel\":582},\"vegaN\":1}"
+  },
+  {
+   "name": "layers: a sheet closed by × leaves no history entry behind",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null,\"tourAfterClose\":{\"mode\":null,\"panel\":582},\"vegaN\":1}"
+  },
+  {
+   "name": "layers: a mode picked from the Learn menu owns an entry; back closes it on the compass",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null,\"tourAfterClose\":{\"mode\":null,\"panel\":582},\"vegaN\":1}"
+  },
+  {
+   "name": "layers: Details -> Webb owns an entry; back closes Webb on the compass, with no entry left",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null,\"tourAfterClose\":{\"mode\":null,\"panel\":582},\"vegaN\":1}"
+  },
+  {
    "name": "save Basic, 48° N: finished",
    "ok": true,
    "detail": "Saved for latitude 48° N. On an iPhone, add this page to the (3 s; Latitude 48° N, Visible: 60 pictures, about 2.9 MB (84% of the whole s)"
@@ -354,7 +394,7 @@
   {
    "name": "a reissued survey: the saved pictures are fetched again in place",
    "ok": true,
-   "detail": "spoiled tile 3 → 42390 bytes, 65 → 65 files, {\"at\":1794775018160,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "spoiled tile 3 → 43673 bytes, 65 → 65 files, {\"at\":1794803557574,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "save Standard, 34° S: finished",
@@ -394,7 +434,7 @@
   {
    "name": "offline with nothing saved: falls back to Eye and says so",
    "ok": true,
-   "detail": "0.9 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
+   "detail": "1.8 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
   }
  ]
 }

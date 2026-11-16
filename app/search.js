@@ -48,6 +48,46 @@
   }
 
   // plain-language facts from the spectral type, brightness and distance
+  // How far something is, three ways a person can feel it: in km, as light's travel time, and as a trip on Voyager 1.
+  const KM_LY = 9.4607e12, C_KMS = 299792.458, VOYAGER_KMS = 17;
+  function bigNumber(n) {   // 384,400 / 225 million / 237 trillion / 2.4 x 10^19
+    if (n < 1e6) return Math.round(n).toLocaleString("en-US");
+    for (const [v, w] of [[1e15, "quadrillion"], [1e12, "trillion"], [1e9, "billion"], [1e6, "million"]]) {
+      if (n >= v && n < v * 1000) { const k = n / v; return `${k < 10 ? k.toFixed(1) : Math.round(k).toLocaleString("en-US")} ${w}`; }
+    }
+    const e = Math.floor(Math.log10(n)); return `${(n / 10 ** e).toFixed(1)} × 10^${e}`;
+  }
+  function span(sec) {      // 1.3 seconds / 8.3 minutes / 4.2 years / 2.5 million years
+    const yr = sec / 31557600;
+    if (sec < 90) return `${sec.toFixed(1)} seconds`;
+    if (sec < 5400) return `${(sec / 60).toFixed(1)} minutes`;
+    if (sec < 172800) return `${(sec / 3600).toFixed(1)} hours`;
+    if (yr < 1) return `${Math.round(sec / 86400)} days`;
+    return `${yr < 10 ? yr.toFixed(1) : bigNumber(yr)} years`;
+  }
+  function distanceLines(km) {
+    return [`${bigNumber(km)} km from you.`,
+      `At the speed of light you would arrive in ${span(km / C_KMS)}.`,
+      `Voyager 1, our fastest probe leaving the Solar System (17 km/s), would need ${span(km / VOYAGER_KMS)}.`];
+  }
+
+  // Look-back: light from far away left long ago. For scale, the event in history (or Earth's history) nearest in time,
+  // on a log scale, with its own date, so the sentence stays true even when the two dates differ.
+  const EVENTS = [[123, "the Wright brothers made the first powered flight (1903)"], [339, "Isaac Newton published his laws of motion and gravity (1687)"],
+    [416, "Galileo first turned a telescope to the sky (1610)"], [534, "Columbus crossed the Atlantic (1492)"],
+    [1026, "Vikings reached North America (about 1000 CE)"], [2026, "the Common Era began (year 1)"],
+    [4590, "the Great Pyramid of Giza was built (about 2560 BCE)"], [5300, "people in Mesopotamia invented writing (about 3200 BCE)"],
+    [11600, "the last ice age ended and farming began (about 11,600 years ago)"], [17000, "people painted the caves of Lascaux (about 17,000 years ago)"],
+    [40000, "people made the first known cave art (about 40,000 years ago)"], [300000, "the first Homo sapiens lived in Africa (about 300,000 years ago)"],
+    [2.6e6, "early humans made the first stone tools (about 2.6 million years ago)"], [66e6, "an asteroid ended the age of the dinosaurs (66 million years ago)"],
+    [230e6, "the first dinosaurs appeared (about 230 million years ago)"], [538e6, "the first animals with eyes and shells filled the seas (538 million years ago)"],
+    [4.54e9, "the Earth formed (4.54 billion years ago)"]];
+  function lookBack(ly) {
+    if (!(ly >= 100)) return "";
+    const [, what] = EVENTS.reduce((a, e) => (Math.abs(Math.log(e[0] / ly)) < Math.abs(Math.log(a[0] / ly)) ? e : a));
+    return `For scale: ${what}.`;
+  }
+
   function describe(s) {
     const out = [];
     const sp = (s.spect || "").trim(), cls = sp.replace(/^(sd|d|g|c)/, "")[0];
@@ -70,6 +110,8 @@
     if (s.dist) {
       const yr = new Date().getFullYear() - Math.round(s.dist);
       out.push(`${s.dist < 100 ? s.dist.toFixed(1) : Math.round(s.dist).toLocaleString()} light-years away: the light you see left it ${s.dist < 1000 ? `around ${yr}` : `about ${Math.round(s.dist).toLocaleString()} years ago`}.`);
+      out.push(...distanceLines(s.dist * KM_LY));
+      if (lookBack(s.dist)) out.push(lookBack(s.dist));
     }
     if (s.near) out.push("One of the Sun's close neighbours (within about 33 light-years).");
     if (s.variable) out.push("A variable star: its brightness changes.");
@@ -109,5 +151,5 @@
     document.addEventListener("pointerdown", (e) => { if (e.target !== input && !list.contains(e.target)) list.hidden = true; });
   }
 
-  root.StarSearch = { load, search, describe, attach, hms, dms, matchedName };
+  root.StarSearch = { load, search, describe, attach, distanceLines, lookBack, KM_LY, hms, dms, matchedName };
 })(window);

@@ -18,6 +18,9 @@ const S = {
 window.__wanderers = { F, S };   // debug handle for automated tests (feed sensor events with exact timestamps)
 // Links for checks and screenshots: ?at=2026-11-15T06:00:00Z&lat=47.6&lon=-122.3&go=1&intro=skip&cam=0&sky=eye
 const Q = new URLSearchParams(location.search), qnum = (k) => (Q.get(k) != null && Q.get(k) !== "" && isFinite(+Q.get(k)) ? +Q.get(k) : null);
+// Some features are hidden for now, until the owner decides (class="later" in compass.html).
+// ?later=1 shows them, for the team to test. To release them for everyone, delete the .later rule in compass.css.
+if (Q.get("later") === "1") document.documentElement.classList.add("with-later");
 const FIXED_AT = Q.get("at") && !isNaN(new Date(Q.get("at"))) ? new Date(Q.get("at")) : null;
 const nowDate = () => FIXED_AT || new Date();
 
@@ -108,8 +111,29 @@ $("go").onclick = async () => {
 async function startCamera() {
   try {
     const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-    $("cam").srcObject = st; S.camOn = true; setZoom(S.zoom);
+    $("cam").srcObject = st; camStream = st; S.camOn = true; setZoom(S.zoom);
   } catch { S.camOn = false; }
+}
+// Camera power: while the sky photographs cover the camera fully (Deep with the slider at Sky, or zoomed in to the
+// telescope view), the camera picture cannot be seen, so the camera is stopped to save battery. It starts again as
+// soon as the photographs let any of it through. S.camOn stays true: the view keeps the camera's lens geometry.
+let camStream = null, camCoveredAt = 0, camRetryAt = 0;
+function camPower() {
+  if (!S.camOn) return;
+  const now = performance.now(), covered = RealSky.DEEP.state === "ready" && RealSky.DEEP.op === 1;
+  if (covered) {
+    if (!camCoveredAt) camCoveredAt = now;
+    if (camStream && now - camCoveredAt > 1500) {   // a short wait: a quick zoom in and out does not restart the camera
+      camStream.getTracks().forEach((t) => t.stop()); camStream = null; $("cam").srcObject = null;
+    }
+    return;
+  }
+  camCoveredAt = 0;
+  if (camStream || now < camRetryAt) return;
+  camRetryAt = now + 5000;                          // one try at a time; a refused camera is tried again in 5 s
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then((st) => {
+    camStream = st; $("cam").srcObject = st; $("cam").play().catch(() => {}); camRetryAt = 0;
+  }).catch(() => {});
 }
 
 if (Q.get("cam") === "0") $("useCam").checked = false;
@@ -155,8 +179,16 @@ function afterIntro(place) {
   $("cosmos").hidden = true; $("ar").hidden = false; $("hud").hidden = false;
   if (S.camOn) { $("cam").hidden = false; $("cam").play().catch(() => {}); }
   fit(); requestAnimationFrame(loop);
+  keepAwake();
   setTimeout(() => (S.sensors ? showCalibration() : desktopMode()), 300);
 }
+// keep the screen on while the sky is open; the browser drops the lock when the page is hidden, so take it again
+function keepAwake() {
+  if (!navigator.wakeLock || document.hidden) return;
+  navigator.wakeLock.request("screen").catch(() => {});
+}
+document.addEventListener("visibilitychange", () => { if (!$("ar").hidden) keepAwake(); });
+
 function desktopMode() {
   $("guideSub").textContent = "No motion sensors here: drag the sky or use the arrow keys to look around.";
 }
@@ -321,7 +353,10 @@ $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   stopGlide();
-  if (e.key === "Escape") { if (![...document.querySelectorAll(".sheet")].some((el) => !el.hidden)) setZoom(1); return; }
+  if (e.key === "Escape") {   // close the top layer, as the back button does; with none open, back to 1x
+    if (!closeTopLayer()) setZoom(1);
+    return;
+  }
   if (phoneSteers()) return;
   const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
   if (e.key === "ArrowLeft") S.manual.az = (S.manual.az - s + 360) % 360;
@@ -334,8 +369,9 @@ window.addEventListener("keydown", (e) => {
 const LONG_SIDE_FOV = 67;   // typical main phone camera: field of view along the image's long side
 function focalPx(W, H) {
   const v = $("cam");
-  if (S.camOn && v.videoWidth) {
-    const vw = v.videoWidth, vh = v.videoHeight, scale = Math.max(W / vw, H / vh);      // object-fit: cover
+  if (v.videoWidth) S.camSize = [v.videoWidth, v.videoHeight];   // kept while the camera is stopped (camPower)
+  if (S.camOn && S.camSize) {
+    const [vw, vh] = S.camSize, scale = Math.max(W / vw, H / vh);      // object-fit: cover
     return (Math.max(vw, vh) / 2) / Math.tan(LONG_SIDE_FOV / 2 * D2R) * scale * S.zoom;
   }
   return (H / 2) / Math.tan(S.vfovNoCam / 2 * D2R) * S.zoom;
@@ -352,7 +388,7 @@ function fit() {
 }
 window.addEventListener("resize", fit);
 
-function loop() { draw(); calibrationTick(); requestAnimationFrame(loop); }
+function loop() { draw(); calibrationTick(); camPower(); requestAnimationFrame(loop); }
 
 function draw() {
   const W = innerWidth, H = innerHeight, now = nowDate(), L = loc();
@@ -402,7 +438,7 @@ function draw() {
 
   // Sun, Moon, bright stars (real positions now)
   g.textAlign = "left"; g.textBaseline = "middle";
-  for (const o of [...BODIES, ...STARS]) {
+  for (const o of RealSky.R.years ? [] : [...BODIES, ...STARS]) {   // in the time machine's year these are not where today says
     const s = Sky.observe(o, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) continue;
     const below = s.alt < 0;
     if (o.body) {
@@ -427,15 +463,16 @@ function draw() {
     g.fillText(`${l.name} · ${a.km < 10 ? a.km.toFixed(1) : Math.round(a.km)} km`, q[0] + 11, q[1] - 2);
   }
 
-  // Webb (JWST) pointings around where you look: small gold squares
-  if (S.webbAround && S.webbAround.length) {
+  // Webb (JWST) pointings around where you look: small violet diamonds (the amber brackets are WANDERERS targets)
+  if (S.webbAround && S.webbAround.length && !RealSky.R.years) {
     g.font = "600 10px 'JetBrains Mono', monospace"; g.textAlign = "left"; g.textBaseline = "middle";
     for (const w of S.webbAround) {
       const s = Sky.observe({ ra: w.ra, dec: w.dec }, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) continue;
       const hot = S.webbHere && S.webbHere.obs === w.obs;
-      g.strokeStyle = s.alt < 0 ? "rgba(255,210,122,.35)" : hot ? "#ffd27a" : "rgba(255,210,122,.75)"; g.lineWidth = hot ? 2 : 1.2;
-      g.strokeRect(q[0] - (hot ? 6 : 4), q[1] - (hot ? 6 : 4), hot ? 12 : 8, hot ? 12 : 8);
-      if (hot) { g.fillStyle = "#ffd27a"; g.fillText("JWST · " + w.target, q[0] + 10, q[1]); }
+      const r = hot ? 7 : 5;
+      g.strokeStyle = s.alt < 0 ? "rgba(201,167,255,.35)" : hot ? "#c9a7ff" : "rgba(201,167,255,.75)"; g.lineWidth = hot ? 2 : 1.2;
+      g.beginPath(); g.moveTo(q[0], q[1] - r); g.lineTo(q[0] + r, q[1]); g.lineTo(q[0], q[1] + r); g.lineTo(q[0] - r, q[1]); g.closePath(); g.stroke();
+      if (hot) { g.fillStyle = "#c9a7ff"; g.fillText("JWST · " + w.target, q[0] + 10, q[1]); }
     }
   }
 
@@ -445,7 +482,7 @@ function draw() {
     S.trailFor = selKey; S.trail = null;
     if (S.sel && window.PathView) PathView.trail(pathQuery(S.sel)).then((tr) => { if (S.trailFor === selKey) S.trail = tr; }).catch(() => {});
   }
-  if (S.trail) {
+  if (S.trail && !RealSky.R.years) {
     const pts = S.trail.pts.map((p) => { const o = Sky.observe(p, now, L.lat, L.lon); return { year: p.year, q: proj(vec(o.az, o.alt)) }; });
     const seg = (arr, style, dash) => { g.strokeStyle = style; g.lineWidth = 2; g.setLineDash(dash); g.beginPath(); let on = false;
       for (const p of arr) { if (!p.q) { on = false; continue; } on ? g.lineTo(p.q[0], p.q[1]) : g.moveTo(p.q[0], p.q[1]); on = true; } g.stroke(); g.setLineDash([]); };
@@ -468,6 +505,7 @@ function draw() {
 
   // WANDERERS targets
   for (const t of S.targets) {
+    if (RealSky.R.years && t.id !== "learn") { t._v = null; continue; }   // today's targets; the time machine's own arrow stays
     const s = Sky.observe({ ra: t.ra, dec: t.dec }, now, L.lat, L.lon), v = vec(s.az, s.alt);
     t._az = s.az; t._alt = s.alt; t._sep = Math.acos(Math.max(-1, Math.min(1, dot(v, P.forward)))) / D2R; t._v = v;
     const el = $("tp_" + t.id); if (el) el.textContent = `${compassPt(s.az)} ${Math.round(s.az)}° · ${s.alt >= 0 ? "up" : "below"} ${Math.abs(Math.round(s.alt))}°`;
@@ -487,7 +525,8 @@ function draw() {
   const T = S.sel && S.targets.find((t) => t.id === S.sel.id);
   if (T && T._v) {
     // keep the arrow inside the clear part of the screen (below the readouts, above the guide panel)
-    const top = (S.sat || 0) + 175, bottom = H - 250, left = 26, right = W - 72;
+    const cl = $("ar").classList;   // the bars only take room while they are pulled out
+    const top = (S.sat || 0) + (cl.contains("top-open") ? 175 : 70), bottom = H - (cl.contains("bottom-open") ? 250 : 60), left = 26, right = W - 72;
     const q = proj(T._v), inside = q && q[0] > left && q[0] < right && q[1] > top && q[1] < bottom;
     if (!inside) {
       const x = dot(T._v, P.right), y = dot(T._v, P.up), ang = Math.atan2(x, y);
@@ -509,6 +548,15 @@ function draw() {
     g.strokeStyle = style; g.lineWidth = w;
     g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.stroke();
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.beginPath(); g.moveTo(cx + dx * 28, cy + dy * 28); g.lineTo(cx + dx * 40, cy + dy * 40); g.stroke(); }
+  }
+
+  // the name of the star, planet or target in the crosshair: pointing the phone works like a mouse hover
+  if (performance.now() - (S.aimNameAt || 0) > 250) { S.aimNameAt = performance.now(); const pk = S.aim ? null : RealSky.pickAt(cx, cy); S.aimName = pk && pk.kind === "star" ? pk.title : ""; }   // the Moon, planets and targets carry their own labels
+  if (S.aimName) {
+    g.font = "600 13px 'Space Grotesk', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    const w = g.measureText(S.aimName).width + 16;
+    g.fillStyle = "rgba(4,9,20,.78)"; g.beginPath(); g.roundRect(cx - w / 2, cy - 64, w, 22, 6); g.fill();
+    g.fillStyle = "#e8eefb"; g.fillText(S.aimName, cx, cy - 53);
   }
 
   drawTape(W, P, T);
@@ -721,7 +769,25 @@ $("wBase").onchange = (e) => Webb.setBase(e.target.value);
 
 // ---------- targets ----------
 // ---------- find any star ----------
-StarSearch.attach($("findIn"), $("findList"), (star) => { $("findIn").blur(); selectStar(star); });
+// A picked star glides into the crosshair when the view is dragged or held. When the phone steers, the arrow guides.
+function flyTo(star) {
+  if (phoneSteers() && !S.hold) return;
+  const L = loc(), o = Sky.observe({ ra: star.ra, dec: star.dec }, nowDate(), L.lat, L.lon), to = { az: o.az, alt: Math.max(-85, Math.min(85, o.alt)) };
+  if (reduced) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
+}
+StarSearch.attach($("findIn"), $("findList"), (star) => { $("findIn").blur(); selectStar(star); flyTo(star); });
+// The search pane: the same live search, reachable at any time from the 🔎 button (or the / key), with the bars hidden.
+const searchOpen = (on) => {
+  $("searchPane").hidden = !on; $("searchBtn").setAttribute("aria-expanded", on);
+  if (on) { $("findTop").value = ""; $("findTopList").hidden = true; $("findTop").focus(); } else $("findTop").blur();
+};
+StarSearch.attach($("findTop"), $("findTopList"), (star) => { searchOpen(false); $("findIn").value = star.name; selectStar(star); flyTo(star); });
+$("searchBtn").onclick = () => searchOpen($("searchPane").hidden);
+$("searchClose").onclick = () => searchOpen(false);
+$("findTop").addEventListener("keydown", (e) => { if (e.key === "Escape") searchOpen(false); });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !$("ar").hidden) { e.preventDefault(); searchOpen(true); }
+});
 function selectStar(star) {
   let t = star.wanderers && S.targets.find((x) => x.id === star.wanderers);
   if (!t) {
@@ -730,7 +796,7 @@ function selectStar(star) {
     S.targets.unshift(t);
   } else t.star = star;
   S.sel = t; renderTargets(); $("aboutBtn").hidden = false;
-  const u = new URL(location); u.searchParams.set("target", star.wanderers || "found"); u.searchParams.set("star", star.name); history.replaceState(null, "", u);
+  const u = new URL(location); u.searchParams.set("target", star.wanderers || "found"); u.searchParams.set("star", star.name); setUrl(u);
 }
 function showDetails(T) {
   const st = T.star || { name: T.name, alt: [], ra: T.ra, dec: T.dec, wanderers: T.id };
@@ -743,6 +809,8 @@ function showDetails(T) {
   $("dMap").href = `observatory.html?ra=${st.ra.toFixed(5)}&dec=${st.dec.toFixed(5)}`;
   $("dFull").hidden = !st.wanderers; if (st.wanderers) $("dFull").href = `observatory.html?target=${st.wanderers}`;
   $("details").hidden = false;
+  $("dLog").textContent = "✓ I saw it";
+  $("dLog").onclick = () => { if (window.WanderersLearn) { WanderersLearn.log(st.name, st.wanderers ? "target" : "star"); $("dLog").textContent = "✓ In your sky log"; } };
   webbDetails(st);
   if (window.PathView) PathView.render($("dPathBody"), pathQuery(T), { explorerHref: (k) => `observatory.html?star=${encodeURIComponent(k)}` });
 }
@@ -764,10 +832,10 @@ function renderTargets() {
   $("targets").innerHTML = S.targets.map((t) =>
     `<button data-id="${t.id}" class="${S.sel && S.sel.id === t.id ? "on" : ""}" role="option"><b>${t.name}</b><span id="tp_${t.id}">${t.teaser}</span></button>`).join("");
   $("targets").querySelectorAll("button").forEach((b) => (b.onclick = () => {
-    S.sel = S.targets.find((t) => t.id === b.dataset.id); renderTargets(); $("aboutBtn").hidden = false;
+    S.sel = S.targets.find((t) => t.id === b.dataset.id); renderTargets(); $("aboutBtn").hidden = false; flyTo(S.sel);
     const u = new URL(location); u.searchParams.set("target", S.sel.id);
     if (S.sel.found) u.searchParams.set("star", S.sel.name); else u.searchParams.delete("star");   // no stale ?star=
-    history.replaceState(null, "", u);
+    setUrl(u);
   }));
 }
 
@@ -838,6 +906,85 @@ $("lmUse").onclick = () => {
 $("northReset").onclick = () => { F.clearFineTune(); $("northMsg").textContent = "Sight check cleared: back to the compass."; };
 $("northClose").onclick = () => { $("north").hidden = true; };
 
+// ---------- pull-out bars ----------
+// Tap a tab, or swipe it, to show or hide its bar. The top tab opens down, the bottom tab opens up.
+// The open or closed state is remembered for the next visit. On the first visit the tabs bounce, as a hint.
+const keep = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
+if (!keep("wanderers.barsSeen")) { keep("wanderers.barsSeen", "1"); $("pullTop").classList.add("nudge"); $("pullBottom").classList.add("nudge"); }
+for (const [id, cls, dir, what] of [["pullTop", "top-open", 1, "the top controls"], ["pullBottom", "bottom-open", -1, "the targets and search"]]) {
+  const b = $(id); let y0 = null, swiped = false;
+  const set = (on) => {
+    $("ar").classList.toggle(cls, on); b.setAttribute("aria-expanded", on); b.setAttribute("aria-label", `${on ? "Hide" : "Show"} ${what}`);
+    b.classList.remove("nudge"); keep("wanderers." + cls, on ? "1" : "0");
+  };
+  if (keep("wanderers." + cls) === "1") set(true);
+  b.onpointerdown = (e) => { y0 = e.clientY; swiped = false; b.setPointerCapture(e.pointerId); };
+  b.onpointerup = (e) => { if (y0 == null) return; const dy = (e.clientY - y0) * dir; y0 = null; if (Math.abs(dy) >= 12) { swiped = true; set(dy > 0); } };
+  b.onclick = () => { if (swiped) { swiped = false; return; } set(!$("ar").classList.contains(cls)); };
+}
+
+// sheets: a swipe down from the top of a sheet closes it (as its Done button does)
+for (const sh of document.querySelectorAll(".sheet")) {
+  let y0 = null;
+  sh.addEventListener("touchstart", (e) => { y0 = sh.scrollTop <= 0 && !e.target.closest("input, select, .webb-view") ? e.touches[0].clientY : null; }, { passive: true });
+  sh.addEventListener("touchend", (e) => { if (y0 != null && e.changedTouches[0].clientY - y0 > 90) sh.hidden = true; y0 = null; }, { passive: true });
+}
+
+// ---------- layers: sheets, cards, search and the 🎓 menu and panel ----------
+// One layer at a time; a learn mode (learnPanel) may stay under one other layer. Each open layer owns one history
+// entry, so the phone's back button (and Esc) closes the top layer and does not leave the compass.
+// A layer closed by its ×, Done or a swipe drops its entry again. Every open and close goes through `hidden`.
+// history.go() is async: a push asked for while our own go() is still running waits for its popstate, or the go()
+// would remove the new entry instead (a menu that opens a mode closes and opens in the same task).
+const LAYERS = [...document.querySelectorAll(".sheet"), $("skyCard"), $("searchPane"), $("learnMenu"), $("learnPanel")];
+const layerStack = [];   // open layers, oldest first
+let skipPops = 0, owedPushes = 0;   // popstates of our own history.go(); pushes that wait for them
+function closeLayer(el) {
+  if (el.id === "learnPanel") window.WanderersLearn ? WanderersLearn.close() : (el.hidden = true);
+  else if (el.id === "searchPane") searchOpen(false);
+  else { el.hidden = true; if (el.id === "learnMenu") $("learnBtn").setAttribute("aria-expanded", false); }
+}
+function moveEntries(n) {   // n > 0: push n entries; n < 0: drop -n entries
+  if (n < 0) { const k = Math.min(owedPushes, -n); owedPushes -= k; n += k; }   // a waiting push and a drop cancel out
+  if (n < 0) { skipPops++; history.go(n); }
+  else if (skipPops) owedPushes += n;
+  else for (let k = 0; k < n; k++) history.pushState({ layer: 1 }, "");
+}
+const layerObs = new MutationObserver((recs) => {
+  let n = 0;   // net entries for this batch: one push or one drop per layer, never both racing
+  for (const el of new Set(recs.map((r) => r.target))) {
+    const i = layerStack.indexOf(el);
+    if (!el.hidden && i < 0) {
+      const others = layerStack.filter((o) => !(o.id === "learnPanel" && el.id !== "learnMenu"));
+      for (const o of others) layerStack.splice(layerStack.indexOf(o), 1);   // off the stack first: no second drop
+      others.forEach(closeLayer);
+      layerStack.push(el); n += 1 - others.length;
+    } else if (el.hidden && i >= 0) { layerStack.splice(i, 1); n--; }
+  }
+  moveEntries(n);
+});
+LAYERS.forEach((el) => layerObs.observe(el, { attributes: true, attributeFilter: ["hidden"] }));
+// A star picked while a layer is open writes the URL of that layer's entry; keep it when the entry goes.
+function setUrl(u) { history.replaceState(history.state, "", u); S.url = location.href; }
+const keepUrl = () => { if (S.url && location.href !== S.url) history.replaceState(history.state, "", S.url); };
+window.addEventListener("popstate", () => {
+  if (skipPops) {
+    keepUrl();
+    if (!--skipPops && owedPushes) { const n = owedPushes; owedPushes = 0; moveEntries(n); }
+    return;
+  }
+  const top = layerStack.pop();
+  if (top) { keepUrl(); closeLayer(top); }
+});
+const closeTopLayer = () => {
+  if (layerStack.length) { history.back(); return true; }   // popstate closes it and drops its entry
+  const open = LAYERS.filter((el) => !el.hidden);              // not seen by the observer (no history entry)
+  open.forEach(closeLayer); return open.length > 0;
+};
+
+// shared with learn.js (the 🎓 learning modes)
+window.WanderersCompass = { S, pose, loc, nowDate, vec, dot, renderTargets };
+
 // ---------- info ----------
 $("infoBtn").onclick = () => { $("info").hidden = false; renderInfo(new Date(), loc(), null, Intl.DateTimeFormat().resolvedOptions().timeZone); };
 $("infoClose").onclick = () => { $("info").hidden = true; };
@@ -862,6 +1009,14 @@ function renderInfo(now, L, lst, tz) {
 RealSky.init({
   pose, focal: focalPx, loc, camOn: () => S.camOn, phoneSteers, F, S,
   openSight: () => $("northBtn").click(),
+  // the WANDERERS target drawn nearest (x, y), within a finger's reach of its brackets; null when none
+  targetAt: (x, y) => {
+    const W = innerWidth, H = innerHeight, proj = RealSky.projector(pose(), focalPx(W, H), W, H);
+    let best = null, bestD = 26;
+    for (const t of S.targets) { const q = t._v && proj(t._v), d = q ? Math.hypot(q[0] - x, q[1] - y) : 1e9; if (d < bestD) { best = t; bestD = d; } }
+    return best;
+  },
+  onTarget: (t) => { S.sel = t; renderTargets(); $("aboutBtn").hidden = false; showDetails(t); },
   // a tapped star opens the same star sheet as the search, found by its star-database key
   onStar: async (pk) => {
     const list = await StarSearch.load().catch(() => []);

@@ -164,7 +164,7 @@
     return ["Mercury", "Venus", "Mars", "Jupiter", "Saturn"].map((name) => {
       const h = heliocentric(name, T), x = h[0] - earth[0], y = h[1] - earth[1], z = h[2] - earth[2];
       const ye = y * cos(eps) - z * sin(eps), ze = y * sin(eps) + z * cos(eps);
-      return { name, ra: norm360(Math.atan2(ye, x) * R2D), dec: Math.atan2(ze, Math.hypot(x, ye)) * R2D, mag: TYPICAL_MAG[name] };
+      return { name, ra: norm360(Math.atan2(ye, x) * R2D), dec: Math.atan2(ze, Math.hypot(x, ye)) * R2D, mag: TYPICAL_MAG[name], au: Math.hypot(x, y, z) };
     });
   }
 
@@ -184,7 +184,10 @@
     return ((val + 540) % 360) - 180;
   }
 
-  const api = { jd, gmst, precess, unprecess, sun, moon, altAz, refraction, observe, unit, frame, unobserve, zenithAngle, planets,
+  // the Sun's distance from Earth (AU) and the Moon's (km, from its horizontal parallax)
+  const sunAU = (date) => Math.hypot(...heliocentric("Earth", (jd(date) - 2451545.0) / 36525));
+  const moonKm = (date) => 6378.14 / Math.sin(moon(jd(date)).parallax / R2D);
+  const api = { sunAU, moonKm, jd, gmst, precess, unprecess, sun, moon, altAz, refraction, observe, unit, frame, unobserve, zenithAngle, planets,
     loadDeclination, declination,
     model: () => (DECL ? { model: DECL.model, epoch: DECL.epoch } : null) };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Sky = api;

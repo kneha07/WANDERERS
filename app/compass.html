@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="compass.css?v=20261117b">
+<link rel="stylesheet" href="compass.css?v=20261118h">
 </head>
 <body>
 <video id="cam" playsinline muted autoplay hidden></video>
@@ -75,7 +75,26 @@
 <!-- 3. AR HUD (drawn on the canvas, plus these controls) -->
 <section id="ar" class="ar" hidden>
   <div class="telemetry mono" id="telemetry"></div>
+  <button id="pullTop" class="pull pull-top" aria-expanded="false" aria-label="Show the top controls"><i></i></button>
   <button id="zoomReset" class="btn hud zoom-reset" aria-label="Zoom back to 1×" hidden>1×</button>
+  <button id="searchBtn" class="btn hud search-btn" aria-label="Find a star" aria-expanded="false">🔎</button>
+  <div id="searchPane" class="search-pane" hidden>
+    <input id="findTop" placeholder="Find any star: Sirius, Vega, Barnard's Star…" autocomplete="off" spellcheck="false" aria-label="Find a star">
+    <button id="searchClose" class="sky-card-close" aria-label="Close the search">×</button>
+    <ul id="findTopList" class="suggest" role="listbox" hidden></ul>
+  </div>
+  <button id="learnBtn" class="btn hud learn-btn" aria-label="Learn: time machine, tour, quiz" aria-expanded="false">🎓</button>
+  <div id="learnMenu" class="learn-menu" hidden>
+    <button class="btn" data-mode="tour">🧭 Tonight's tour</button>
+    <button class="btn" data-mode="quiz">🎯 Find it: quiz</button>
+    <button class="btn" data-mode="time">⏳ Time machine</button>
+    <button class="btn" data-mode="infrared">🔴 Why infrared?</button>
+    <button class="btn" data-mode="near">🔍 Candidates near here</button>
+    <button class="btn" data-mode="log">📓 My sky log</button>
+    <button class="btn later" data-mode="class">👩‍🏫 Class link</button>
+  </div>
+  <div id="learnPanel" class="learn-panel" hidden aria-live="polite"></div>
+  <span id="hoverName" class="hover-name" hidden></span>
   <span id="heldMark" class="held-mark" hidden>HELD</span>
   <p id="holdHint" class="hold-hint" role="status" hidden>View held. Drag to move. Pinch out to follow the phone again.</p>
   <div class="skybar" id="skybar">
@@ -96,6 +115,7 @@
     <button id="skyCardClose" class="sky-card-close" aria-label="Close">×</button>
     <b id="skyCardName"></b>
     <div id="skyCardLines" class="small"></div>
+    <button id="skyCardLog" class="btn ghost saw-it">✓ I saw it</button>
   </div>
   <div id="dragBar" class="drag-bar" hidden>
     <p class="small">Drag the sky until one thing you can see (the Moon, a planet, a bright star) sits where you see it.</p>
@@ -115,6 +135,7 @@
     <div class="row-btns"><button id="aimCancel" class="btn ghost">Cancel</button><button id="aimGo" class="btn primary">Calibrate</button></div>
   </div>
   <div class="guide">
+    <button id="pullBottom" class="pull pull-bottom" aria-expanded="false" aria-label="Show the targets and search"><i></i></button>
     <button id="webbChip" class="webb-chip" hidden></button>
     <div id="guideMain" class="guide-main">Pick a target</div>
     <div id="guideSub" class="small"></div>
@@ -155,7 +176,7 @@
   <div id="dPath" class="path-card"><h3>Where it has been, and where it is going</h3>
     <p class="small dim">Blue: the path it has taken. Green, dashed: the path ahead. The dot is where it is now.</p><div id="dPathBody"></div></div>
   <div class="row-btns"><a id="dMap" class="btn">SPHEREx sky map ↗</a><a id="dFull" class="btn" hidden>Full WANDERERS analysis ↗</a>
-    <button id="dClose" class="btn primary">Done</button></div>
+    <button id="dLog" class="btn saw-it">✓ I saw it</button><button id="dClose" class="btn primary">Done</button></div>
   <p class="small dim">Star data: HYG database v4.0 (Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0.</p>
 </div>
 
@@ -188,7 +209,7 @@
   <p id="savedRow" class="small">—</p>
   <ul id="savedList" class="saved-list"></ul>
   <div class="row-btns left"><button id="clearAuto" class="btn ghost">Clear recent pictures</button></div>
-  <div class="save-box">
+  <div class="save-box later">
     <b>Save the sky for a place</b>
     <p class="small dim">Going somewhere with poor signal? Save the Deep photographs here first. Only the latitude of the place
       matters, so one save works on any night. It saves the background chosen under Deep (Visible or Infrared).
@@ -206,15 +227,16 @@
 </div>
 
 <script src="theme.js"></script>
-<script src="sky.js?v=20261117a"></script>
-<script src="search.js?v=20261117a"></script>
+<script src="sky.js?v=20261118a"></script>
+<script src="search.js?v=20261118b"></script>
 <script src="starcore.js?v=20261117a"></script>
-<script src="pathview.js?v=20261117a"></script>
+<script src="pathview.js?v=20261118a"></script>
 <script src="telescope.js?v=20261117a"></script>
 <script src="orient.js?v=20261117a"></script>
-<script src="skyview.js?v=20261117a"></script>
+<script src="skyview.js?v=20261118b"></script>
 <script src="hips.js?v=20261117a"></script>
-<script src="realsky.js?v=20261117b"></script>
-<script type="module" src="compass.js?v=20261117b"></script>
+<script src="realsky.js?v=20261118h"></script>
+<script type="module" src="compass.js?v=20261118l"></script>
+<script type="module" src="learn.js?v=20261118g"></script>
 </body>
 </html>

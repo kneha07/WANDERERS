@@ -286,6 +286,42 @@ async function main() {
     `view ${h0.az.toFixed(4)}°, ${h0.alt.toFixed(4)}° -> ${h1.az.toFixed(4)}°, ${h1.alt.toFixed(4)}°; the phone turned ${turned.toFixed(2)}°`);
   check("no script errors on the page (online)", page.errors.length === 0, page.errors.slice(0, 2).join(" | "));
 
+  // ---- layers: one at a time, and the back button closes the top one instead of leaving the compass ----
+  const layers = await page.eval(`(async () => {
+    const $ = (id) => document.getElementById(id), wait = () => new Promise((ok) => setTimeout(ok, 300));
+    const shown = () => ["searchPane", "learnMenu", "learnPanel", "info"].filter((id) => !$(id).hidden).join(",");
+    const out = {};
+    $("learnBtn").click(); await wait(); $("searchBtn").click(); await wait(); out.one = shown();
+    history.back(); await wait(); out.afterBack = shown(); out.page = location.pathname;
+    WanderersLearn.open("time"); await wait(); $("infoBtn").click(); await wait(); out.stack = shown();
+    history.back(); await wait(); out.back1 = shown(); history.back(); await wait(); out.back2 = shown();
+    $("infoBtn").click(); await wait(); $("infoClose").click(); await wait(); out.closed = shown(); out.state = history.state;
+    // a layer that opens in the same task as another one closes (menu -> mode, Details -> Webb) still owns an entry
+    $("learnBtn").click(); await wait(); $("learnMenu").querySelector('[data-mode="log"]').click(); await wait();
+    out.mode = shown(); out.modeEntry = !!(history.state && history.state.layer);
+    history.back(); await wait(); out.modeBack = shown(); out.modePage = location.pathname;
+    $("details").hidden = false; await wait(); $("details").hidden = true; $("webb").hidden = false; await wait();
+    out.webbEntry = !!(history.state && history.state.layer);
+    history.back(); await wait(); out.webbBack = $("webb").hidden; out.webbPage = location.pathname; out.endState = history.state;
+    // a tour closed while it loads does not start; "I saw it" twice on one day counts once
+    WanderersLearn.open("tour"); WanderersLearn.close(); await new Promise((ok) => setTimeout(ok, 1500));
+    out.tourAfterClose = { mode: WanderersLearn.mode, panel: $("learnPanel").innerHTML.length };
+    const was = localStorage.getItem("wanderers.skyLog"); localStorage.removeItem("wanderers.skyLog");
+    WanderersLearn.log("Vega", "star"); WanderersLearn.log("Vega", "star"); out.vegaN = WanderersLearn.readLog().Vega.n;
+    if (was === null) localStorage.removeItem("wanderers.skyLog"); else localStorage.setItem("wanderers.skyLog", was);
+    return out; })()`);
+  check("learn: a tour closed while it loads does not start", layers.tourAfterClose.mode === null && layers.tourAfterClose.panel === 0, JSON.stringify(layers.tourAfterClose));
+  check("learn: a double tap on 'I saw it' logs one sighting", layers.vegaN === 1, `n = ${layers.vegaN}`);
+  check("layers: the Learn menu closes when the search opens", layers.one === "searchPane", JSON.stringify(layers));
+  check("layers: back closes the search and stays on the compass", layers.afterBack === "" && /compass\.html$/.test(layers.page), JSON.stringify(layers));
+  check("layers: a sheet over the time machine closes first, then the time machine",
+    layers.stack === "learnPanel,info" && layers.back1 === "learnPanel" && layers.back2 === "", JSON.stringify(layers));
+  check("layers: a sheet closed by × leaves no history entry behind", layers.closed === "" && layers.state === null, JSON.stringify(layers));
+  check("layers: a mode picked from the Learn menu owns an entry; back closes it on the compass",
+    layers.mode === "learnPanel" && layers.modeEntry && layers.modeBack === "" && /compass\.html$/.test(layers.modePage), JSON.stringify(layers));
+  check("layers: Details -> Webb owns an entry; back closes Webb on the compass, with no entry left",
+    layers.webbEntry && layers.webbBack && /compass\.html$/.test(layers.webbPage) && layers.endState === null, JSON.stringify(layers));
+
   // ---- 2. save the sky for places, through the info sheet; then remove one place ----
   // Basic for Seattle's latitude stays for part 3. Standard for Sydney's is saved, then removed again: that must
   // leave every Seattle picture in place. SHARP=1 also saves and removes Sharp for Seattle (about 690 pictures).
