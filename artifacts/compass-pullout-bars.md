@@ -19,3 +19,13 @@ Request: hide the top and bottom bars of the Sky Compass. Show them only when th
 
 - https://github.com/kneha07/WANDERERS/issues/93: first-visit hint decision, and real-phone test.
 - Branch not pushed (agents do not push).
+
+## Follow-up: hover names and click to open (commit 988ceb5)
+
+- A mouse over a star, planet, the Moon or a WANDERERS target shows its name next to the pointer. The cursor changes to a pointer.
+- A click on a WANDERERS target (bracketed) now selects it and opens its sheet. A click on an Eye star already opened its sheet.
+- Both go through `pickAt()` in `app/realsky.js`; `targetAt` and `onTarget` hooks come from `app/compass.js`.
+- The hover check uses a 40 ms timer, not `requestAnimationFrame`: a hidden browser pane stops rAF.
+- Verified with the real mouse in the browser pane: hover "Bunda" and "Barnard's Star", click opens both sheets. Tests: 80 pass.
+- Touch phones have no hover. A tap opens the sheet, as before.
+- Seen, not changed: `data/stars/pred/hip106786.json` (Bunda) is 404; the path view falls back.
