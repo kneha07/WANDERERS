@@ -29,3 +29,18 @@ Request: hide the top and bottom bars of the Sky Compass. Show them only when th
 - Verified with the real mouse in the browser pane: hover "Bunda" and "Barnard's Star", click opens both sheets. Tests: 80 pass.
 - Touch phones have no hover. A tap opens the sheet, as before.
 - Seen, not changed: `data/stars/pred/hip106786.json` (Bunda) is 404; the path view falls back. Tracked in https://github.com/kneha07/WANDERERS/issues/95.
+
+## Follow-up: UX round 2 (2026-11-15)
+
+Built (verified in the browser pane; tests 80 pass):
+
+- Camera power: the camera stops when the photographs cover it fully (`RealSky.DEEP.op === 1`, ready), after 1.5 s. It restarts when they do not. Tested with a fake `getUserMedia`: Eye live, Deep + full Sky ended, slider 60 % live again. The last picture size is kept (`S.camSize`), so the lens geometry does not change.
+- Crosshair name: `pickAt` at the screen center, every 250 ms, drawn above the reticle.
+- Screen Wake Lock after the intro, taken again on `visibilitychange`.
+- Esc closes open sheets (else back to 1x). A swipe down (> 90 px) from a sheet's top closes it.
+- Webb frames: violet diamonds, not gold squares.
+- First visit: the pull tabs bounce 3 times (`wanderers.barsSeen`). The bars' open state is kept in `wanderers.top-open` and `wanderers.bottom-open`.
+
+Removed on user request: red night mode (built, then removed; the user did not like it).
+
+Not tested: the real camera stop and restart, the wake lock and the swipe-down on a real phone (issue #93).
