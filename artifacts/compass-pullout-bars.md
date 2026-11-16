@@ -28,4 +28,4 @@ Request: hide the top and bottom bars of the Sky Compass. Show them only when th
 - The hover check uses a 40 ms timer, not `requestAnimationFrame`: a hidden browser pane stops rAF.
 - Verified with the real mouse in the browser pane: hover "Bunda" and "Barnard's Star", click opens both sheets. Tests: 80 pass.
 - Touch phones have no hover. A tap opens the sheet, as before.
-- Seen, not changed: `data/stars/pred/hip106786.json` (Bunda) is 404; the path view falls back.
+- Seen, not changed: `data/stars/pred/hip106786.json` (Bunda) is 404; the path view falls back. Tracked in https://github.com/kneha07/WANDERERS/issues/95.
