@@ -50,3 +50,12 @@ No redesign is needed for one more language: add a dictionary file and a build s
 
 Tracked in issue kneha07/WANDERERS#94 (https://github.com/kneha07/WANDERERS/issues/94).
 - Translations are machine-made and not reviewed by native speakers (issue kneha07/WANDERERS#96). Vietnamese constellation names use formal Hán-Việt forms. Korean uses "웹 망원경" in one short label but "Webb" in longer sentences.
+
+## Decision note: strings with numbers (issue #94), 2026-11-15 (in progress)
+
+- Problem: in zh/hi/vi/ko the star detail panels stay English. Metric: visible English sentences after a click probe of all 6 pages in zh. Before: 674. Target: < 30 (names and data codes only).
+- Evidence: 674 sentences, 293 templates; 609 (90 %) have a number inside, 65 (10 %) are fixed sentences that show only after a click. Mostly Observatory panels starModel, starQuake, starProfile, lrCard, pathBody, facts. The 1,700 SPHEREx flag codes (BLOOM, OVERFLOW, …) are data codes and stay English.
+- 3 Whys: English shows → text is not a dictionary key → numbers change per star, and load-time collection never clicked → i18n.js keys on the finished text, scripts paste numbers into English templates.
+- Plan: i18n.js looks up the exact text first, then the number template ("{0} light-years away") and puts the numbers back. A click probe in all 4 visitor modes collected 756 new shapes (en-4…7.json). Build and test/i18n.test.js check that every translation keeps its placeholders.
+- Rejected: rewriting 282 script templates as t() calls (about 10 files, conflicts with open branches).
+- Probe lesson: the click probe clicked the Sky Survey CSV/JSON export buttons, which opened save prompts; the probe now skips export/download/share/camera buttons.

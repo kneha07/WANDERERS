@@ -3,7 +3,7 @@
  * artifacts/i18n/<lang>-*.json) and swaps every text node and the placeholder / title / aria-label / alt
  * attributes whose English text is a key, now and as scripts add more.
  * Choice: ?lang=<code>, then the saved choice, then the browser language. Changing it reloads the page.
- * ponytail: whole-string match only; text built with numbers inside (e.g. "34 epochs") stays English (issue #94). */
+ * Lookup: exact text, then the number template ("{0} epochs"). Strings that no probe saw stay English (issue #94). */
 (() => {
   // Short labels: a closed <select> is as wide as its longest option, and the phone header has little room.
   const LANGS = { en: ["EN", "en"], zh: ["中文", "zh-CN"], hi: ["हिन्दी", "hi"], vi: ["Việt", "vi"], ko: ["한국어", "ko"] };
@@ -29,10 +29,19 @@
   document.documentElement.lang = LANGS[lang][1];
 
   const sc = document.createElement("script");
-  sc.src = `i18n-${lang}.js?v=20261116a`;
+  sc.src = `i18n-${lang}.js?v=20261116b`;
   sc.onload = () => {
     const D = window.I18N_DICT || {};
-    const tr = (v) => { const k = v.trim().replace(/\s+/g, " "); return Object.hasOwn(D, k) ? v.replace(v.trim(), D[k]) : null; };
+    // Exact text first. Then the number template: scripts paste numbers into English sentences, so
+    // "4.2 light-years away" is looked up as "{0} light-years away" and the numbers go back in, in any order.
+    const NUM = /\d+(?:[.,]\d+)*/g;
+    const look = (k) => {
+      if (Object.hasOwn(D, k)) return D[k];
+      const nums = k.match(NUM); if (!nums) return null;
+      let i = 0; const shape = k.replace(NUM, () => `{${i++}}`);
+      return Object.hasOwn(D, shape) ? D[shape].replace(/\{(\d+)\}/g, (_, j) => nums[j]) : null;
+    };
+    const tr = (v) => { const k = v.trim().replace(/\s+/g, " "); const t = k && look(k); return t ? v.replace(v.trim(), t) : null; };
     const text = (n) => { const p = n.parentElement; if (!p || p.closest("script,style,svg,select.lang-toggle")) return; const t = tr(n.nodeValue); if (t !== null && t !== n.nodeValue) n.nodeValue = t; };
     const attrs = (e) => { if (e.classList?.contains("lang-toggle")) return; ATTRS.forEach((a) => { const v = e.getAttribute(a); if (v) { const t = tr(v); if (t !== null && t !== v) e.setAttribute(a, t); } }); };
     const walk = (root) => {

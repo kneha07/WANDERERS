@@ -18,6 +18,9 @@ for lang in langs:
     for f in sorted(src.glob(f"{lang}-*.json")):
         d.update(json.loads(f.read_text(encoding="utf-8")))
     d = {" ".join(k.split()): v for k, v in d.items() if v and v != k}
+    # A number template ("{0} light-years away") must keep every placeholder, or a number vanishes from the page.
+    bad = [k for k, v in d.items() if sorted(re.findall(r"\{\d+\}", k)) != sorted(re.findall(r"\{\d+\}", v))]
+    assert not bad, f"{lang}: placeholders differ in {len(bad)} entries, e.g. {bad[:3]}"
     out = root / "app" / f"i18n-{lang}.js"
     out.write_text("/* Built by scripts/build_i18n.py from artifacts/i18n/" + lang + "-*.json. Do not edit by hand. */\n"
                    "window.I18N_DICT = " + json.dumps(d, ensure_ascii=False, indent=0) + ";\n", encoding="utf-8", newline="\n")
