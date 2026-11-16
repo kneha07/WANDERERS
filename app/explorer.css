@@ -295,3 +295,6 @@ html[data-mode="kids"] .obs #classify, html[data-mode="teens"] .obs #classify, h
 html[data-mode="kids"] .obs-guide:not(:empty), html[data-mode="teens"] .obs-guide:not(:empty) { display: grid; }
 /* unit symbols must keep their case (µm, σ): no uppercasing in data-table headers */
 .rp-table thead th, .or-table thead th { text-transform: none; letter-spacing: .02em; }
+
+/* Narrow phones: the mode switch is one more button in the header, so tighten the gaps to keep it on screen (375 px). */
+@media (max-width: 420px) { .site-head .bar { gap: 12px; } .head-tools { gap: 6px; } }

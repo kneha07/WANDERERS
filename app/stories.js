@@ -55,7 +55,7 @@
     g.drawImage(v, 0, 0);
     const withLabels = sky.on && sky.drawn > 0;
     if (withLabels) g.drawImage($("camOverlay"), 0, 0, c.width, c.height);
-    usePhoto(c, { estimated: withLabels });
+    usePhoto(c, { estimated: withLabels, fixedOn: withLabels ? sky.fixedOn : "" });
     closeCamera();
   }
   function fromFile(file) {
@@ -95,7 +95,7 @@
     }));
   }
   function usePhoto(canvas, meta) {
-    st.photo = canvas; st.estimated = !!meta.estimated; st.nasa = meta.nasa || null;
+    st.photo = canvas; st.estimated = !!meta.estimated; st.fixedOn = meta.fixedOn || ""; st.nasa = meta.nasa || null;
     $("stepDesign").hidden = false; $("stepSave").hidden = false;
     $("nasaPick").hidden = true; $("openNasa").setAttribute("aria-expanded", "false");
     tell("camera-photo");
@@ -104,9 +104,16 @@
   }
 
   /* ================= estimated sky labels on the live camera ================= */
-  const sky = { on: false, loc: null, pose: null, decl: 0, objects: [], raf: 0, drawn: 0, listener: null };
+  // Pointing comes from the Sky Compass orientation engine (orient.js): the gyroscope drives every movement and the
+  // compass only sets north, so labels are steady, follow roll, and survive the iPhone heading flip above 45°.
+  // A sight check ("Line up") is the same as Sky Compass's: put the crosshair on the Moon, a planet or a bright star
+  // and tap Set; from then on that object, not the magnetometer, decides north. The Sun is not offered here.
+  const O = root.Orient;
+  const sky = { on: false, loc: null, decl: 0, objects: [], raf: 0, drawn: 0, listeners: null, F: null, aim: null, fixedOn: "" };
+  const nowPos = (o, now) => Sky.observe(o.body ? { body: o.body } : { ra: o.ra, dec: o.dec }, now || new Date(), sky.loc.lat, sky.loc.lon);
+  const screenAngle = () => { const so = root.screen && root.screen.orientation; return so && typeof so.angle === "number" ? so.angle : +root.orientation || 0; };
   async function startSky() {
-    if (!Sky) { say("camMsg", "Sky maths not available."); return; }
+    if (!Sky || !O) { say("camMsg", "Sky maths not available."); return; }
     say("camMsg", "Asking for motion sensors and location (used only on this phone)…");
     try {   // iOS needs a tap-time permission for orientation
       const DOE = root.DeviceOrientationEvent;
@@ -125,22 +132,28 @@
     Sky.planets(now).forEach((p) => objs.push({ name: p.name, ra: p.ra, dec: p.dec, kind: "planet" }));
     if (stars) stars.stars.filter((s) => s[2] <= 1.6 && s[7]).forEach((s) => objs.push({ name: s[7], ra: s[0], dec: s[1], kind: "star" }));
     sky.objects = objs;
-    sky.listener = (e) => { const p = R.pose(e); if (p) { sky.pose = p; drawLabels(); } };   // redraw on every sensor update too
-    root.addEventListener("deviceorientationabsolute", sky.listener);
-    root.addEventListener("deviceorientation", sky.listener);
+    const F = new O.Fusion(); F.decl = sky.decl; sky.F = F; sky.fixedOn = "";
+    const rel = (e) => { F.feed(e); drawLabels(); };                     // redraw on every sensor update too
+    const abs = (e) => { F.feed({ alpha: e.alpha, beta: e.beta, gamma: e.gamma, absolute: true }); drawLabels(); };
+    sky.listeners = { rel, abs };
+    root.addEventListener("deviceorientation", rel, true);
+    root.addEventListener("deviceorientationabsolute", abs, true);
     sky.on = true;
     $("skyLabels").setAttribute("aria-pressed", "true");
-    $("nudgeBox").hidden = false;
+    $("nudgeBox").hidden = false; $("fixBox").hidden = false;
     const b = $("estBanner"); b.hidden = false; b.textContent = R.estimateNote();
     say("camMsg", "");
     tick();
-    setTimeout(() => { if (sky.on && !sky.pose) say("camMsg", "No compass reading from this device, so labels can’t be placed. Sky labels work on phones with a compass."); }, 2500);
+    setTimeout(() => {
+      if (sky.on && !(F.pointing() && (F.pointing().ready || F.compassFrozen)))
+        say("camMsg", "No compass reading from this device yet. Use “Line up” on the Moon or a bright star to set north by sight.");
+    }, 2500);
   }
   function stopSky() {
-    sky.on = false; cancelAnimationFrame(sky.raf);
-    if (sky.listener) { root.removeEventListener("deviceorientationabsolute", sky.listener); root.removeEventListener("deviceorientation", sky.listener); }
+    sky.on = false; cancelAnimationFrame(sky.raf); endAim();
+    if (sky.listeners) { root.removeEventListener("deviceorientation", sky.listeners.rel, true); root.removeEventListener("deviceorientationabsolute", sky.listeners.abs, true); sky.listeners = null; }
     const c = $("camOverlay"); c.getContext("2d").clearRect(0, 0, c.width, c.height);
-    $("skyLabels").setAttribute("aria-pressed", "false"); $("nudgeBox").hidden = true; $("estBanner").hidden = true;
+    $("skyLabels").setAttribute("aria-pressed", "false"); $("nudgeBox").hidden = true; $("fixBox").hidden = true; $("estBanner").hidden = true;
   }
   function tick() {
     if (!sky.on) return;
@@ -154,31 +167,71 @@
     const g = c.getContext("2d");
     g.clearRect(0, 0, c.width, c.height);
     sky.drawn = 0;
-    if (sky.pose && c.width) {
-      const now = new Date(), nudge = +$("nudge").value || 0;
-      const pose = { heading: (sky.pose.heading + sky.decl + nudge + 360) % 360, pitch: sky.pose.pitch };
-      const hfov = c.width >= c.height ? 63 : 48;              // typical phone main camera
-      g.font = `${Math.round(c.width / 34)}px Inter, system-ui, sans-serif`;
-      g.textBaseline = "middle";
-      const boxes = [];                                         // keep labels from overlapping: move a label down until it is clear
-      for (const o of sky.objects) {
-        const pos = Sky.observe(o.body ? { body: o.body } : { ra: o.ra, dec: o.dec }, now, sky.loc.lat, sky.loc.lon);
-        if (pos.alt < -2) continue;
-        const pt = R.skyToScreen(pos, pose, hfov, c.width, c.height);
-        if (!pt) continue;
-        sky.drawn++;
-        const r = o.kind === "moon" || o.kind === "sun" ? c.width / 26 : c.width / 70;
-        g.strokeStyle = o.kind === "planet" ? "#F2B866" : "#8AB6EF"; g.lineWidth = Math.max(2, c.width / 400);
-        g.setLineDash([6, 6]); g.beginPath(); g.arc(pt.x, pt.y, r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
-        const label = `${o.name} (est.)`, w = g.measureText(label).width, bh = c.width / 25;
-        const bx = pt.x + r + 6; let by = pt.y - bh / 2;
-        for (let k = 0; k < 6 && boxes.some((b) => bx < b.x + b.w && b.x < bx + w + 16 && by < b.y + b.h && b.y < by + bh); k++) by += bh + 4;
-        boxes.push({ x: bx, y: by, w: w + 16, h: bh });
-        if (by !== pt.y - bh / 2) { g.strokeStyle = "rgba(241,245,250,.5)"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(pt.x + r, pt.y); g.lineTo(bx, by + bh / 2); g.stroke(); }
-        g.fillStyle = "rgba(5,11,20,.62)"; g.fillRect(bx, by, w + 16, bh);
-        g.fillStyle = "#F1F5FA"; g.fillText(label, bx + 8, by + bh / 2);
-      }
+    const pt = sky.F && sky.F.pointing();
+    if (!pt || !(pt.ready || sky.F.compassFrozen) || !c.width) return;
+    const now = new Date(), nudge = +$("nudge").value || 0, ang = screenAngle();
+    const hfov = c.width >= c.height ? 63 : 48;                // typical phone main camera
+    g.font = `${Math.round(c.width / 34)}px Inter, system-ui, sans-serif`;
+    g.textBaseline = "middle";
+    const boxes = [];                                           // keep labels from overlapping: move a label down until it is clear
+    for (const o of sky.objects) {
+      const pos = nowPos(o, now);
+      if (pos.alt < -2) continue;
+      const p = R.projectPointing(pos, pt, hfov, c.width, c.height, ang, nudge);
+      if (!p) continue;
+      sky.drawn++;
+      const r = o.kind === "moon" || o.kind === "sun" ? c.width / 26 : c.width / 70;
+      g.strokeStyle = o.kind === "planet" ? "#F2B866" : "#8AB6EF"; g.lineWidth = Math.max(2, c.width / 400);
+      g.setLineDash([6, 6]); g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      const label = `${o.name} (est.)`, w = g.measureText(label).width, bh = c.width / 25;
+      const bx = p.x + r + 6; let by = p.y - bh / 2;
+      for (let k = 0; k < 6 && boxes.some((b) => bx < b.x + b.w && b.x < bx + w + 16 && by < b.y + b.h && b.y < by + bh); k++) by += bh + 4;
+      boxes.push({ x: bx, y: by, w: w + 16, h: bh });
+      if (by !== p.y - bh / 2) { g.strokeStyle = "rgba(241,245,250,.5)"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(p.x + r, p.y); g.lineTo(bx, by + bh / 2); g.stroke(); }
+      g.fillStyle = "rgba(5,11,20,.62)"; g.fillRect(bx, by, w + 16, bh);
+      g.fillStyle = "#F1F5FA"; g.fillText(label, bx + 8, by + bh / 2);
     }
+  }
+
+  /* ---- sight check, shared with Sky Compass: aim the crosshair at something you can see, then Set ---- */
+  function fixChoices(now) {
+    return sky.objects.filter((o) => o.kind !== "sun").map((o) => ({ o, p: nowPos(o, now) })).filter((x) => x.p.alt > 3)
+      .sort((a, b) => (b.o.kind === "moon") - (a.o.kind === "moon") || (b.o.kind === "planet") - (a.o.kind === "planet") || b.p.alt - a.p.alt).slice(0, 8);
+  }
+  function openFix() {
+    const box = $("fixList"), open = box.hidden;
+    box.hidden = !open; $("fixBtn").setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    const items = fixChoices(new Date()), dir = (az) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(az / 45) % 8];
+    box.innerHTML = items.length
+      ? items.map((x, i) => `<button type="button" data-i="${i}">${x.o.name}<span>${dir(x.p.az)} · ${Math.round(x.p.alt)}° up</span></button>`).join("")
+      : '<p class="small-note">Nothing bright is up right now. Use the slider instead.</p>';
+    box.querySelectorAll("button").forEach((b) => (b.onclick = () => startAim(items[+b.dataset.i].o)));
+  }
+  function startAim(o) {
+    sky.aim = o; $("fixList").hidden = true; $("fixBtn").setAttribute("aria-expanded", "false");
+    $("aimMark").hidden = false; $("aimBar").hidden = false;
+    say("aimText", `Move the phone until the gold crosshair sits on ${o.name}, then tap Set.`);
+  }
+  function endAim() { sky.aim = null; const m = $("aimMark"), b = $("aimBar"); if (m) m.hidden = true; if (b) b.hidden = true; }
+  function setAim() {
+    const o = sky.aim, F = sky.F;
+    if (!o || !F) return endAim();
+    const before = { az: F.fineAz, alt: F.fineAlt, frozen: F.compassFrozen }, pos = nowPos(o), r = F.fineTune(pos.az, pos.alt);
+    if (!r) { say("aimText", "The motion sensors are not ready yet. Hold still a moment and try again."); return; }
+    if (Math.abs(r.dAlt) > 20) {                               // same rule as Sky Compass: a wild aim changes nothing
+      F.fineAz = before.az; F.fineAlt = before.alt; F.compassFrozen = before.frozen;
+      say("aimText", `That is ${Math.round(Math.abs(r.dAlt))}° higher or lower than ${o.name} really is. Is the crosshair on it? Aim again and tap Set.`);
+      return;
+    }
+    $("nudge").value = 0; say("nudgeVal", "0°");
+    sky.fixedOn = o.name;
+    say("camMsg", `Lined up on ${o.name}: north moved ${r.dAz >= 0 ? "+" : ""}${r.dAz.toFixed(1)}°. Labels are still estimates.`);
+    endAim(); drawLabels();
+  }
+  function resetFix() {
+    if (sky.F) sky.F.clearFineTune();
+    sky.fixedOn = ""; endAim(); say("camMsg", "Line-up cleared: back to the compass."); drawLabels();
   }
 
   /* ================= 2 · design ================= */
@@ -257,7 +310,7 @@
       g.restore();
       notes.push(`${st.cons.name}: constellation guide, illustration only`);
     }
-    if (st.estimated) notes.push("Sky labels estimated from phone sensors, not identified in the photo");
+    if (st.estimated) notes.push("Sky labels estimated from phone sensors, not identified in the photo" + (st.fixedOn ? ` (north lined up by eye on ${st.fixedOn})` : ""));
     if (st.nasa) notes.push("Image: NASA WISE / SPHEREx via WANDERERS");
     // text panel
     const P = T.panel;
@@ -334,6 +387,12 @@
   $("snap").onclick = snap;
   $("skyLabels").onclick = () => (sky.on ? stopSky() : startSky());
   $("nudge").oninput = () => { $("nudgeVal").textContent = `${$("nudge").value}°`; };
+  $("fixBtn").onclick = openFix;
+  $("aimGo").onclick = setAim;
+  $("aimCancel").onclick = endAim;
+  $("fixReset").onclick = resetFix;
+  // Offline: the same service worker as Sky Compass keeps this page, its scripts and the NASA facts on the phone.
+  if (root.navigator.serviceWorker && root.isSecureContext) root.navigator.serviceWorker.register("sw.js").catch(() => {});
   $("upload").onchange = (e) => { fromFile(e.target.files && e.target.files[0]); e.target.value = ""; };
   $("openNasa").onclick = showNasa;
   $("doShare").onclick = doShare;

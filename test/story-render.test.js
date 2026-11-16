@@ -94,3 +94,57 @@ test("Story Studio privacy: camera, sensors and location only on tap; nothing up
   assert.match(code, /constellation guide, illustration only/);
   assert.match(read("app/stories.html"), /Private by default/);
 });
+
+// ---- Sky Compass calibration shared with Space Camera (orient.js Fusion + sight check) ----
+const O = require("../app/orient.js");
+const settle = (F, e, n = 40) => { for (let i = 0; i < n; i++) F.feed({ ...e, t: i * 16 }); return F.pointing(); };
+
+test("projectPointing: centre is where the camera points; right, up and roll follow the phone", () => {
+  const F = new O.Fusion(), p = settle(F, { alpha: 0, beta: 90, gamma: 0, webkitCompassHeading: 180 });   // upright, facing south
+  near(p.az, 180, 0.5, "az"); near(p.alt, 0, 0.5, "alt");
+  const c = R.projectPointing({ az: p.az, alt: p.alt }, p, 48, 1080, 1440);
+  near(c.x, 540, 1e-6, "x"); near(c.y, 720, 1e-6, "y");
+  assert.ok(R.projectPointing({ az: p.az + 10, alt: p.alt }, p, 48, 1080, 1440).x > 540, "west of south is to the right");
+  assert.ok(R.projectPointing({ az: p.az, alt: p.alt + 10 }, p, 48, 1080, 1440).y < 720, "higher is up");
+  assert.equal(R.projectPointing({ az: p.az + 180, alt: 0 }, p, 48, 1080, 1440), null, "behind is hidden");
+  // the nudge slider turns the labels: +10° nudge puts an object 10° to the right back in the centre
+  near(R.projectPointing({ az: p.az + 10, alt: p.alt }, p, 48, 1080, 1440, 0, 10).x, 540, 1e-6, "nudge");
+  // landscape (screen turned 90°): the sky's up is still the picture's up
+  const L = new O.Fusion(), q = settle(L, { ...O.eulerFromMat([[0, 1, 0], [0, 0, 1], [1, 0, 0]]), absolute: true });
+  assert.ok(R.projectPointing({ az: q.az, alt: q.alt + 10 }, q, 63, 1440, 1080, 90).y < 540, "landscape: higher is up");
+  near(R.projectPointing({ az: q.az, alt: q.alt + 10 }, q, 63, 1440, 1080, 90).x, 720, 1e-6, "landscape: no sideways drift");
+});
+
+test("sight check: lining up on the Moon fixes a compass that is 25° off", () => {
+  const date = new Date("2026-11-15T06:00:00Z"), moon = Sky.observe({ body: "moon" }, date, 47.6062, -122.3321);
+  // the phone really points at the Moon (upright, camera tilted up to it), but its compass is bent by 25°
+  const e = { alpha: (360 - moon.az) % 360, beta: 90 + moon.alt, gamma: 0, absolute: true };
+  const F = new O.Fusion();
+  settle(F, e);
+  F.delta = 25;
+  for (let i = 0; i < 80; i++) F.feed({ ...e, t: 1000 + i * 16 });
+  const before = F.pointing();
+  near(Math.abs(O.wrap180(before.az - moon.az)), 25, 0.5, "labels are 25° off before the sight check");
+  assert.ok(F.fineTune(moon.az, moon.alt) && F.compassFrozen, "the Moon now decides north");
+  for (let i = 0; i < 80; i++) F.feed({ ...e, t: 3000 + i * 16 });
+  const c = R.projectPointing(moon, F.pointing(), 48, 1080, 1440);
+  near(c.x, 540, 1, "the Moon's label sits under the crosshair (x)"); near(c.y, 720, 1, "(y)");
+});
+
+test("Space Camera uses the Sky Compass engine and sight check, never the Sun, and says when north was set by eye", () => {
+  const js = read("app/stories.js"), html = read("app/stories.html");
+  assert.ok(html.indexOf('src="orient.js"') > 0 && html.indexOf('src="orient.js"') < html.indexOf("stories.js?"), "orient.js loads before stories.js");
+  assert.match(js, /new O\.Fusion\(\)/); assert.match(js, /F\.fineTune\(/); assert.match(js, /R\.projectPointing\(/);
+  assert.match(js, /o\.kind !== "sun"/, "the Sun is never offered for a sight check");
+  assert.match(js, /Math\.abs\(r\.dAlt\) > 20/, "a wild aim is rejected, as in Sky Compass");
+  assert.match(js, /north lined up by eye on/);
+  for (const id of ["fixBtn", "fixList", "aimMark", "aimGo", "aimCancel", "fixReset"]) assert.match(html, new RegExp(`id="${id}"`), id);
+});
+
+test("offline: the service worker keeps Story Studio and its NASA facts, and stories.js registers it", () => {
+  const sw = read("app/sw.js");
+  for (const f of ["stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js", "orient.js", "sky.js"])
+    assert.match(sw, new RegExp(`"${f.replace(".", "\\.")}"`), f);
+  assert.match(sw, /storeTargets\(c\)/); assert.match(sw, /isTargetJson\(url\)/);
+  assert.match(read("app/stories.js"), /serviceWorker\.register\("sw\.js"\)/);
+});
