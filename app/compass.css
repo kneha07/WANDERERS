@@ -277,3 +277,19 @@ p.pv-dim { font-size: .8rem; }
 .search-pane input { width: 100%; font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
 .search-pane .sky-card-close { top: 10px; right: 8px; }
 .search-pane .suggest { top: calc(100% + 4px); bottom: auto; }   /* the list drops down here, not up as in the bottom bar */
+
+/* 🎓 learning modes (learn.js): a button at the bottom left, a small menu, and one panel at the bottom */
+.ar .learn-btn, .ar .learn-menu, .ar .learn-panel { pointer-events: auto; }
+.learn-btn { position: absolute; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); min-width: 44px; min-height: 44px; font-size: 1.05rem; }
+.ar.bottom-open .learn-btn, .ar.bottom-open .learn-menu, .learning .learn-btn, .learning .learn-menu, .learning .search-btn, .learning .guide { display: none; }
+.learn-menu { position: absolute; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 62px); display: grid; gap: 6px; z-index: 5; }
+.learn-menu .btn { text-align: left; background: var(--panel-solid); }
+.learn-panel { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; max-height: 52vh; overflow: auto;
+  padding: 12px 16px max(14px, env(safe-area-inset-bottom)); background: var(--panel); backdrop-filter: blur(8px); border-top: 1px solid var(--cyan); }
+.learn-panel p { margin: 4px 0; }
+.learn-panel .sky-card-close { top: 6px; right: 10px; }
+.learn-title { font: 700 1.15rem var(--font); margin: 4px 0; }
+.learn-aim { font-weight: 600; color: var(--amber); }
+.learn-aim.ok { color: var(--lock); }
+.learn-panel input[type=range] { width: 100%; margin: 6px 0; }
+.tm-presets .btn { padding: 4px 10px; font-size: .8rem; }

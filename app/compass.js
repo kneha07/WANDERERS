@@ -925,6 +925,9 @@ for (const sh of document.querySelectorAll(".sheet")) {
   sh.addEventListener("touchend", (e) => { if (y0 != null && e.changedTouches[0].clientY - y0 > 90) sh.hidden = true; y0 = null; }, { passive: true });
 }
 
+// shared with learn.js (the 🎓 learning modes)
+window.WanderersCompass = { S, pose, loc, nowDate, vec, dot, renderTargets };
+
 // ---------- info ----------
 $("infoBtn").onclick = () => { $("info").hidden = false; renderInfo(new Date(), loc(), null, Intl.DateTimeFormat().resolvedOptions().timeZone); };
 $("infoClose").onclick = () => { $("info").hidden = true; };

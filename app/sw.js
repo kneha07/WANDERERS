@@ -28,7 +28,7 @@ const { maxFiles: MAX_FILES, maxBytes: MAX_BYTES, maxAgeMs: MAX_AGE_MS } = CFG.r
 const META = TILES + "__wanderers_meta__";            // a made-up URL inside the cache: when it was started
 const SHELL_CACHE = CFG.caches.shell;
 const SHELL = ["compass.html", "compass.css", "compass.js", "brand.css", "theme.js", "favicon.svg", "sky.js", "search.js", "starcore.js",
-  "pathview.js", "telescope.js", "orient.js", "intro.js", "skyview.js", "hips.js", "realsky.js", "manifest.webmanifest", "icon-192.png", "icon-512.png",
+  "pathview.js", "telescope.js", "orient.js", "intro.js", "skyview.js", "hips.js", "realsky.js", "learn.js", "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "data/skystars.json", "data/stars.json", "data/constellations.json", "data/index.json", "data/declination.json", "data/earth/cities.json", "data/paths.json",
   // Space Camera and Story Studio (stories.html); sky.js, orient.js, theme.js and the data above are shared
   "stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js",

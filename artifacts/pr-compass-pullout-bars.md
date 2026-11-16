@@ -20,13 +20,18 @@ Sky Compass: the sky fills the screen. The bars hide until the user pulls them o
 - **Search pane:** a 🔎 button (bottom right) or the `/` key opens the live star search (`StarSearch.attach()`) under the compass tape, while the bars stay hidden.
 - **Shining constellations:** the lines get a soft cyan glow that slowly brightens and dims (steady with reduced motion).
 - **Galaxies:** 16 well-known galaxies (Andromeda, Triangulum, the Magellanic Clouds, Whirlpool, Sombrero, Centaurus A, M87 and more) draw at their true size and tilt, coloured by type. Hover or tap shows type, distance and size.
+- **🎓 Learn menu** (bottom left; `app/learn.js`):
+  - **Time machine:** a year slider (±50,000 years). Each star moves along its Hipparcos proper motion, and the constellation lines move with their stars. "Show me the Big Dipper" points the arrow at it. Straight-line motion only; precession is not shown, and the panel says so.
+  - **Tonight's tour:** five stops of different kinds (bright star, constellation, planet, galaxy, WANDERERS target) chosen from what is up now, in order around the horizon, with the arrow and "✓ You are looking at it".
+  - **Find it quiz:** five rounds; hold the crosshair on the named object for 0.6 s; 10 points, or 5 after a hint (the arrow); best score kept.
+- **Distances:** star, planet, Moon, Sun and galaxy cards (and the star sheet on the compass and the Observatory) show km from you, light's travel time, and the time Voyager 1 would need. Planet distances come from `Sky.planets()` (new `au`), the Moon's from its parallax, the Sun's from Earth's orbit.
 - **Webb frames:** violet diamonds, so they do not look like the amber target brackets.
 
 ## Verification
 
 - Browser pane (375x812 and desktop): bars open and close with tap and swipe; hover names and click-to-open for a star (Bunda) and a target (Barnard's Star); crosshair name; Esc; remembered bars after a reload; first-visit hint.
 - Camera power with a fake `getUserMedia`: Eye → live, Deep + full Sky → track ended, slider 60 % → live again.
-- `node --test test/compass-*.test.js test/realsky-telescope.test.js test/survey-static.test.js test/theme.test.js`: 80 pass, 0 fail.
+- `node --test test/compass-*.test.js test/realsky-telescope.test.js test/survey-static.test.js test/theme.test.js`: 80 pass, 0 fail. Full suite `node --test test/*.test.js`: 664 pass, 0 fail.
 
 ## Not verified
 

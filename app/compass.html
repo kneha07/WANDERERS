@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="compass.css?v=20261118d">
+<link rel="stylesheet" href="compass.css?v=20261118e">
 </head>
 <body>
 <video id="cam" playsinline muted autoplay hidden></video>
@@ -83,6 +83,13 @@
     <button id="searchClose" class="sky-card-close" aria-label="Close the search">×</button>
     <ul id="findTopList" class="suggest" role="listbox" hidden></ul>
   </div>
+  <button id="learnBtn" class="btn hud learn-btn" aria-label="Learn: time machine, tour, quiz" aria-expanded="false">🎓</button>
+  <div id="learnMenu" class="learn-menu" hidden>
+    <button class="btn" data-mode="tour">🧭 Tonight's tour</button>
+    <button class="btn" data-mode="quiz">🎯 Find it: quiz</button>
+    <button class="btn" data-mode="time">⏳ Time machine</button>
+  </div>
+  <div id="learnPanel" class="learn-panel" hidden aria-live="polite"></div>
   <span id="hoverName" class="hover-name" hidden></span>
   <span id="heldMark" class="held-mark" hidden>HELD</span>
   <p id="holdHint" class="hold-hint" role="status" hidden>View held. Drag to move. Pinch out to follow the phone again.</p>
@@ -215,15 +222,16 @@
 </div>
 
 <script src="theme.js"></script>
-<script src="sky.js?v=20261117a"></script>
-<script src="search.js?v=20261117a"></script>
+<script src="sky.js?v=20261118a"></script>
+<script src="search.js?v=20261118a"></script>
 <script src="starcore.js?v=20261117a"></script>
 <script src="pathview.js?v=20261117a"></script>
 <script src="telescope.js?v=20261117a"></script>
 <script src="orient.js?v=20261117a"></script>
-<script src="skyview.js?v=20261117a"></script>
+<script src="skyview.js?v=20261118a"></script>
 <script src="hips.js?v=20261117a"></script>
-<script src="realsky.js?v=20261118d"></script>
-<script type="module" src="compass.js?v=20261118e"></script>
+<script src="realsky.js?v=20261118e"></script>
+<script type="module" src="compass.js?v=20261118f"></script>
+<script type="module" src="learn.js?v=20261118b"></script>
 </body>
 </html>

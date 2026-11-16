@@ -48,6 +48,29 @@
   }
 
   // plain-language facts from the spectral type, brightness and distance
+  // How far something is, three ways a person can feel it: in km, as light's travel time, and as a trip on Voyager 1.
+  const KM_LY = 9.4607e12, C_KMS = 299792.458, VOYAGER_KMS = 17;
+  function bigNumber(n) {   // 384,400 / 225 million / 237 trillion / 2.4 x 10^19
+    if (n < 1e6) return Math.round(n).toLocaleString("en-US");
+    for (const [v, w] of [[1e15, "quadrillion"], [1e12, "trillion"], [1e9, "billion"], [1e6, "million"]]) {
+      if (n >= v && n < v * 1000) { const k = n / v; return `${k < 10 ? k.toFixed(1) : Math.round(k).toLocaleString("en-US")} ${w}`; }
+    }
+    const e = Math.floor(Math.log10(n)); return `${(n / 10 ** e).toFixed(1)} × 10^${e}`;
+  }
+  function span(sec) {      // 1.3 seconds / 8.3 minutes / 4.2 years / 2.5 million years
+    const yr = sec / 31557600;
+    if (sec < 90) return `${sec.toFixed(1)} seconds`;
+    if (sec < 5400) return `${(sec / 60).toFixed(1)} minutes`;
+    if (sec < 172800) return `${(sec / 3600).toFixed(1)} hours`;
+    if (yr < 1) return `${Math.round(sec / 86400)} days`;
+    return `${yr < 10 ? yr.toFixed(1) : bigNumber(yr)} years`;
+  }
+  function distanceLines(km) {
+    return [`${bigNumber(km)} km from you.`,
+      `At the speed of light you would arrive in ${span(km / C_KMS)}.`,
+      `Voyager 1, our fastest probe leaving the Solar System (17 km/s), would need ${span(km / VOYAGER_KMS)}.`];
+  }
+
   function describe(s) {
     const out = [];
     const sp = (s.spect || "").trim(), cls = sp.replace(/^(sd|d|g|c)/, "")[0];
@@ -70,6 +93,7 @@
     if (s.dist) {
       const yr = new Date().getFullYear() - Math.round(s.dist);
       out.push(`${s.dist < 100 ? s.dist.toFixed(1) : Math.round(s.dist).toLocaleString()} light-years away: the light you see left it ${s.dist < 1000 ? `around ${yr}` : `about ${Math.round(s.dist).toLocaleString()} years ago`}.`);
+      out.push(...distanceLines(s.dist * KM_LY));
     }
     if (s.near) out.push("One of the Sun's close neighbours (within about 33 light-years).");
     if (s.variable) out.push("A variable star: its brightness changes.");
@@ -109,5 +133,5 @@
     document.addEventListener("pointerdown", (e) => { if (e.target !== input && !list.contains(e.target)) list.hidden = true; });
   }
 
-  root.StarSearch = { load, search, describe, attach, hms, dms, matchedName };
+  root.StarSearch = { load, search, describe, attach, distanceLines, KM_LY, hms, dms, matchedName };
 })(window);
