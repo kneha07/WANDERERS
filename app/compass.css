@@ -267,3 +267,13 @@ p.pv-dim { font-size: .8rem; }
 
 /* sheets: a grabber shows that a swipe down closes them */
 .sheet::before { content: ""; display: block; width: 42px; height: 5px; margin: -8px auto 10px; border-radius: 3px; background: var(--line); }
+
+/* the search pane: a 🔎 button (bottom right, always there) opens the live star search under the compass tape */
+.ar .search-btn, .ar .search-pane { pointer-events: auto; }
+.search-btn { position: absolute; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); min-width: 44px; min-height: 44px; font-size: 1.05rem; }
+.ar.bottom-open .search-btn { display: none; }   /* the bottom bar has its own search box */
+.search-pane { position: absolute; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 64px); z-index: 5; max-width: 520px; margin: 0 auto;
+  padding: 8px 40px 8px 8px; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 12px; }
+.search-pane input { width: 100%; font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.search-pane .sky-card-close { top: 10px; right: 8px; }
+.search-pane .suggest { top: calc(100% + 4px); bottom: auto; }   /* the list drops down here, not up as in the bottom bar */

@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brand.css">
-<link rel="stylesheet" href="compass.css?v=20261118c">
+<link rel="stylesheet" href="compass.css?v=20261118d">
 </head>
 <body>
 <video id="cam" playsinline muted autoplay hidden></video>
@@ -77,6 +77,12 @@
   <div class="telemetry mono" id="telemetry"></div>
   <button id="pullTop" class="pull pull-top" aria-expanded="false" aria-label="Show the top controls"><i></i></button>
   <button id="zoomReset" class="btn hud zoom-reset" aria-label="Zoom back to 1×" hidden>1×</button>
+  <button id="searchBtn" class="btn hud search-btn" aria-label="Find a star" aria-expanded="false">🔎</button>
+  <div id="searchPane" class="search-pane" hidden>
+    <input id="findTop" placeholder="Find any star: Sirius, Vega, Barnard's Star…" autocomplete="off" spellcheck="false" aria-label="Find a star">
+    <button id="searchClose" class="sky-card-close" aria-label="Close the search">×</button>
+    <ul id="findTopList" class="suggest" role="listbox" hidden></ul>
+  </div>
   <span id="hoverName" class="hover-name" hidden></span>
   <span id="heldMark" class="held-mark" hidden>HELD</span>
   <p id="holdHint" class="hold-hint" role="status" hidden>View held. Drag to move. Pinch out to follow the phone again.</p>
@@ -218,6 +224,6 @@
 <script src="skyview.js?v=20261117a"></script>
 <script src="hips.js?v=20261117a"></script>
 <script src="realsky.js?v=20261118b"></script>
-<script type="module" src="compass.js?v=20261118d"></script>
+<script type="module" src="compass.js?v=20261118e"></script>
 </body>
 </html>

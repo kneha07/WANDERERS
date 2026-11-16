@@ -52,3 +52,4 @@ Assumption to confirm: the user asked to turn the camera off at "deep and move f
 - Pushed on user request and opened https://github.com/kneha07/WANDERERS/pull/97 (2026-11-15). Next: review and merge, then the real-phone test in #93.
 - Codex review on #97 did not run: the Codex usage limit was reached (2026-11-15). A human review is needed; no automated findings exist.
 - Crosshair name shows stars only (2026-11-15): the Moon, planets and targets already have labels, so the user saw "Moon" twice. Bars looked "not hiding" because a test left them open and the page remembers that state; reset in the browser pane.
+- Search pane (2026-11-15): a 🔎 button (bottom right, hidden while the bottom bar is open) or the / key opens a live star search under the compass tape. It reuses StarSearch.attach() from app/search.js. Verified: typing "vega" lists Vega live, Enter selects it, Esc closes. Tests: 40 compass tests pass.

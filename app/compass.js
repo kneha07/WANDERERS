@@ -767,6 +767,18 @@ $("wBase").onchange = (e) => Webb.setBase(e.target.value);
 // ---------- targets ----------
 // ---------- find any star ----------
 StarSearch.attach($("findIn"), $("findList"), (star) => { $("findIn").blur(); selectStar(star); });
+// The search pane: the same live search, reachable at any time from the 🔎 button (or the / key), with the bars hidden.
+const searchOpen = (on) => {
+  $("searchPane").hidden = !on; $("searchBtn").setAttribute("aria-expanded", on);
+  if (on) { $("findTop").value = ""; $("findTopList").hidden = true; $("findTop").focus(); } else $("findTop").blur();
+};
+StarSearch.attach($("findTop"), $("findTopList"), (star) => { searchOpen(false); $("findIn").value = star.name; selectStar(star); });
+$("searchBtn").onclick = () => searchOpen($("searchPane").hidden);
+$("searchClose").onclick = () => searchOpen(false);
+$("findTop").addEventListener("keydown", (e) => { if (e.key === "Escape") searchOpen(false); });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !$("ar").hidden) { e.preventDefault(); searchOpen(true); }
+});
 function selectStar(star) {
   let t = star.wanderers && S.targets.find((x) => x.id === star.wanderers);
   if (!t) {
