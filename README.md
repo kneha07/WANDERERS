@@ -297,7 +297,8 @@ node server.js        # http://localhost:8000 (home), /observatory.html (workspa
 ```
 
 `app/` is a static site, so it can be deployed as-is (GitHub Pages, Netlify). The live question box only
-appears when `server.js` is running.
+appears when `server.js` is running. [docs/deploy.md](docs/deploy.md) compares the ways to deploy (GitHub Pages,
+a Cloudflare Worker, or this computer through a tunnel) and `node scripts/deploy.js` runs them.
 
 **Automatic deploy:** `.github/workflows/pages.yml` publishes `app/` to GitHub Pages
 (`https://kneha07.github.io/WANDERERS/`) on every push to `main`, after each vote count, and by hand from the Actions

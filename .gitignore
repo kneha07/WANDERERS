@@ -19,3 +19,6 @@ artifacts/real-sky/prof*/
 app/data/survey/tiles/*.json
 app/data/survey/manifest.json
 app/data/survey/.run.lock
+
+# wrangler local state (node scripts/deploy.js static)
+.wrangler/
