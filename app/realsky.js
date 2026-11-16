@@ -24,6 +24,7 @@
     survey: pick("survey", (v) => SURVEYS[v], load("wanderers.skySurvey", "visible")),
     lines: load("wanderers.skyLines", true), mix: load("wanderers.skyMix", 0.8), msg: "", calDrag: null,
   };
+  const STILL = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;   // no slow shine on the lines
   let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), phoneSteers(), F, S, onStar(key), openSight()
   let LAST = null;         // the latest frame: pose, focal, size, time, place (for taps, the drag and the self-check)
 
@@ -102,17 +103,76 @@
       CON.figs = CON.list.map((c) => ({ name: c.name, at: fr.toHorizon(...Sky.unit(c.ra, c.dec)),
         strokes: c.lines.map((l) => { const v = []; for (let i = 0; i < l.length; i += 2) v.push(fr.toHorizon(...Sky.unit(l[i], l[i + 1]))); return v; }) }));
     }
-    g.strokeStyle = "rgba(124,196,255,.34)"; g.lineWidth = 1; g.beginPath();
+    // the lines shine: a soft cyan glow under a brighter line, slowly brightening and dimming (an 8 s cycle)
+    const shine = STILL ? 0.5 : 0.5 + 0.5 * Math.sin(now.getTime() / 8000 * 2 * Math.PI);
+    g.save(); g.shadowColor = "rgba(124,196,255,.9)"; g.shadowBlur = 5 + 5 * shine;
+    g.strokeStyle = `rgba(150,210,255,${(0.42 + 0.18 * shine).toFixed(3)})`; g.lineWidth = 1.3; g.beginPath();
     for (const c of CON.figs) for (const st of c.strokes) for (let i = 1; i < st.length; i++) {
       if (st[i - 1][2] < 0 && st[i][2] < 0) continue;              // under the ground
       const a = proj(st[i - 1]), b = proj(st[i]); if (!a || !b) continue;
       g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
     }
-    g.stroke();
-    g.fillStyle = "rgba(124,196,255,.6)"; g.font = "600 10px 'JetBrains Mono', monospace"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.stroke(); g.restore();
+    g.fillStyle = "rgba(150,210,255,.75)"; g.font = "600 10px 'JetBrains Mono', monospace"; g.textAlign = "center"; g.textBaseline = "middle";
     for (const c of CON.figs) { if (c.at[2] < 0) continue; const q = proj(c.at); if (q) g.fillText(c.name.toUpperCase(), q[0], q[1]); }
     g.textAlign = "left";
   }
+  // ---------- galaxies: well-known galaxies, at their true size and tilt, coloured by type ----------
+  // Positions J2000 (deg), size as major x minor axis (arcmin), PA = position angle of the major axis (deg, from north
+  // through east). Sources: the Messier and NGC catalogues (NED / SIMBAD values, rounded). Distances in light-years.
+  const GALAXIES = [
+    ["Andromeda Galaxy", "M31", "spiral", 10.6847, 41.2690, 190, 60, 35, 2.5e6],
+    ["Triangulum Galaxy", "M33", "spiral", 23.4621, 30.6602, 73, 45, 23, 2.7e6],
+    ["Large Magellanic Cloud", "LMC", "irregular", 80.894, -69.756, 645, 550, 170, 1.6e5],
+    ["Small Magellanic Cloud", "SMC", "irregular", 13.187, -72.829, 320, 205, 45, 2.0e5],
+    ["Whirlpool Galaxy", "M51", "spiral", 202.4696, 47.1952, 11, 7, 163, 2.3e7],
+    ["Bode's Galaxy", "M81", "spiral", 148.8882, 69.0653, 27, 14, 157, 1.2e7],
+    ["Cigar Galaxy", "M82", "starburst", 148.9685, 69.6797, 11, 5, 65, 1.2e7],
+    ["Pinwheel Galaxy", "M101", "spiral", 210.8023, 54.3489, 29, 27, 0, 2.1e7],
+    ["Sombrero Galaxy", "M104", "spiral", 189.9976, -11.6231, 9, 4, 90, 3.1e7],
+    ["Centaurus A", "NGC 5128", "elliptical", 201.3651, -43.0191, 26, 20, 35, 1.2e7],
+    ["Sculptor Galaxy", "NGC 253", "spiral", 11.888, -25.2883, 27, 7, 52, 1.1e7],
+    ["Virgo A", "M87", "elliptical", 187.7059, 12.3911, 8, 6, 0, 5.4e7],
+    ["Southern Pinwheel", "M83", "spiral", 204.2538, -29.8658, 13, 12, 0, 1.5e7],
+    ["Sunflower Galaxy", "M63", "spiral", 198.9555, 42.0293, 13, 7, 104, 2.9e7],
+    ["Black Eye Galaxy", "M64", "spiral", 194.1821, 21.6827, 10, 5, 115, 1.7e7],
+    ["Milky Way centre", "Sgr A*", "our galaxy", 266.4168, -29.0078, 60, 30, 58, 2.6e4],
+  ].map(([name, id, type, ra, dec, a, b, pa, ly]) => ({ name, id, type, ra, dec, a, b, pa, ly }));
+  const GAL_COLOR = { spiral: [170, 200, 255], elliptical: [255, 214, 150], irregular: [255, 170, 210], starburst: [255, 160, 130], "our galaxy": [255, 236, 200] };
+  const GAL_KIND = { spiral: "A spiral galaxy", elliptical: "An elliptical galaxy", irregular: "An irregular dwarf galaxy", starburst: "A starburst galaxy: new stars form very fast", "our galaxy": "The centre of our own galaxy, the Milky Way, with its black hole Sagittarius A*" };
+  const lyText = (ly) => (ly >= 1e6 ? `${(ly / 1e6).toFixed(ly < 1e7 ? 1 : 0)} million` : `${Math.round(ly / 1000)},000`) + " light-years";
+  // screen place, half axes (px) and tilt of one galaxy; null when it is behind the view
+  function galaxyOnScreen(gx, proj, now, L, f) {
+    const s = Sky.observe(gx, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) return null;
+    const n = Sky.observe({ ra: gx.ra, dec: Math.min(89.9, gx.dec + 0.2) }, now, L.lat, L.lon), qn = proj(vec(n.az, n.alt));
+    const north = qn ? Math.atan2(qn[0] - q[0], -(qn[1] - q[1])) : 0, px = f * Math.PI / 180 / 60;   // px per arcmin
+    return { q, alt: s.alt, rx: Math.max(5, gx.a / 2 * px), ry: Math.max(2.5, gx.b / 2 * px), rot: north - gx.pa * Math.PI / 180 };
+  }
+  function drawGalaxies(g, proj, now, L, f) {
+    g.font = "600 11px 'Space Grotesk', sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
+    for (const gx of GALAXIES) {
+      const o = galaxyOnScreen(gx, proj, now, L, f); if (!o || o.alt < -2) continue;
+      const [r, gg, b] = GAL_COLOR[gx.type];
+      if (R.sky === "eye") {   // a soft glowing ellipse; in Deep the photograph shows the real galaxy, so only an outline
+        g.save(); g.translate(o.q[0], o.q[1]); g.rotate(o.rot - Math.PI / 2); g.scale(1, o.ry / o.rx);
+        const grad = g.createRadialGradient(0, 0, 0, 0, 0, o.rx);
+        grad.addColorStop(0, `rgba(255,255,255,.95)`); grad.addColorStop(0.12, `rgba(${r},${gg},${b},.8)`); grad.addColorStop(0.45, `rgba(${r},${gg},${b},.38)`); grad.addColorStop(1, `rgba(${r},${gg},${b},0)`);   // a white core, then the colour of its type, fading out
+        g.fillStyle = grad; g.beginPath(); g.arc(0, 0, o.rx, 0, 7); g.fill(); g.restore();
+      }
+      g.save(); g.strokeStyle = `rgba(${r},${gg},${b},.55)`; g.lineWidth = 1; g.setLineDash([3, 3]);
+      g.beginPath(); g.ellipse(o.q[0], o.q[1], o.rx + 3, o.ry + 3, o.rot - Math.PI / 2, 0, 7); g.stroke(); g.restore();
+      g.fillStyle = `rgba(${r},${gg},${b},.95)`; g.fillText(gx.name, o.q[0] + o.rx * 0.7 + 8, o.q[1] - 4);
+    }
+    g.textAlign = "left";
+  }
+  function galaxyCard(gx, now, L) {
+    const a = Math.round(Sky.observe(gx, now, L.lat, L.lon).alt);
+    const size = gx.a >= 60 ? `${(gx.a / 60).toFixed(1)}° across` : `${gx.a}′ across`;
+    return { kind: "galaxy", title: `${gx.name} (${gx.id})`, lines: [`${GAL_KIND[gx.type]}, ${lyText(gx.ly)} away.`,
+      `${size} in our sky (the full Moon is 0.5°). ${a >= 0 ? `${a}° above the horizon now.` : "Below the horizon now."}`,
+      gx.ly > 1e6 ? `The light you see left it about ${lyText(gx.ly).replace(" light-years", " years")} ago.` : "Position: Messier / NGC catalogues."] };
+  }
+
   function drawPlanets(g, proj, now, L) {
     g.font = "600 12px 'Space Grotesk', sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
     for (const pl of planetsNow(now)) {
@@ -226,6 +286,7 @@
     if (R.sky === "off") return;
     const proj = projector(P, f, W, H);
     if (R.lines) drawLines(g, proj, now, L);
+    drawGalaxies(g, proj, now, L, f);
     if (R.sky === "eye") drawEye(g, proj, now, L, f);
     drawPlanets(g, proj, now, L);
   }
@@ -277,7 +338,12 @@
     const off = (o) => { const s = Sky.observe(o, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); return q ? Math.hypot(q[0] - x, q[1] - y) : 1e9; };
     const where = (o) => { const a = Math.round(Sky.observe(o, now, L.lat, L.lon).alt); return a >= 0 ? `${a}° above the horizon now.` : "Below the horizon now."; };
     for (const b of [{ name: "Moon", body: "moon" }, { name: "Sun", body: "sun" }]) if (off(b) < reach) return { kind: "body", title: b.name, lines: [where(b), "Its place is worked out for this moment, not taken from a picture."] };
+    for (const gx of GALAXIES) {
+      const o = galaxyOnScreen(gx, proj, now, L, f); if (!o) continue;
+      if (Math.hypot(o.q[0] - x, o.q[1] - y) < Math.max(18, Math.min(o.rx, 120))) { var galaxyHit = galaxyCard(gx, now, L); break; }
+    }
     for (const pl of planetsNow(now)) if (off(pl) < reach) return { kind: "planet", title: pl.name, lines: ["A planet. " + where(pl), "Its place is worked out from JPL's orbital elements, not taken from a picture."] };
+    if (galaxyHit && R.sky !== "off") return galaxyHit;   // after the Moon, Sun and planets, before single stars
     if (EYE.stars && R.sky !== "off") {
       let best = null;
       for (const s of starsUp(now, L, R.sky === "eye" ? SkyView.limitMag(R.limit) : 6.5)) {
@@ -541,6 +607,6 @@
     setSky(R.sky);
   }
 
-  const api = { init, draw, cover, cancelGesture, cancelDrag, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
+  const api = { GALAXIES, init, draw, cover, cancelGesture, cancelDrag, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
   root.RealSky = api;
 })(window);

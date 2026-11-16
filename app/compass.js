@@ -766,13 +766,19 @@ $("wBase").onchange = (e) => Webb.setBase(e.target.value);
 
 // ---------- targets ----------
 // ---------- find any star ----------
-StarSearch.attach($("findIn"), $("findList"), (star) => { $("findIn").blur(); selectStar(star); });
+// A picked star glides into the crosshair when the view is dragged or held. When the phone steers, the arrow guides.
+function flyTo(star) {
+  if (phoneSteers() && !S.hold) return;
+  const L = loc(), o = Sky.observe({ ra: star.ra, dec: star.dec }, nowDate(), L.lat, L.lon), to = { az: o.az, alt: Math.max(-85, Math.min(85, o.alt)) };
+  if (reduced) S.manual = to; else ease = { from: { ...S.manual }, to, t0: performance.now() };
+}
+StarSearch.attach($("findIn"), $("findList"), (star) => { $("findIn").blur(); selectStar(star); flyTo(star); });
 // The search pane: the same live search, reachable at any time from the 🔎 button (or the / key), with the bars hidden.
 const searchOpen = (on) => {
   $("searchPane").hidden = !on; $("searchBtn").setAttribute("aria-expanded", on);
   if (on) { $("findTop").value = ""; $("findTopList").hidden = true; $("findTop").focus(); } else $("findTop").blur();
 };
-StarSearch.attach($("findTop"), $("findTopList"), (star) => { searchOpen(false); $("findIn").value = star.name; selectStar(star); });
+StarSearch.attach($("findTop"), $("findTopList"), (star) => { searchOpen(false); $("findIn").value = star.name; selectStar(star); flyTo(star); });
 $("searchBtn").onclick = () => searchOpen($("searchPane").hidden);
 $("searchClose").onclick = () => searchOpen(false);
 $("findTop").addEventListener("keydown", (e) => { if (e.key === "Escape") searchOpen(false); });
@@ -821,7 +827,7 @@ function renderTargets() {
   $("targets").innerHTML = S.targets.map((t) =>
     `<button data-id="${t.id}" class="${S.sel && S.sel.id === t.id ? "on" : ""}" role="option"><b>${t.name}</b><span id="tp_${t.id}">${t.teaser}</span></button>`).join("");
   $("targets").querySelectorAll("button").forEach((b) => (b.onclick = () => {
-    S.sel = S.targets.find((t) => t.id === b.dataset.id); renderTargets(); $("aboutBtn").hidden = false;
+    S.sel = S.targets.find((t) => t.id === b.dataset.id); renderTargets(); $("aboutBtn").hidden = false; flyTo(S.sel);
     const u = new URL(location); u.searchParams.set("target", S.sel.id);
     if (S.sel.found) u.searchParams.set("star", S.sel.name); else u.searchParams.delete("star");   // no stale ?star=
     history.replaceState(null, "", u);

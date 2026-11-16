@@ -62,7 +62,7 @@ function load({ sky = "eye", camOn = false, archive = "ok", online = true, conne
   let P = poseAt(CAPELLA.az, CAPELLA.alt);
   const focal = () => 422 / Math.tan(30 * D2R) * S.zoom;              // compass.js with no camera: 60 deg tall at 1x
   RS.init({ pose: () => P, focal, loc: () => HERE, camOn: () => camOn, phoneSteers: () => S.sensors && !S.hold, F, S, onStar() {}, openSight() {} });
-  const g = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => ((t[k] = v), true) });
+  const g = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}), set: (t, k, v) => ((t[k] = v), true) });
   return {
     RS, S, F, el, calls, timers, clock, nav,
     frame: () => RS.draw(g, P, focal(), 390, 844, NOW, HERE),
