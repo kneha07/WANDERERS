@@ -71,13 +71,14 @@ let mode = null, timer = 0;
 async function open(m) {
   close();
   mode = m; document.body.classList.add("learning"); $("learnMenu").hidden = true; $("learnPanel").hidden = false;
-  if (m !== "time") { panel(`${closeBtn}<p class="small">Loading the sky…</p>`); await ready(); if (mode !== m) return; }
-  ({ time: startTime, tour: startTour, quiz: startQuiz })[m]();
+  if (m === "tour" || m === "quiz") { panel(`${closeBtn}<p class="small">Loading the sky…</p>`); await ready(); if (mode !== m) return; }
+  ({ time: startTime, tour: startTour, quiz: startQuiz, infrared: startInfrared, class: startClass, log: startLog, near: startNear })[m]();
 }
 function close() {
   if (!mode) return;
   clearInterval(timer); timer = 0;
   if (mode === "time") endTime();
+  if (mode === "infrared") endInfrared();
   pointTo(null); mode = null;
   document.body.classList.remove("learning"); $("learnPanel").hidden = true; $("learnPanel").innerHTML = "";
 }
@@ -92,18 +93,24 @@ function startTime() {
   timeWas = { sky: RS.R.sky, lines: RS.R.lines };
   RS.R.lines = true; RS.setSky("eye");                     // the photographs cannot move; the drawn stars can
   const thisYear = C.nowDate().getUTCFullYear();
-  panel(`${closeBtn}<div class="mission-tag">TIME MACHINE · HOW THE STARS MOVE</div>
+  panel(`${closeBtn}<div class="mission-tag">TIME MACHINE · HOW THE SKY CHANGES</div>
     <div class="learn-title" id="tmYear">${yearText(thisYear)}</div>
     <input type="range" id="tmSlider" min="-50000" max="50000" step="100" value="0" aria-label="Years from today">
-    <div class="row-btns tm-presets">${[-50000, -10000, 0, 10000, 50000].map((y) => `<button class="btn ghost" data-y="${y}">${y ? (y > 0 ? "+" : "−") + Math.abs(y / 1000) + "k" : "Today"}</button>`).join("")}</div>
-    <p class="small">Each star moves along its measured motion today (Hipparcos), in a straight line. Near stars move most:
-      the Big Dipper bends out of shape, while far stars such as those of Cygnus hardly move.
-      <span class="dim">Straight-line motion only: Earth's slow wobble (precession) is not shown, and the nearest stars are approximate far from today.</span></p>
+    <div class="row-btns tm-presets">${[-50000, -14000, -5000, 0, 12000, 50000].map((y) => `<button class="btn ghost" data-y="${y}">${y ? (y > 0 ? "+" : "−") + Math.abs(y / 1000) + "k" : "Today"}</button>`).join("")}</div>
+    <p class="small learn-aim" id="tmPole"></p>
+    <p class="small">Two things change. Each star moves through space (Hipparcos motions), so near stars drift: the Big Dipper
+      bends out of shape. And Earth's axis slowly circles (precession, one turn in about 25,800 years), so the pole star
+      changes and different stars rise where you live.
+      <span class="dim">Planets, the Moon and today's targets are hidden. Simple precession model: good to a few degrees.</span></p>
     <div class="row-btns"><button class="btn" id="tmDipper">Show me the Big Dipper</button></div>`);
-  const go = (y) => { $("tmSlider").value = y; $("tmYear").textContent = yearText(thisYear + y); RS.setYears(y); };
+  let dipper = false;
+  const follow = () => { const p = dipper && RS.starPlace("Megrez"); if (p) pointTo({ name: "Big Dipper (Ursa Major)", ...p, kind: "constellation" }); };   // Megrez joins the bowl and the handle
+  const pole = () => { const ps = RS.poleStar(); $("tmPole").textContent = ps ? (ps.deg < 5 ? `Pole star: ${ps.name}, ${ps.deg.toFixed(1)}° from the pole.` : `No bright pole star: the nearest, ${ps.name}, is ${ps.deg.toFixed(0)}° away.`) : ""; };
+  const go = async (y) => { $("tmSlider").value = y; $("tmYear").textContent = yearText(thisYear + y); await RS.setYears(y); if (+$("tmSlider").value === y) { pole(); follow(); } };
   $("tmSlider").addEventListener("input", (e) => go(+e.target.value));
   $("learnPanel").querySelectorAll("[data-y]").forEach((b) => (b.onclick = () => go(+b.dataset.y)));
-  $("tmDipper").onclick = () => { const c = RS.CON.list && RS.CON.list.find((x) => x.name === "Ursa Major"); if (c) pointTo({ name: "Big Dipper (Ursa Major)", ra: 165.5, dec: 56, kind: "constellation" }); };   // the Dipper's middle, not the constellation's
+  $("tmDipper").onclick = () => { dipper = true; follow(); };
+  pole();
 }
 function endTime() {
   const RS = window.RealSky;
@@ -134,13 +141,14 @@ function showStop() {
     <div class="row-btns"><button class="btn ghost" id="tourBack" ${tour.i ? "" : "disabled"}>Back</button>
       <button class="btn primary" id="tourNext">${last ? "Finish" : "Next stop →"}</button></div>`);
   $("tourBack").onclick = () => { tour.i--; showStop(); };
-  $("tourNext").onclick = () => { if (last) close(); else { tour.i++; showStop(); } };
+  $("tourNext").onclick = () => { if (last) { flag("tour"); close(); } else { tour.i++; showStop(); } };
   tourTick();
 }
 function tourTick() {
   const o = tour && tour.stops[tour.i], el = $("tourAim"); if (!o || !el) return;
   const a = aimAt(o), on = a.sep <= o.tol;
   el.textContent = on ? `✓ You are looking at it.` : `Follow the arrow: ${a.turn}.`; el.classList.toggle("ok", on);
+  if (on && !tour.on) log(o.name, o.kind);
   tour.on = on;                                   // (compass.js buzzes once on the lock: the arrow points at this stop)
 }
 
@@ -176,7 +184,7 @@ function quizTick() {
   if (a.sep > o.tol) { quiz.inSince = 0; return; }
   if (!quiz.inSince) { quiz.inSince = now; return; }
   if (now - quiz.inSince < 600) return;
-  quiz.done = true; const pts = quiz.hint ? 5 : 10; quiz.score += pts;
+  quiz.done = true; const pts = quiz.hint ? 5 : 10; quiz.score += pts; log(o.name, o.kind);
   if (navigator.vibrate) navigator.vibrate([40, 50, 40]);
   $("quizMsg").textContent = `✓ Found it! +${pts}. ${o.kind === "star" ? o.lines[1] || o.lines[0] : o.lines[0]}`;   // for a star: how far, not its magnitude $("quizMsg").classList.add("ok");
   setTimeout(nextRound, 2500);
@@ -186,6 +194,7 @@ function nextRound() {
   if (++quiz.i < quiz.rounds.length) { showRound(); return; }
   const max = quiz.rounds.length * 10, best = Math.max(+(keep("wanderers.quizBest") || 0), quiz.score);
   keep("wanderers.quizBest", best); pointTo(null);
+  if (quiz.score === max) flag("quiz");
   panel(`${closeBtn}<div class="mission-tag">FIND IT · DONE</div><div class="learn-title">${quiz.score} of ${max} points</div>
     <p class="small">Your best: ${best}. Each find is a real object in tonight's sky, from where you stand.</p>
     <div class="row-btns"><button class="btn ghost" data-close>Done</button><button class="btn primary" id="quizAgain">Play again</button></div>`);
@@ -193,8 +202,117 @@ function nextRound() {
   $("quizAgain").onclick = () => open("quiz");
 }
 
+// ---------- 4. why infrared? ----------
+// Dust blocks visible light; infrared passes through it. Flip the Deep photographs between the two surveys over a dusty
+// place that is up now, with the arrow to it.
+const DUSTY = [
+  { name: "Centre of the Milky Way", ra: 266.42, dec: -29.0, why: "Behind 25,000 light-years of dust: in visible light it is dark, in infrared the crowded centre shines." },
+  { name: "Rho Ophiuchi cloud", ra: 246.8, dec: -24.4, why: "A dark cloud where new stars form: infrared shows the young stars inside it." },
+  { name: "Orion Nebula", ra: 83.82, dec: -5.39, why: "A star nursery: infrared shows the stars still wrapped in their dust." },
+  { name: "North America Nebula", ra: 312.9, dec: 44.3, why: "Dark dust lanes in Cygnus: infrared sees the stars behind them." },
+  { name: "Taurus dark clouds", ra: 68.0, dec: 26.0, why: "Cold dust clouds, among the nearest star nurseries: almost empty in visible light." },
+];
+let irWas = null, irFlip = 0;
+function startInfrared() {
+  const RS = window.RealSky, now = C.nowDate(), L = C.loc();
+  irWas = { sky: RS.R.sky, survey: RS.R.survey };
+  RS.setSky("deep");
+  const up = DUSTY.map((d) => ({ ...d, alt: Sky.observe(d, now, L.lat, L.lon).alt })).sort((a, b) => b.alt - a.alt), d = up[0];
+  pointTo({ ...d, kind: "dusty cloud" });
+  panel(`${closeBtn}<div class="mission-tag">WHY INFRARED? · SEEING THROUGH DUST</div>
+    <div class="learn-title">${esc(d.name)}</div>
+    <p class="small learn-aim">${d.alt > 0 ? "Follow the arrow, then flip." : "Below your horizon now: drag the sky there, or flip anywhere along the Milky Way."}</p>
+    <p class="small">${esc(d.why)}</p>
+    <p class="small">Dust blocks visible light, like fog. Infrared light has longer waves that slip past the dust, so hidden stars appear.
+      That is why NASA's WISE and SPHEREx and the Webb telescope look in infrared.</p>
+    <div class="row-btns"><button class="btn primary" id="irFlip">Flip: <span id="irNow"></span></button>
+      <label class="check small"><input type="checkbox" id="irAuto"> Flip every 3 s</label></div>
+    <p class="small dim" id="irName"></p>`);
+  const show = () => { $("irNow").textContent = RS.R.survey === "infrared" ? "Infrared → Visible" : "Visible → Infrared"; $("irName").textContent = `Now: ${RS.surveyOf(RS.R.survey).name}.`; };
+  const flip = async () => { await RS.setSurvey(RS.R.survey === "infrared" ? "visible" : "infrared"); show(); };
+  $("irFlip").onclick = flip;
+  $("irAuto").onchange = (e) => { clearInterval(irFlip); irFlip = e.target.checked ? setInterval(flip, 3000) : 0; };
+  show();
+}
+function endInfrared() {
+  clearInterval(irFlip); irFlip = 0;
+  const RS = window.RealSky;
+  if (irWas) { RS.setSurvey(irWas.survey); RS.setSky(irWas.sky); irWas = null; }
+}
+
+// ---------- 5. class link ----------
+// One link that opens this sky for everyone: this place (rounded to about 10 km), this sky mode and target, and, if
+// chosen, this moment frozen (?at=). It uses only settings the compass already reads from its link.
+function classLink(freeze) {
+  const u = new URL("compass.html", location.href), L = C.loc(), RS = window.RealSky, sel = C.S.sel;
+  u.searchParams.set("lat", L.lat.toFixed(1)); u.searchParams.set("lon", L.lon.toFixed(1));
+  u.searchParams.set("sky", RS.R.sky);
+  if (freeze) u.searchParams.set("at", C.nowDate().toISOString().slice(0, 16) + "Z");
+  if (sel && sel.id !== "learn") { u.searchParams.set("target", sel.id); if (sel.found) u.searchParams.set("star", sel.name); }
+  return u.href;
+}
+function startClass() {
+  panel(`${closeBtn}<div class="mission-tag">CLASS LINK · EVERYONE SEES THE SAME SKY</div>
+    <p class="small">Share this link with a class. It opens this place, sky and target on every phone.</p>
+    <label class="check small"><input type="checkbox" id="clFreeze" checked> Freeze this moment (the same sky for everyone, at any hour)</label>
+    <div class="row-input"><input id="clUrl" readonly aria-label="Class link"><button class="btn" id="clCopy">Copy</button></div>
+    <div class="row-btns"><button class="btn primary" id="clShare" hidden>Share…</button></div>
+    <p class="small dim">The link holds your place rounded to about 10 km. Nothing is sent anywhere until you share it.</p>`);
+  const fill = () => { $("clUrl").value = classLink($("clFreeze").checked); };
+  $("clFreeze").onchange = fill; fill();
+  $("clCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText($("clUrl").value); $("clCopy").textContent = "Copied"; }
+    catch { $("clUrl").select(); $("clCopy").textContent = "Press Ctrl+C"; }
+  };
+  if (navigator.share) { $("clShare").hidden = false; $("clShare").onclick = () => navigator.share({ title: "WANDERERS Sky Compass", url: $("clUrl").value }).catch(() => {}); }
+}
+
+// ---------- 6. my sky log ----------
+// Objects the user saw: logged by a tour stop, a quiz find, or "I saw it" on a card. Kept on this phone only.
+const readLog = () => { try { return JSON.parse(keep("wanderers.skyLog") || "{}"); } catch { return {}; } };
+function log(name, kind) {
+  if (!name) return;
+  const l = readLog(), now = new Date().toISOString().slice(0, 10);
+  l[name] = { kind, first: (l[name] && l[name].first) || now, last: now, n: ((l[name] && l[name].n) || 0) + 1 };
+  keep("wanderers.skyLog", JSON.stringify(l));
+}
+const flag = (k) => { const l = readLog(); l["#" + k] = { kind: "flag", first: new Date().toISOString().slice(0, 10), n: 1 }; keep("wanderers.skyLog", JSON.stringify(l)); };
+const BADGES = [["First light", "your first object", (c) => c.all >= 1], ["Planet spotter", "3 planets", (c) => c.planet >= 3],
+  ["Galaxy hunter", "3 galaxies", (c) => c.galaxy >= 3], ["Star collector", "20 stars", (c) => c.star >= 20],
+  ["Pattern finder", "5 constellations", (c) => c.constellation >= 5], ["Tour guide", "a whole tour", (c) => c.tour],
+  ["Sharp eye", "a perfect quiz", (c) => c.quiz]];
+function startLog() {
+  const l = readLog(), items = Object.entries(l).filter(([k]) => !k.startsWith("#")), c = { all: items.length, tour: !!l["#tour"], quiz: !!l["#quiz"] };
+  for (const [, v] of items) c[v.kind] = (c[v.kind] || 0) + 1;
+  const recent = items.sort((a, b) => (b[1].last || "").localeCompare(a[1].last || "")).slice(0, 30);
+  panel(`${closeBtn}<div class="mission-tag">MY SKY LOG · ${items.length} OBJECT${items.length === 1 ? "" : "S"}</div>
+    <div class="badges">${BADGES.map(([t, need, ok]) => `<span class="badge ${ok(c) ? "on" : ""}" title="${esc(need)}">${ok(c) ? "★" : "☆"} ${esc(t)}<small>${esc(need)}</small></span>`).join("")}</div>
+    ${recent.length ? `<ul class="saved-list">${recent.map(([k, v]) => `<li><span><b>${esc(k)}</b> <span class="dim">${esc(v.kind)}</span></span><span class="dim">${esc(v.first)}${v.n > 1 ? ` · ${v.n}×` : ""}</span></li>`).join("")}</ul>`
+      : '<p class="small">Nothing yet. Take the tour, play Find it, or tap a star and choose "I saw it".</p>'}
+    <p class="small dim">Kept on this phone only.</p>`);
+}
+
+// ---------- 7. candidates near here ----------
+// The Sky Survey's moving-object candidates (data/survey/leaderboard.json) nearest the crosshair, with a link to each.
+let CANDS = null;
+async function startNear() {
+  panel(`${closeBtn}<p class="small">Loading the survey candidates…</p>`);
+  if (!CANDS) CANDS = await fetch("data/survey/leaderboard.json").then((r) => r.json()).then((d) => d.candidates).catch(() => null);
+  if (mode !== "near") return;
+  if (!CANDS) { panel(`${closeBtn}<div class="learn-title">Candidates not available</div><p class="small">The survey list could not load. Check the connection and try again.</p>`); return; }
+  const P = C.pose(), now = C.nowDate(), L = C.loc();
+  const sepOf = (c) => { const s = Sky.observe(c, now, L.lat, L.lon); return Math.acos(Math.max(-1, Math.min(1, C.dot(C.vec(s.az, s.alt), P.forward)))) / D2R; };
+  const near = CANDS.map((c) => ({ c, sep: sepOf(c) })).sort((a, b) => a.sep - b.sep).slice(0, 6);
+  panel(`${closeBtn}<div class="mission-tag">CANDIDATES NEAR HERE · SKY SURVEY</div>
+    <p class="small">Faint objects that move between infrared photographs taken years apart. Each one is a candidate, not a discovery: people check them.</p>
+    <ul class="saved-list">${near.map(({ c, sep }) => `<li><span><b>${esc(c.id)}</b> <span class="dim">${Math.round(sep)}° from your crosshair · moves ${(c.pm / 1000).toFixed(2)}″/yr</span></span>
+      <a class="btn" href="survey.html?id=${encodeURIComponent(c.id)}">Check it ↗</a></li>`).join("")}</ul>
+    <div class="row-btns"><button class="btn ghost" id="nearShow">Show the nearest</button></div>`);
+  $("nearShow").onclick = () => pointTo({ name: `Candidate ${near[0].c.id}`, ra: near[0].c.ra, dec: near[0].c.dec, kind: "candidate" });
+}
+
 // ---------- menu ----------
 $("learnBtn").onclick = () => { const m = $("learnMenu"); m.hidden = !m.hidden; $("learnBtn").setAttribute("aria-expanded", !m.hidden); };
 $("learnMenu").querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => open(b.dataset.mode)));
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && mode) close(); });
-window.WanderersLearn = { open, close, objectsUp, get mode() { return mode; } };
+window.WanderersLearn = { open, close, objectsUp, log, readLog, classLink, get mode() { return mode; } };

@@ -436,7 +436,7 @@ function draw() {
 
   // Sun, Moon, bright stars (real positions now)
   g.textAlign = "left"; g.textBaseline = "middle";
-  for (const o of [...BODIES, ...STARS]) {
+  for (const o of RealSky.R.years ? [] : [...BODIES, ...STARS]) {   // in the time machine's year these are not where today says
     const s = Sky.observe(o, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) continue;
     const below = s.alt < 0;
     if (o.body) {
@@ -462,7 +462,7 @@ function draw() {
   }
 
   // Webb (JWST) pointings around where you look: small violet diamonds (the amber brackets are WANDERERS targets)
-  if (S.webbAround && S.webbAround.length) {
+  if (S.webbAround && S.webbAround.length && !RealSky.R.years) {
     g.font = "600 10px 'JetBrains Mono', monospace"; g.textAlign = "left"; g.textBaseline = "middle";
     for (const w of S.webbAround) {
       const s = Sky.observe({ ra: w.ra, dec: w.dec }, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) continue;
@@ -480,7 +480,7 @@ function draw() {
     S.trailFor = selKey; S.trail = null;
     if (S.sel && window.PathView) PathView.trail(pathQuery(S.sel)).then((tr) => { if (S.trailFor === selKey) S.trail = tr; }).catch(() => {});
   }
-  if (S.trail) {
+  if (S.trail && !RealSky.R.years) {
     const pts = S.trail.pts.map((p) => { const o = Sky.observe(p, now, L.lat, L.lon); return { year: p.year, q: proj(vec(o.az, o.alt)) }; });
     const seg = (arr, style, dash) => { g.strokeStyle = style; g.lineWidth = 2; g.setLineDash(dash); g.beginPath(); let on = false;
       for (const p of arr) { if (!p.q) { on = false; continue; } on ? g.lineTo(p.q[0], p.q[1]) : g.moveTo(p.q[0], p.q[1]); on = true; } g.stroke(); g.setLineDash([]); };
@@ -503,6 +503,7 @@ function draw() {
 
   // WANDERERS targets
   for (const t of S.targets) {
+    if (RealSky.R.years && t.id !== "learn") { t._v = null; continue; }   // today's targets; the time machine's own arrow stays
     const s = Sky.observe({ ra: t.ra, dec: t.dec }, now, L.lat, L.lon), v = vec(s.az, s.alt);
     t._az = s.az; t._alt = s.alt; t._sep = Math.acos(Math.max(-1, Math.min(1, dot(v, P.forward)))) / D2R; t._v = v;
     const el = $("tp_" + t.id); if (el) el.textContent = `${compassPt(s.az)} ${Math.round(s.az)}° · ${s.alt >= 0 ? "up" : "below"} ${Math.abs(Math.round(s.alt))}°`;
@@ -806,6 +807,8 @@ function showDetails(T) {
   $("dMap").href = `observatory.html?ra=${st.ra.toFixed(5)}&dec=${st.dec.toFixed(5)}`;
   $("dFull").hidden = !st.wanderers; if (st.wanderers) $("dFull").href = `observatory.html?target=${st.wanderers}`;
   $("details").hidden = false;
+  $("dLog").textContent = "✓ I saw it";
+  $("dLog").onclick = () => { if (window.WanderersLearn) { WanderersLearn.log(st.name, st.wanderers ? "target" : "star"); $("dLog").textContent = "✓ In your sky log"; } };
   webbDetails(st);
   if (window.PathView) PathView.render($("dPathBody"), pathQuery(T), { explorerHref: (k) => `observatory.html?star=${encodeURIComponent(k)}` });
 }

@@ -23,6 +23,7 @@
     limit: pick("limit", (v) => SkyView.LIMITS[v], load("wanderers.skyLimit", "dark")),
     survey: pick("survey", (v) => SURVEYS[v], load("wanderers.skySurvey", "visible")),
     lines: load("wanderers.skyLines", true), mix: load("wanderers.skyMix", 0.8), msg: "", calDrag: null,
+    years: 0,   // the time machine: years from today (learn.js); 0 = today
   };
   const STILL = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;   // no slow shine on the lines
   let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), phoneSteers(), F, S, onStar(key), openSight()
@@ -64,34 +65,70 @@
     for (let i = 0; i < n; i++) {
       const v = fr.toHorizon(a[3 * i], a[3 * i + 1], a[3 * i + 2]);
       if (v[2] < 0) continue;
-      v.push(EYE.stars[i][2], EYE.stars[i][3], i); out.push(v);
+      v.push(EYE.stars[i][2] + (EYE.dmag ? EYE.dmag[i] : 0), EYE.stars[i][3], i); out.push(v);
     }
     return out;
   }
-  // ---------- the time machine: each star moves along its measured proper motion ----------
-  // R.years is the offset from today. A star moves in a straight line on the sky at its Hipparcos proper motion
-  // (HYG, via StarSearch's stars.json). ponytail: linear motion, no radial velocity, no precession (Earth's 26,000-year
-  // wobble); good for the shapes of constellations over +-50,000 years, not for exact places of the nearest stars.
-  const MAS = Math.PI / 180 / 3600 / 1000;
+  // ---------- the time machine: each star moves through space, and Earth's axis turns ----------
+  // R.years is the offset from today. Each star moves in a straight line through space: its Hipparcos proper motion
+  // across the sky, plus its radial velocity along the line of sight (HYG, via StarSearch's stars.json). So a near star's
+  // path on the sky curves, and its brightness changes with its distance. Then precession turns the equator: Earth's axis
+  // circles the ecliptic pole once in about 25,800 years, so the pole star and what a latitude can see change.
+  // ponytail: precession at a constant 50.29"/yr about the J2000 ecliptic pole, obliquity fixed at 23.44 deg (good to a
+  // few degrees over +-50,000 years); the long-period model (Vondrak et al. 2011) would remove that error.
+  const MAS = Math.PI / 180 / 3600 / 1000, KMS_LY_YR = 3.3356e-6, PREC_RATE = 50.29 / 3600, EPS = 23.4393 * Math.PI / 180;
+  let PREC = null;            // 3x3 rotation for R.years (null today)
+  function precession(years) {   // J2000 equatorial -> the equator and equinox of that year (as a J2000-like frame)
+    const L = years * PREC_RATE * Math.PI / 180, c = Math.cos(L), s = Math.sin(L), ce = Math.cos(EPS), se = Math.sin(EPS);
+    // Rx(-eps) . Rz(L) . Rx(eps), written out
+    const toEcl = [[1, 0, 0], [0, ce, se], [0, -se, ce]], turn = [[c, -s, 0], [s, c, 0], [0, 0, 1]], back = [[1, 0, 0], [0, ce, -se], [0, se, ce]];
+    const mul = (A, B) => A.map((r) => B[0].map((_, j) => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
+    return mul(back, mul(turn, toEcl));
+  }
+  const precessed = (v) => (PREC ? [PREC[0][0] * v[0] + PREC[0][1] * v[1] + PREC[0][2] * v[2], PREC[1][0] * v[0] + PREC[1][1] * v[1] + PREC[1][2] * v[2],
+    PREC[2][0] * v[0] + PREC[2][1] * v[1] + PREC[2][2] * v[2]] : v);
+  // a catalogue place (J2000) as a J2000-like vector for the time machine's year (precession only: galaxies, line ends)
+  const skyVec = (ra, dec) => precessed(Sky.unit(ra, dec));
   async function setYears(years) {
-    R.years = years; EYE.key = ""; CON.key = "";
-    if (!years || !EYE.stars) { if (EYE.base) EYE.xyz.set(EYE.base); return; }
-    if (!EYE.vel) {                                   // per star: velocity on the sky, radians per year, in J2000 xyz
+    R.years = years; PREC = years ? precession(years) : null; EYE.key = ""; CON.key = "";
+    if (!years || !EYE.stars) { if (EYE.base) EYE.xyz.set(EYE.base); EYE.dmag = null; return; }
+    if (!EYE.vel) {                                   // per star: rate of change of its direction (1/yr), in J2000 xyz
       const list = await StarSearch.load(), pm = new Map(list.filter((t) => t.key && t.pmra != null).map((t) => [t.key, t]));
       EYE.vel = new Float32Array(EYE.stars.length * 3);
       EYE.stars.forEach((r, i) => {
         const t = pm.get(typeof r[4] === "number" ? `hip${r[4]}` : r[4]); if (!t) return;
         const a = r[0] * Math.PI / 180, d = r[1] * Math.PI / 180, e = t.pmra * MAS, n = t.pmdec * MAS;   // pmra includes cos(dec)
-        EYE.vel.set([-Math.sin(a) * e - Math.sin(d) * Math.cos(a) * n, Math.cos(a) * e - Math.sin(d) * Math.sin(a) * n, Math.cos(d) * n], 3 * i);
+        const k = t.rv != null && r[5] > 0 ? t.rv * KMS_LY_YR / r[5] : 0;   // radial: fraction of its distance per year
+        EYE.vel.set([-Math.sin(a) * e - Math.sin(d) * Math.cos(a) * n + k * Math.cos(d) * Math.cos(a),
+          Math.cos(a) * e - Math.sin(d) * Math.sin(a) * n + k * Math.cos(d) * Math.sin(a), Math.cos(d) * n + k * Math.sin(d)], 3 * i);
       });
     }
     if (R.years !== years) return;                    // a newer move came in while the motions loaded
     const b = EYE.base, v = EYE.vel, x = EYE.xyz;
-    for (let i = 0; i < x.length; i += 3) {
-      const p0 = b[i] + v[i] * years, p1 = b[i + 1] + v[i + 1] * years, p2 = b[i + 2] + v[i + 2] * years, k = 1 / Math.hypot(p0, p1, p2);
-      x[i] = p0 * k; x[i + 1] = p1 * k; x[i + 2] = p2 * k;
+    EYE.dmag = new Float32Array(EYE.stars.length);
+    for (let i = 0, j = 0; i < x.length; i += 3, j++) {
+      const p = [b[i] + v[i] * years, b[i + 1] + v[i + 1] * years, b[i + 2] + v[i + 2] * years], len = Math.max(0.05, Math.hypot(...p));
+      const q = precessed([p[0] / len, p[1] / len, p[2] / len]);
+      x[i] = q[0]; x[i + 1] = q[1]; x[i + 2] = q[2];
+      EYE.dmag[j] = 5 * Math.log10(len);              // the length is the new distance / today's: farther is fainter
     }
     EYE.key = ""; CON.key = "";
+  }
+  // the bright star nearest the north celestial pole in the time machine's year: { name, deg }
+  function poleStar() {
+    if (!EYE.stars) return null;
+    let best = null;
+    for (let i = 0; i < EYE.stars.length; i++) {
+      const m = EYE.stars[i][2] + (EYE.dmag ? EYE.dmag[i] : 0); if (m > 4 || !EYE.stars[i][7]) continue;   // 4: Thuban (3.7), the pyramid builders' pole star, counts
+      const z = EYE.xyz[3 * i + 2]; if (!best || z > best.z) best = { z, name: EYE.stars[i][7] };
+    }
+    return best && { name: best.name, deg: Math.acos(Math.min(1, best.z)) * 180 / Math.PI };
+  }
+  // where a star of the drawn sky is now (time machine included), as J2000 ra/dec for compass.js's markers
+  function starPlace(name) {
+    const i = EYE.stars ? EYE.stars.findIndex((r) => r[7] === name) : -1; if (i < 0) return null;
+    const x = EYE.xyz[3 * i], y = EYE.xyz[3 * i + 1], z = EYE.xyz[3 * i + 2];
+    return { ra: (Math.atan2(y, x) * 180 / Math.PI + 360) % 360, dec: Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI };
   }
   // which star each corner of a constellation line is (nearest within 0.3 deg), so the lines move with their stars
   function lineStars() {
@@ -147,8 +184,8 @@
       CON.key = key;
       const fr = Sky.frame(now, L.lat, L.lon);
       const vidx = R.years ? lineStars() : null, x = EYE.xyz;   // in another year a corner sits on its moved star
-      const at = (ci, li, j, ra, dec) => { const i = vidx ? vidx[ci][li][j / 2] : -1; return i >= 0 ? fr.toHorizon(x[3 * i], x[3 * i + 1], x[3 * i + 2]) : fr.toHorizon(...Sky.unit(ra, dec)); };
-      CON.figs = CON.list.map((c, ci) => ({ name: c.name, at: fr.toHorizon(...Sky.unit(c.ra, c.dec)),
+      const at = (ci, li, j, ra, dec) => { const i = vidx ? vidx[ci][li][j / 2] : -1; return i >= 0 ? fr.toHorizon(x[3 * i], x[3 * i + 1], x[3 * i + 2]) : fr.toHorizon(...skyVec(ra, dec)); };
+      CON.figs = CON.list.map((c, ci) => ({ name: c.name, at: fr.toHorizon(...skyVec(c.ra, c.dec)),
         strokes: c.lines.map((l, li) => { const v = []; for (let j = 0; j < l.length; j += 2) v.push(at(ci, li, j, l[j], l[j + 1])); return v; }) }));
     }
     // the lines shine: a soft cyan glow under a brighter line, slowly brightening and dimming (an 8 s cycle)
@@ -191,10 +228,10 @@
   const lyText = (ly) => (ly >= 1e6 ? `${(ly / 1e6).toFixed(ly < 1e7 ? 1 : 0)} million` : `${Math.round(ly / 1000)},000`) + " light-years";
   // screen place, half axes (px) and tilt of one galaxy; null when it is behind the view
   function galaxyOnScreen(gx, proj, now, L, f) {
-    const s = Sky.observe(gx, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) return null;
-    const n = Sky.observe({ ra: gx.ra, dec: Math.min(89.9, gx.dec + 0.2) }, now, L.lat, L.lon), qn = proj(vec(n.az, n.alt));
+    const fr = Sky.frame(now, L.lat, L.lon), h = fr.toHorizon(...skyVec(gx.ra, gx.dec)), q = proj(h); if (!q) return null;
+    const qn = proj(fr.toHorizon(...skyVec(gx.ra, Math.min(89.9, gx.dec + 0.2))));
     const north = qn ? Math.atan2(qn[0] - q[0], -(qn[1] - q[1])) : 0, px = f * Math.PI / 180 / 60;   // px per arcmin
-    return { q, alt: s.alt, rx: Math.max(5, gx.a / 2 * px), ry: Math.max(2.5, gx.b / 2 * px), rot: north - gx.pa * Math.PI / 180 };
+    return { q, alt: Math.asin(Math.max(-1, Math.min(1, h[2]))) * 180 / Math.PI, rx: Math.max(5, gx.a / 2 * px), ry: Math.max(2.5, gx.b / 2 * px), rot: north - gx.pa * Math.PI / 180 };
   }
   function drawGalaxies(g, proj, now, L, f) {
     g.font = "600 11px 'Space Grotesk', sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
@@ -219,7 +256,7 @@
     return { kind: "galaxy", title: `${gx.name} (${gx.id})`, lines: [`${GAL_KIND[gx.type]}, ${lyText(gx.ly)} away.`,
       `${size} in our sky (the full Moon is 0.5°). ${a >= 0 ? `${a}° above the horizon now.` : "Below the horizon now."}`,
       gx.ly > 1e6 ? `The light you see left it about ${lyText(gx.ly).replace(" light-years", " years")} ago.` : "Position: Messier / NGC catalogues.",
-      ...StarSearch.distanceLines(gx.ly * StarSearch.KM_LY)] };
+      ...StarSearch.distanceLines(gx.ly * StarSearch.KM_LY), StarSearch.lookBack(gx.ly)].filter(Boolean) };
   }
 
   function drawPlanets(g, proj, now, L) {
@@ -337,7 +374,7 @@
     if (R.lines) drawLines(g, proj, now, L);
     drawGalaxies(g, proj, now, L, f);
     if (R.sky === "eye") drawEye(g, proj, now, L, f);
-    drawPlanets(g, proj, now, L);
+    if (!R.years) drawPlanets(g, proj, now, L);   // the planets and the Moon belong to today, not to the time machine's year
   }
 
   // ---------- controls ----------
@@ -387,13 +424,13 @@
     const off = (o) => { const s = Sky.observe(o, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); return q ? Math.hypot(q[0] - x, q[1] - y) : 1e9; };
     const where = (o) => { const a = Math.round(Sky.observe(o, now, L.lat, L.lon).alt); return a >= 0 ? `${a}° above the horizon now.` : "Below the horizon now."; };
     const far = (km) => StarSearch.distanceLines(km);
-    for (const b of [{ name: "Moon", body: "moon" }, { name: "Sun", body: "sun" }]) if (off(b) < reach) return { kind: "body", title: b.name, lines: [where(b),
+    if (!R.years) for (const b of [{ name: "Moon", body: "moon" }, { name: "Sun", body: "sun" }]) if (off(b) < reach) return { kind: "body", title: b.name, lines: [where(b),
       ...far(b.body === "moon" ? Sky.moonKm(now) : Sky.sunAU(now) * 1.495979e8), "Its place is worked out for this moment, not taken from a picture."] };
     for (const gx of GALAXIES) {
       const o = galaxyOnScreen(gx, proj, now, L, f); if (!o) continue;
       if (Math.hypot(o.q[0] - x, o.q[1] - y) < Math.max(18, Math.min(o.rx, 120))) { var galaxyHit = galaxyCard(gx, now, L); break; }
     }
-    for (const pl of planetsNow(now)) if (off(pl) < reach) return { kind: "planet", title: pl.name, lines: ["A planet. " + where(pl), ...far(pl.au * 1.495979e8), "Its place is worked out from JPL's orbital elements, not taken from a picture."] };
+    if (!R.years) for (const pl of planetsNow(now)) if (off(pl) < reach) return { kind: "planet", title: pl.name, lines: ["A planet. " + where(pl), ...far(pl.au * 1.495979e8), "Its place is worked out from JPL's orbital elements, not taken from a picture."] };
     if (galaxyHit && R.sky !== "off") return galaxyHit;   // after the Moon, Sun and planets, before single stars
     if (EYE.stars && R.sky !== "off") {
       let best = null;
@@ -410,6 +447,8 @@
     if (!pk) return;
     $("skyCardName").textContent = pk.title;
     $("skyCardLines").replaceChildren(...pk.lines.map((t) => { const p = document.createElement("p"); p.textContent = t; return p; }));
+    const b = $("skyCardLog");   // add it to the sky log (learn.js)
+    if (b) { b.textContent = "✓ I saw it"; b.onclick = () => { if (window.WanderersLearn) { WanderersLearn.log(pk.title.replace(/ \(.*\)$/, ""), pk.kind === "body" ? "Moon or Sun" : pk.kind); b.textContent = "✓ In your sky log"; } }; }
   }
   function onTap(x, y) {
     const pk = pickAt(x, y);
@@ -658,6 +697,6 @@
     setSky(R.sky);
   }
 
-  const api = { GALAXIES, galaxyCard, planetsNow, setYears, loadStars, loadLines, init, draw, cover, cancelGesture, cancelDrag, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
+  const api = { setSurvey, GALAXIES, galaxyCard, planetsNow, setYears, poleStar, starPlace, precession, loadStars, loadLines, init, draw, cover, cancelGesture, cancelDrag, setSky, renderSaved, R, DEEP, EYE, CON, SAVE, selfTest, pickAt, onTap, rollOf, surveyOf, projector };
   root.RealSky = api;
 })(window);

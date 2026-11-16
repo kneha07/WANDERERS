@@ -53,9 +53,9 @@
     const lines = [`Magnitude ${mag.toFixed(1)}${cons && cons[con] ? ` · in ${cons[con]}` : ""}`];
     if (ly) {
       lines.push(`${ly >= 100 ? Math.round(ly).toLocaleString("en-US") : ly} light-years away. The light you would see left it about ${ly >= 100 ? Math.round(ly).toLocaleString("en-US") : Math.round(ly)} years ago.`);
-      if (root.StarSearch && StarSearch.distanceLines) lines.push(...StarSearch.distanceLines(ly * StarSearch.KM_LY));
+      if (root.StarSearch && StarSearch.distanceLines) lines.push(...StarSearch.distanceLines(ly * StarSearch.KM_LY), StarSearch.lookBack(ly));
     } else lines.push("Distance not measured.");
-    return { title: name || (typeof id === "number" ? `HIP ${id}` : String(id)), lines, key };
+    return { title: name || (typeof id === "number" ? `HIP ${id}` : String(id)), lines: lines.filter(Boolean), key };
   }
 
   // How far off the pointing can be, in degrees, and whether that is worth a calibration.

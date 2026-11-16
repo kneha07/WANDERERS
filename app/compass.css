@@ -293,3 +293,11 @@ p.pv-dim { font-size: .8rem; }
 .learn-aim.ok { color: var(--lock); }
 .learn-panel input[type=range] { width: 100%; margin: 6px 0; }
 .tm-presets .btn { padding: 4px 10px; font-size: .8rem; }
+
+/* learn.js: sky log badges, the "I saw it" buttons */
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.badge { display: grid; padding: 5px 9px; border: 1px solid var(--line); border-radius: 10px; font: 600 .78rem var(--font); color: var(--dim); }
+.badge small { font: .64rem var(--mono); font-weight: 400; }
+.badge.on { color: var(--amber); border-color: var(--amber); }
+.sky-card .saw-it { margin-top: 6px; padding: 4px 10px; font-size: .8rem; }
+.learn-menu { max-height: 70vh; overflow: auto; }
