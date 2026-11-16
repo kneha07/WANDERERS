@@ -23,7 +23,10 @@ Changing the language reloads the page. Hindi (हिन्दी) is the Indian
    Entries (strings that stay the same are dropped): zh 1,792 · ko 1,783 · vi 1,780 · hi 1,682 (Hindi keeps the 88 constellation names in English).
 
 Traditional Chinese is not translated from English. `scripts/zh_to_traditional.py` converts every `zh-*.json` with OpenCC
-(`s2twp` → `tw-*.json` with Taiwan words such as 軟體 / 影片 / 網路; `s2hk` → `hk-*.json` with Hong Kong words such as 軟件 / 視頻 / 網絡).
+(`s2twp` → `tw-*.json` with Taiwan words such as 軟體 / 影片 / 網路; `s2hk` → `hk-*.json` with Hong Kong characters such as 裏 / 着 / 户).
+`s2hk` changes characters only, so mainland words stayed (搜索, 保存, 加載, 屏幕, 實時, 視頻 …). The owner pointed this out (Hong Kong uses 影片, not 視頻).
+`HK_WORDS` in the script now replaces 33 mainland words with Hong Kong words (搜尋, 儲存, 載入, 螢幕, 即時, 影片 …) and keeps the words Hong Kong shares with the mainland (軟件, 網絡, 數據, 像素, 項目).
+質量 changes only in "quality" phrases (數據質素), because it also means "mass" (木星質量). After the fix, none of the listed mainland words is left in `hk-*.json`.
 Needs `pip install opencc-python-reimplemented==0.1.7` at build time only. Entries: tw 1,792 · hk 1,792.
 
 To add strings: add pairs to a `<lang>-*.json` file, then run the build script again. After a change to `zh-*.json`, run `zh_to_traditional.py` first.

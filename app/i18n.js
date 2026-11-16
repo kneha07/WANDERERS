@@ -33,7 +33,7 @@
   document.documentElement.lang = LANGS[lang][1];
 
   const sc = document.createElement("script");
-  sc.src = `i18n-${lang}.js?v=20261116d`;
+  sc.src = `i18n-${lang}.js?v=20261116e`;
   sc.onload = () => {
     const D = window.I18N_DICT || {};
     // Exact text first. Then the number template: scripts paste numbers into English sentences, so
