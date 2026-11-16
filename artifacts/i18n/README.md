@@ -1,11 +1,12 @@
-# Language versions (中文, हिन्दी, Tiếng Việt, 한국어): run record, 2026-11-15
+# Language versions (简体中文, 繁體中文 台灣 / 香港, हिन्दी, Tiếng Việt, 한국어): run record, 2026-11-15
 
 ## How it works
 
 ```
-page loads ──> i18n.js adds a language menu (EN · 中文 · हिन्दी · Việt · 한국어) next to each theme toggle
+page loads ──> i18n.js adds a language menu (EN · 简中 · 繁·台 · 繁·港 · हिन्दी · Việt · 한국어) next to each theme toggle
                  │
-                 ├─ lang = ?lang=en|zh|hi|vi|ko  →  saved choice (localStorage "wanderers-lang")  →  browser language
+                 ├─ lang = ?lang=en|zh|tw|hk|hi|vi|ko  →  saved choice (localStorage "wanderers-lang")  →  browser language
+                 │          (zh-HK / zh-MO → hk, zh-TW / zh-Hant → tw, other zh → zh)
                  │
                  └─ not en: load i18n-<lang>.js (English → <lang> dictionary)
                          swap text nodes + placeholder/title/aria-label/alt by whole-string match
@@ -21,14 +22,18 @@ Changing the language reloads the page. Hindi (हिन्दी) is the Indian
 3. `python scripts/build_i18n.py` writes `app/i18n-<lang>.js` for every language found.
    Entries (strings that stay the same are dropped): zh 1,792 · ko 1,783 · vi 1,780 · hi 1,682 (Hindi keeps the 88 constellation names in English).
 
-To add strings: add pairs to a `<lang>-*.json` file, then run the build script again.
+Traditional Chinese is not translated from English. `scripts/zh_to_traditional.py` converts every `zh-*.json` with OpenCC
+(`s2twp` → `tw-*.json` with Taiwan words such as 軟體 / 影片 / 網路; `s2hk` → `hk-*.json` with Hong Kong words such as 軟件 / 視頻 / 網絡).
+Needs `pip install opencc-python-reimplemented==0.1.7` at build time only. Entries: tw 1,792 · hk 1,792.
+
+To add strings: add pairs to a `<lang>-*.json` file, then run the build script again. After a change to `zh-*.json`, run `zh_to_traditional.py` first.
 To add a language: add `<lang>-*.json`, run the build, add the code to `LANGS` in `app/i18n.js` and the file to `SHELL` in `app/sw.js`.
 
 ## Checks
 
 - All 6 pages in zh, hi, vi and ko: title, headings and controls are translated; only star names, file names and mission names stay English (on purpose).
-- 375 px phone width (mobile emulation): no page is wider than the screen, in all 5 languages. The header got a smaller wordmark and tighter gaps at ≤ 420 px.
-- `node --test test/*.test.js`: 668 pass, 0 fail (4 new: every dictionary keeps its `{n}` placeholders). `i18n.js` loads as the last script, so the script-order tests still hold.
+- 375 px phone width (mobile emulation): no page is wider than the screen, in all 7 languages (tw and hk checked by page load only, no clicks). The header got a smaller wordmark and tighter gaps at ≤ 420 px.
+- `node --test test/*.test.js`: 671 pass, 0 fail. `test/i18n.test.js` checks every dictionary keeps its `{n}` placeholders, and that the browser language picks the right version (zh-Hant-HK → Hong Kong, zh-Hant → Taiwan). `i18n.js` loads as the last script, so the script-order tests still hold.
 - Hindi headings get line-height 1.35, so Devanagari marks do not touch the next line.
 - The menu change ko → vi reloads in Vietnamese and drops `?lang` from the address.
 
