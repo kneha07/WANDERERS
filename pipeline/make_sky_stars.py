@@ -1,11 +1,14 @@
-"""Build the small sky files the Sky Compass draws from. Standard library only, no network for the stars.
+"""Build the small sky files the Sky Compass draws from. Standard library only; needs the network.
 
-    python pipeline/make_sky_stars.py               # app/data/skystars.json from the star database
+    python pipeline/make_sky_stars.py               # app/data/skystars.json from NASA HEASARC + the star database
     python pipeline/make_sky_stars.py --constellations # also refresh app/data/constellations.json (needs the network)
 
-Stars: every star a human eye can see (V <= 6.5) from app/data/stars/index.json, the team's star database
-(pipeline/stardb.py: HYG v4.1, CC BY-SA 4.0). One source, so a star tapped in the compass opens the same
-record in the Star database tab. Rows are sorted bright to faint so the page can stop at the chosen faintness:
+Stars: every star a human eye can see (V <= 6.5). Position, V magnitude and spectral type come from the
+Hipparcos Main Catalogue as served by NASA HEASARC (table "hipparcos"), moved from epoch J1991.25 to J2000
+with each star's proper motion. Names, HIP keys, distances and constellations come from app/data/stars/index.json,
+the team's star database (pipeline/stardb.py: HYG v4.1, CC BY-SA 4.0), so a star tapped in the compass opens the
+same record in the Star database tab. A star without a Hipparcos row keeps its HYG values.
+Rows are sorted bright to faint so the page can stop at the chosen faintness:
 
     [ra_deg, dec_deg, vmag, spectral_letter, hip_number_or_key, distance_ly_or_0, constellation_index, name?]
 
@@ -14,6 +17,7 @@ The name is left out when it is only "HIP <number>". Constellation names are lis
 Constellation lines: d3-celestial (Olaf Frohn, BSD 3-Clause), https://github.com/ofrohn/d3-celestial.
 """
 import json
+import math
 import sys
 import urllib.request
 from pathlib import Path
@@ -21,32 +25,65 @@ from pathlib import Path
 DATA = Path(__file__).resolve().parent.parent / "app" / "data"
 NAKED_EYE = 6.5
 LY_PER_PC = 3.26156
+HEASARC = ("https://heasarc.gsfc.nasa.gov/xamin/query?table=hipparcos&fields=hip_number,ra_deg,dec_deg,vmag,pm_ra,pm_dec,spect_type"
+           "&constraint=vmag%3C%3D7&resultmax=0&format=text")   # the TAP endpoint answers only in binary VOTable
+YEARS = 2000.0 - 1991.25
 D3 = "https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/"
 
 
-def stars():
-    db = json.loads((DATA / "stars" / "index.json").read_text(encoding="utf-8"))
-    cons, rows = [], []
-    for s in db["stars"]:
-        if s.get("mag") is None or s["mag"] > NAKED_EYE or s.get("ra") is None or s.get("dec") is None:
+def hipparcos():
+    """{hip: (ra, dec, vmag, spectral letter)} at J2000 from NASA HEASARC; pm_ra already includes cos(dec)."""
+    with urllib.request.urlopen(HEASARC, timeout=120) as r:
+        text = r.read().decode("utf-8")
+    out = {}
+    for line in text.splitlines():
+        f = ["" if x.strip() == "null" else x.strip() for x in line.split("|")]
+        if len(f) != 7 or not f[0].isdigit() or not (f[1] and f[2] and f[3]):
             continue
+        ra, dec, pmra, pmdec = float(f[1]), float(f[2]), float(f[4] or 0), float(f[5] or 0)
+        dec2 = dec + pmdec * YEARS / 3.6e6
+        ra2 = (ra + pmra * YEARS / 3.6e6 / max(1e-6, math.cos(math.radians(dec)))) % 360
+        out[int(f[0])] = (ra2, dec2, float(f[3]), (f[6] or " ")[0].upper())
+    if "OVERFLOW" in text or len(out) < 15000:
+        sys.exit(f"HEASARC answer looks cut short ({len(out)} rows)")
+    return out
+
+
+def stars():
+    hip_rows = hipparcos()
+    db = json.loads((DATA / "stars" / "index.json").read_text(encoding="utf-8"))
+    cons, rows, nasa, hyg_only = [], [], 0, 0
+    for s in db["stars"]:
+        hip = s.get("hip")
+        h = hip_rows.get(hip) if hip else None
+        if h:
+            ra, dec, mag, letter = h
+            nasa += 1
+        else:
+            ra, dec, mag, letter = s.get("ra"), s.get("dec"), s.get("mag"), (s.get("spect") or " ")[0].upper()
+        if mag is None or mag > NAKED_EYE or ra is None or dec is None:
+            nasa -= 1 if h else 0
+            continue
+        hyg_only += 0 if h else 1
         con = s.get("con") or ""
         if con not in cons:
             cons.append(con)
-        hip = s.get("hip")
         dist = s.get("dist_pc")
         ly = round(dist * LY_PER_PC, 1 if dist and dist < 30 else 0) if dist and 0 < dist < 90000 else 0   # HYG writes 100000 for unknown
-        row = [round(s["ra"], 3), round(s["dec"], 3), round(s["mag"], 2), (s.get("spect") or " ")[0].upper(),
+        row = [round(ra, 3), round(dec, 3), round(mag, 2), letter,
                hip if hip and s["key"] == f"hip{hip}" else s["key"], ly, cons.index(con)]
         if s.get("name") and s["name"] != f"HIP {hip}":
             row.append(s["name"])
         rows.append(row)
+    sirius = next(r for r in rows if r[4] == 32349)
+    assert abs(sirius[0] - 101.287) < 0.002 and abs(sirius[1] + 16.716) < 0.002, sirius   # proper motion applied
     rows.sort(key=lambda r: r[2])
-    out = {"meta": {"source": "HYG Database v4.1 (astronexus), CC BY-SA 4.0, through app/data/stars/index.json",
+    out = {"meta": {"source": "Hipparcos Main Catalogue (ESA) via NASA HEASARC, positions moved to J2000; names, keys and distances: HYG Database v4.1 (astronexus), CC BY-SA 4.0",
                     "fields": "ra, dec (deg, J2000), V mag, spectral letter, HIP number or key, distance (ly, 0 = unknown), constellation index, name",
                     "cons": cons}, "stars": rows}
     path = DATA / "skystars.json"
     path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"{nasa} from HEASARC Hipparcos, {hyg_only} HYG only")
     print(f"{len(rows)} stars -> {path} ({path.stat().st_size / 1024:.0f} KB); brightest {rows[0]}; "
           f"to 6.0: {sum(r[2] <= 6.0 for r in rows)}, to 4.5: {sum(r[2] <= 4.5 for r in rows)}, to 3.0: {sum(r[2] <= 3.0 for r in rows)}")
 
