@@ -548,7 +548,7 @@ function draw() {
   }
 
   // the name of the star, planet or target in the crosshair: pointing the phone works like a mouse hover
-  if (performance.now() - (S.aimNameAt || 0) > 250) { S.aimNameAt = performance.now(); const pk = S.aim ? null : RealSky.pickAt(cx, cy); S.aimName = pk ? pk.title : ""; }
+  if (performance.now() - (S.aimNameAt || 0) > 250) { S.aimNameAt = performance.now(); const pk = S.aim ? null : RealSky.pickAt(cx, cy); S.aimName = pk && pk.kind === "star" ? pk.title : ""; }   // the Moon, planets and targets carry their own labels
   if (S.aimName) {
     g.font = "600 13px 'Space Grotesk', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
     const w = g.measureText(S.aimName).width + 16;
