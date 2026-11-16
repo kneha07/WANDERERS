@@ -353,9 +353,8 @@ $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   stopGlide();
-  if (e.key === "Escape") {   // close the open sheet; with none open, back to 1x
-    const open = [...document.querySelectorAll(".sheet")].filter((el) => !el.hidden);
-    if (open.length) open.forEach((el) => (el.hidden = true)); else setZoom(1);
+  if (e.key === "Escape") {   // close the top layer, as the back button does; with none open, back to 1x
+    if (!closeTopLayer()) setZoom(1);
     return;
   }
   if (phoneSteers()) return;
@@ -930,6 +929,43 @@ for (const sh of document.querySelectorAll(".sheet")) {
   sh.addEventListener("touchstart", (e) => { y0 = sh.scrollTop <= 0 && !e.target.closest("input, select, .webb-view") ? e.touches[0].clientY : null; }, { passive: true });
   sh.addEventListener("touchend", (e) => { if (y0 != null && e.changedTouches[0].clientY - y0 > 90) sh.hidden = true; y0 = null; }, { passive: true });
 }
+
+// ---------- layers: sheets, cards, search and the 🎓 menu and panel ----------
+// One layer at a time; a learn mode (learnPanel) may stay under one other layer. Each open layer owns one history
+// entry, so the phone's back button (and Esc) closes the top layer and does not leave the compass.
+// A layer closed by its ×, Done or a swipe drops its entry again. Every open and close goes through `hidden`.
+const LAYERS = [...document.querySelectorAll(".sheet"), $("skyCard"), $("searchPane"), $("learnMenu"), $("learnPanel")];
+const layerStack = [];   // open layers, oldest first
+let skipPops = 0;        // popstate events caused by our own history.go(), not by the user
+function closeLayer(el) {
+  if (el.id === "learnPanel") window.WanderersLearn?.close();
+  else if (el.id === "searchPane") searchOpen(false);
+  else { el.hidden = true; if (el.id === "learnMenu") $("learnBtn").setAttribute("aria-expanded", false); }
+}
+function dropEntries(n) { if (n > 0) { skipPops++; history.go(-n); } }
+const layerObs = new MutationObserver((recs) => {
+  for (const el of new Set(recs.map((r) => r.target))) {
+    const i = layerStack.indexOf(el);
+    if (!el.hidden && i < 0) {
+      const others = layerStack.filter((o) => !(o.id === "learnPanel" && el.id !== "learnMenu"));
+      for (const o of others) layerStack.splice(layerStack.indexOf(o), 1);   // off the stack first: no second drop
+      others.forEach(closeLayer);
+      layerStack.push(el);
+      if (others.length) dropEntries(others.length - 1); else history.pushState({ layer: el.id }, "");
+    } else if (el.hidden && i >= 0) { layerStack.splice(i, 1); dropEntries(1); }
+  }
+});
+LAYERS.forEach((el) => layerObs.observe(el, { attributes: true, attributeFilter: ["hidden"] }));
+window.addEventListener("popstate", () => {
+  if (skipPops) { skipPops--; return; }
+  const top = layerStack.pop();
+  if (top) closeLayer(top);
+});
+const closeTopLayer = () => {
+  if (layerStack.length) { history.back(); return true; }   // popstate closes it and drops its entry
+  const open = LAYERS.filter((el) => !el.hidden);              // not seen by the observer (no history entry)
+  open.forEach(closeLayer); return open.length > 0;
+};
 
 // shared with learn.js (the 🎓 learning modes)
 window.WanderersCompass = { S, pose, loc, nowDate, vec, dot, renderTargets };

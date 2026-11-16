@@ -67,7 +67,7 @@ async function ready() {
 }
 
 // ---------- the panel and the mode ----------
-let mode = null, timer = 0;
+let mode = null, timer = 0, next = 0;   // next: the quiz's wait before the next round
 async function open(m) {
   close();
   mode = m; document.body.classList.add("learning"); $("learnMenu").hidden = true; $("learnPanel").hidden = false;
@@ -76,7 +76,7 @@ async function open(m) {
 }
 function close() {
   if (!mode) return;
-  clearInterval(timer); timer = 0;
+  clearInterval(timer); timer = 0; clearTimeout(next);
   if (mode === "time") endTime();
   if (mode === "infrared") endInfrared();
   pointTo(null); mode = null;
@@ -176,7 +176,7 @@ function showRound() {
     <p class="small">${esc(o.clue)}</p><p class="small learn-aim" id="quizMsg">Point the crosshair at it.</p>
     <div class="row-btns"><button class="btn ghost" id="quizHint">Hint (−5)</button><button class="btn ghost" id="quizSkip">Skip</button></div>`);
   $("quizHint").onclick = () => { quiz.hint = true; pointTo(o); $("quizHint").disabled = true; $("quizMsg").textContent = "Follow the arrow."; };
-  $("quizSkip").onclick = nextRound;
+  $("quizSkip").onclick = () => { clearTimeout(next); nextRound(); };
 }
 function quizTick() {
   if (!quiz || quiz.done) return;
@@ -187,7 +187,7 @@ function quizTick() {
   quiz.done = true; const pts = quiz.hint ? 5 : 10; quiz.score += pts; log(o.name, o.kind);
   if (navigator.vibrate) navigator.vibrate([40, 50, 40]);
   $("quizMsg").textContent = `✓ Found it! +${pts}. ${o.kind === "star" ? o.lines[1] || o.lines[0] : o.lines[0]}`;   // for a star: how far, not its magnitude $("quizMsg").classList.add("ok");
-  setTimeout(nextRound, 2500);
+  next = setTimeout(nextRound, 2500);
 }
 function nextRound() {
   if (!quiz) return;
@@ -270,13 +270,16 @@ function startClass() {
 // ---------- 6. my sky log ----------
 // Objects the user saw: logged by a tour stop, a quiz find, or "I saw it" on a card. Kept on this phone only.
 const readLog = () => { try { return JSON.parse(keep("wanderers.skyLog") || "{}"); } catch { return {}; } };
+const today = () => new Date().toLocaleDateString("sv");   // YYYY-MM-DD on the phone's own calendar, not UTC
+// n counts the nights an object was seen: a second tap (or a double tap) on the same day does not add one
 function log(name, kind) {
   if (!name) return;
-  const l = readLog(), now = new Date().toISOString().slice(0, 10);
-  l[name] = { kind, first: (l[name] && l[name].first) || now, last: now, n: ((l[name] && l[name].n) || 0) + 1 };
+  const l = readLog(), now = today(), was = l[name];
+  if (was && was.last === now) return;
+  l[name] = { kind, first: (was && was.first) || now, last: now, n: ((was && was.n) || 0) + 1 };
   keep("wanderers.skyLog", JSON.stringify(l));
 }
-const flag = (k) => { const l = readLog(); l["#" + k] = { kind: "flag", first: new Date().toISOString().slice(0, 10), n: 1 }; keep("wanderers.skyLog", JSON.stringify(l)); };
+const flag = (k) => { const l = readLog(); l["#" + k] = { kind: "flag", first: today(), n: 1 }; keep("wanderers.skyLog", JSON.stringify(l)); };
 const BADGES = [["First light", "your first object", (c) => c.all >= 1], ["Planet spotter", "3 planets", (c) => c.planet >= 3],
   ["Galaxy hunter", "3 galaxies", (c) => c.galaxy >= 3], ["Star collector", "20 stars", (c) => c.star >= 20],
   ["Pattern finder", "5 constellations", (c) => c.constellation >= 5], ["Tour guide", "a whole tour", (c) => c.tour],
@@ -314,5 +317,4 @@ async function startNear() {
 // ---------- menu ----------
 $("learnBtn").onclick = () => { const m = $("learnMenu"); m.hidden = !m.hidden; $("learnBtn").setAttribute("aria-expanded", !m.hidden); };
 $("learnMenu").querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => open(b.dataset.mode)));
-window.addEventListener("keydown", (e) => { if (e.key === "Escape" && mode) close(); });
 window.WanderersLearn = { open, close, objectsUp, log, readLog, classLink, get mode() { return mode; } };

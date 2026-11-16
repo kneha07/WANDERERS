@@ -76,7 +76,8 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const StarSearch = { attach(input, list, onPick) { picked.onPick = onPick; }, load: () => Promise.resolve([]), search: () => [], hms: (d) => `${d}h`, dms: (d) => `${d}d`, describe: () => [] };
   const navigator = { geolocation, vibrate: () => true, mediaDevices: { getUserMedia: () => Promise.reject(new Error("no camera")) } };
   const env = {
-    window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
+    window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); }, pushState() {}, back() {}, go() {} }, navigator,
+    fetch: fetchFile, MutationObserver: class { observe() {} },   // the layer stack (back button) is checked in test/browser/realsky.mjs
     // realsky.js (the team's real-sky layer) draws extra sky detail; these flow tests only need it to be present
     RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cover: () => 0, pickAt: () => null, cancelGesture() {}, cancelDrag() {}, renderSaved() {}, projector: () => () => null },
     Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: pathView,

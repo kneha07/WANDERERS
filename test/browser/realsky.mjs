@@ -286,6 +286,23 @@ async function main() {
     `view ${h0.az.toFixed(4)}°, ${h0.alt.toFixed(4)}° -> ${h1.az.toFixed(4)}°, ${h1.alt.toFixed(4)}°; the phone turned ${turned.toFixed(2)}°`);
   check("no script errors on the page (online)", page.errors.length === 0, page.errors.slice(0, 2).join(" | "));
 
+  // ---- layers: one at a time, and the back button closes the top one instead of leaving the compass ----
+  const layers = await page.eval(`(async () => {
+    const $ = (id) => document.getElementById(id), wait = () => new Promise((ok) => setTimeout(ok, 300));
+    const shown = () => ["searchPane", "learnMenu", "learnPanel", "info"].filter((id) => !$(id).hidden).join(",");
+    const out = {};
+    $("learnBtn").click(); await wait(); $("searchBtn").click(); await wait(); out.one = shown();
+    history.back(); await wait(); out.afterBack = shown(); out.page = location.pathname;
+    WanderersLearn.open("time"); await wait(); $("infoBtn").click(); await wait(); out.stack = shown();
+    history.back(); await wait(); out.back1 = shown(); history.back(); await wait(); out.back2 = shown();
+    $("infoBtn").click(); await wait(); $("infoClose").click(); await wait(); out.closed = shown(); out.state = history.state;
+    return out; })()`);
+  check("layers: the Learn menu closes when the search opens", layers.one === "searchPane", JSON.stringify(layers));
+  check("layers: back closes the search and stays on the compass", layers.afterBack === "" && /compass\.html$/.test(layers.page), JSON.stringify(layers));
+  check("layers: a sheet over the time machine closes first, then the time machine",
+    layers.stack === "learnPanel,info" && layers.back1 === "learnPanel" && layers.back2 === "", JSON.stringify(layers));
+  check("layers: a sheet closed by × leaves no history entry behind", layers.closed === "" && layers.state === null, JSON.stringify(layers));
+
   // ---- 2. save the sky for places, through the info sheet; then remove one place ----
   // Basic for Seattle's latitude stays for part 3. Standard for Sydney's is saved, then removed again: that must
   // leave every Seattle picture in place. SHARP=1 also saves and removes Sharp for Seattle (about 690 pictures).
