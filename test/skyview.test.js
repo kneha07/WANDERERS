@@ -31,7 +31,9 @@ test("the compass stars are the star database's naked-eye stars, one for one", (
   for (const row of stars.slice(0, 300)) {
     const rec = byKey.get(typeof row[4] === "number" ? `hip${row[4]}` : row[4]);
     assert.ok(rec, `no database record for ${row[4]}`);
-    assert.ok(Math.abs(rec.ra - row[0]) < 0.001 && Math.abs(rec.dec - row[1]) < 0.001, String(row[4]));
+    // Positions come from NASA HEASARC Hipparcos, moved to J2000; HYG differs by up to 16" (Alpha Centauri).
+    const off = Math.hypot((rec.ra - row[0]) * Math.cos((rec.dec * Math.PI) / 180), rec.dec - row[1]);
+    assert.ok(off < 0.01, `${row[4]} is ${off.toFixed(4)} deg from its record`);
     assert.equal(DB.meta.cons[row[6]], rec.con || "");
   }
 });

@@ -119,7 +119,7 @@
           <svg viewBox="0 0 120 120" aria-hidden="true">${f.paths.map((p) => `<polyline points="${p.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" ")}"/>`).join("")}${f.points.map((q) => `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="2.2"/>`).join("")}</svg>
           <span class="cc-name">${esc(c.name)}</span><span class="cc-more" aria-live="polite"></span></button>`;
       }).join("")}</div>
-      <p class="small-note">Figure lines: d3-celestial (BSD). Stars: HYG Database v4.1 (CC BY-SA 4.0). East is to the left, as the sky looks from the ground.</p>`;
+      <p class="small-note">Figure lines: d3-celestial (BSD). Stars: Hipparcos (ESA) via NASA HEASARC; names: HYG Database v4.1 (CC BY-SA 4.0). East is to the left, as the sky looks from the ground.</p>`;
     host.querySelectorAll(".cc-card").forEach((b) => (b.onclick = async () => {
       const c = s.list.find((x) => x.id === b.dataset.id), more = b.querySelector(".cc-more");
       b.setAttribute("aria-expanded", "true");
