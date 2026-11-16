@@ -98,3 +98,18 @@ The owner asked to fix the 3 Highs. Fixes on `feature/compass-pullout-bars`: c9a
 | `origin/docs/readme-honest` | older copy of `docs/readme-accuracy` (#67, merged) | superseded |
 | `feature/real-sky`, `feature/real-sky-core`, `feature/real-sky-finish` | earlier versions of #40 real-sky (merged) | superseded |
 | `feature/real-sky-main`, `origin/feature/star-database-ml`, `integrate/2026-11-15c` | same patches already on `main` | already in |
+
+## Round 3: feature/chinese-version (integrate/chinese-version, #110)
+
+On request, an Opus agent merged and reviewed the branch in `.worktrees/integrate-zh`. The orchestrator checked its fix commit and reran the checks.
+
+| Step | SHA |
+|---|---|
+| base `main` | 442e5c2 |
+| merge `feature/chinese-version` 10fdbc4 (1 conflict: `app/compass.html`, both sides kept) | 586efce |
+| fixes: aim-bar "Done" as a flag (High, translated text broke it), 183 new strings, 6 HK words, lazy dictionaries in `sw.js`, literal replacement | fed43c2 |
+| review record `artifacts/review-chinese-version-10fdbc4.md` (PASS) | 962a5df |
+
+- Checks: `node --test` 677 pass, 0 fail, 2 skipped (orchestrator rerun); `node --check` clean; agent: `realsky.mjs` 60 PASS, 0 FAIL; 7 languages on compass.html and index.html, 0 page errors.
+- Audit: `git diff --check` clean, no conflict markers, all `uses:` pinned, `_headers`, `server.js` and `.github/` unchanged.
+- Open: owner decisions and English leftovers in #111; native-speaker review of the 183 machine translations in #96; real-phone test not done.
