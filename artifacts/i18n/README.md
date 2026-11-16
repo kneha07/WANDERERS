@@ -49,7 +49,7 @@ No redesign is needed for one more language: add a dictionary file and a build s
 3. Add a test that fails when a visible string has no translation.
 4. Only if search ranking matters: build `/zh/...` pages at deploy time.
 
-Tracked in issue kneha07/WANDERERS#94 (https://github.com/kneha07/WANDERERS/issues/94). Step 2 is now covered by number templates in `i18n.js` without a script rewrite; step 3 is covered for placeholders only.
+Tracked in issue kneha07/WANDERERS#94 (https://github.com/kneha07/WANDERERS/issues/94), closed 2026-11-15 with the result comment. Step 2 is now covered by number templates in `i18n.js` without a script rewrite; step 3 is covered for placeholders only.
 
 ## Decision note: strings with numbers (issue #94), 2026-11-15
 
