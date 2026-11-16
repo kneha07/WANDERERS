@@ -69,7 +69,7 @@
     deep: "Survey photographs taken decades ago. Not a live view: no Moon, planets or satellites in them.",
   };
   const CREDITS = {
-    eye: "Stars: HYG Database v4.1 (CC BY-SA 4.0). Constellation lines: d3-celestial (BSD). Planets: JPL approximate elements.",
+    eye: "Stars: Hipparcos (ESA) via NASA HEASARC; names and distances: HYG Database v4.1 (CC BY-SA 4.0). Constellation lines: d3-celestial (BSD). Planets: JPL approximate elements.",
     deep: "Digitized Sky Survey – STScI/NASA, coloured and tiled by CDS, served by NASA/IPAC IRSA.",
     infrared: "Two Micron All Sky Survey (2MASS) – University of Massachusetts and IPAC/Caltech, funded by NASA and NSF; coloured and tiled by CDS, served by NASA/IPAC IRSA.",
   };
