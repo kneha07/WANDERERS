@@ -46,3 +46,7 @@ Removed on user request: red night mode (built, then removed; the user did not l
 Not tested: the real camera stop and restart, the wake lock and the swipe-down on a real phone (issue #93).
 
 Assumption to confirm: the user asked to turn the camera off at "deep and move full z-score". This was read as Deep sky with the Camera/Sky slider at full Sky. The user was told and can correct it.
+
+## Hand-off
+
+- Pushed on user request and opened https://github.com/kneha07/WANDERERS/pull/97 (2026-11-15). Next: review and merge, then the real-phone test in #93.
