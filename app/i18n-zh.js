@@ -1,5 +1,5 @@
-/* Built by scripts/build_i18n_zh.py from artifacts/i18n/zh-*.json. Do not edit by hand. */
-window.I18N_ZH = {
+/* Built by scripts/build_i18n.py from artifacts/i18n/zh-*.json. Do not edit by hand. */
+window.I18N_DICT = {
 "Skip to content": "跳到正文",
 "Explore": "探索",
 "Sky Survey": "巡天",

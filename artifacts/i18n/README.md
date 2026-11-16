@@ -1,32 +1,36 @@
-# Chinese (中文) version: run record, 2026-11-15
+# Language versions (中文, हिन्दी, Tiếng Việt, 한국어): run record, 2026-11-15
 
 ## How it works
 
 ```
-page loads ──> i18n.js adds an EN / 中文 button next to each theme toggle
+page loads ──> i18n.js adds a language menu (EN · 中文 · हिन्दी · Việt · 한국어) next to each theme toggle
                  │
-                 ├─ lang = ?lang=zh|en  →  saved choice (localStorage "wanderers-lang")  →  browser language
+                 ├─ lang = ?lang=en|zh|hi|vi|ko  →  saved choice (localStorage "wanderers-lang")  →  browser language
                  │
-                 └─ zh: load i18n-zh.js (English → 中文 dictionary)
+                 └─ not en: load i18n-<lang>.js (English → <lang> dictionary)
                          swap text nodes + placeholder/title/aria-label/alt by whole-string match
                          MutationObserver translates content that scripts add later
 ```
 
-Switching back to English reloads the page.
+Changing the language reloads the page. Hindi (हिन्दी) is the Indian language, as the most spoken one.
 
 ## Dictionary
 
 1. `en-*.json`: 1,169 visible strings collected from the 6 pages in a browser.
-2. `zh-*.json`: translations (4 parallel translator agents; every key checked present).
-3. `python scripts/build_i18n_zh.py` writes `app/i18n-zh.js` (1,096 entries; strings that stay the same are dropped).
+2. `<lang>-*.json`: translations by parallel translator agents; every key checked present.
+3. `python scripts/build_i18n.py` writes `app/i18n-<lang>.js` for every language found.
+   Entries (strings that stay the same are dropped): zh 1,096 · vi 1,090 · ko 1,093 · hi 993 (Hindi keeps the 88 constellation names in English).
 
-To add strings: add pairs to a `zh-*.json` file, then run the build script again.
+To add strings: add pairs to a `<lang>-*.json` file, then run the build script again.
+To add a language: add `<lang>-*.json`, run the build, add the code to `LANGS` in `app/i18n.js` and the file to `SHELL` in `app/sw.js`.
 
 ## Checks
 
-- All 6 pages in zh: title, headings and controls are Chinese; only star names, file names and mission names stay English (on purpose).
-- 375 px phone width: no page is wider than the screen, in EN and in zh. The header got a smaller wordmark and tighter gaps at ≤ 420 px.
+- All 6 pages in zh, hi, vi and ko: title, headings and controls are translated; only star names, file names and mission names stay English (on purpose).
+- 375 px phone width (mobile emulation): no page is wider than the screen, in all 5 languages. The header got a smaller wordmark and tighter gaps at ≤ 420 px.
 - `node --test test/*.test.js`: 664 pass, 0 fail. `i18n.js` loads as the last script, so the script-order tests still hold.
+- Hindi headings get line-height 1.35, so Devanagari marks do not touch the next line.
+- The menu change ko → vi reloads in Vietnamese and drops `?lang` from the address.
 
 ## Known limits
 
@@ -45,3 +49,4 @@ No redesign is needed for one more language: add a dictionary file and a build s
 4. Only if search ranking matters: build `/zh/...` pages at deploy time.
 
 Tracked in issue kneha07/WANDERERS#94 (https://github.com/kneha07/WANDERERS/issues/94).
+- Translations are machine-made and not reviewed by native speakers. Vietnamese constellation names use formal Hán-Việt forms. Korean uses "웹 망원경" in one short label but "Webb" in longer sentences.

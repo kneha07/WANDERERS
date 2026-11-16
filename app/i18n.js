@@ -1,34 +1,40 @@
-/* English / 中文 switch. The pages are written in English; in Chinese mode this file loads the
- * dictionary (i18n-zh.js, built from artifacts/i18n/zh-*.json) and swaps every text node and the
- * placeholder / title / aria-label / alt attributes whose English text is a key, now and as scripts add more.
- * Choice: ?lang=zh|en, then the saved choice, then the browser language. Switching back reloads the page.
- * ponytail: whole-string match only; text built with numbers inside (e.g. "34 epochs") stays English. */
+/* Language menu (English / 中文 / हिन्दी / Tiếng Việt / 한국어). The pages are written in English; in another
+ * language this file loads that dictionary (i18n-<lang>.js, built by scripts/build_i18n.py from
+ * artifacts/i18n/<lang>-*.json) and swaps every text node and the placeholder / title / aria-label / alt
+ * attributes whose English text is a key, now and as scripts add more.
+ * Choice: ?lang=<code>, then the saved choice, then the browser language. Changing it reloads the page.
+ * ponytail: whole-string match only; text built with numbers inside (e.g. "34 epochs") stays English (issue #94). */
 (() => {
+  // Short labels: a closed <select> is as wide as its longest option, and the phone header has little room.
+  const LANGS = { en: ["EN", "en"], zh: ["中文", "zh-CN"], hi: ["हिन्दी", "hi"], vi: ["Việt", "vi"], ko: ["한국어", "ko"] };
   const KEY = "wanderers-lang", ATTRS = ["placeholder", "title", "aria-label", "alt"];
   const get = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
   const set = (v) => { try { localStorage.setItem(KEY, v); } catch { /* private mode */ } };
-  const q = new URLSearchParams(location.search).get("lang");
-  if (q === "zh" || q === "en") set(q);
-  const lang = q || get() || (/^zh/i.test(navigator.language) ? "zh" : "en");
+  const ok = (l) => (Object.hasOwn(LANGS, l) ? l : null);
+  const q = ok(new URLSearchParams(location.search).get("lang"));
+  if (q) set(q);
+  const lang = q || ok(get()) || ok(String(navigator.language || "").slice(0, 2).toLowerCase()) || "en";
 
   document.querySelectorAll(".theme-toggle").forEach((t) => {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "lang-toggle"; b.lang = lang === "zh" ? "en" : "zh-CN";
-    b.textContent = lang === "zh" ? "EN" : "中文";
-    b.setAttribute("aria-label", lang === "zh" ? "Switch to English" : "切换到中文");
-    b.addEventListener("click", () => { set(lang === "zh" ? "en" : "zh"); const u = new URL(location.href); u.searchParams.delete("lang"); location.replace(u); });
-    t.before(b);
+    const s = document.createElement("select");
+    s.className = "lang-toggle"; s.setAttribute("aria-label", "Language");
+    for (const [code, [label, tag]] of Object.entries(LANGS)) {
+      const o = new Option(label, code, false, code === lang);
+      o.lang = tag; s.add(o);
+    }
+    s.addEventListener("change", () => { set(s.value); const u = new URL(location.href); u.searchParams.delete("lang"); location.replace(u); });
+    t.before(s);
   });
-  if (lang !== "zh") return;
-  document.documentElement.lang = "zh-CN";
+  if (lang === "en") return;
+  document.documentElement.lang = LANGS[lang][1];
 
-  const s = document.createElement("script");
-  s.src = "i18n-zh.js?v=20261115a";
-  s.onload = () => {
-    const D = window.I18N_ZH || {};
+  const sc = document.createElement("script");
+  sc.src = `i18n-${lang}.js?v=20261116a`;
+  sc.onload = () => {
+    const D = window.I18N_DICT || {};
     const tr = (v) => { const k = v.trim().replace(/\s+/g, " "); return Object.hasOwn(D, k) ? v.replace(v.trim(), D[k]) : null; };
-    const text = (n) => { const p = n.parentElement; if (!p || p.closest("script,style,svg")) return; const t = tr(n.nodeValue); if (t !== null && t !== n.nodeValue) n.nodeValue = t; };
-    const attrs = (e) => ATTRS.forEach((a) => { const v = e.getAttribute(a); if (v) { const t = tr(v); if (t !== null && t !== v) e.setAttribute(a, t); } });
+    const text = (n) => { const p = n.parentElement; if (!p || p.closest("script,style,svg,select.lang-toggle")) return; const t = tr(n.nodeValue); if (t !== null && t !== n.nodeValue) n.nodeValue = t; };
+    const attrs = (e) => { if (e.classList?.contains("lang-toggle")) return; ATTRS.forEach((a) => { const v = e.getAttribute(a); if (v) { const t = tr(v); if (t !== null && t !== v) e.setAttribute(a, t); } }); };
     const walk = (root) => {
       if (root.nodeType === 3) return text(root);
       if (root.nodeType !== 1) return;
@@ -44,5 +50,5 @@
       else m.addedNodes.forEach(walk);
     })).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
   };
-  document.head.append(s);
+  document.head.append(sc);
 })();
