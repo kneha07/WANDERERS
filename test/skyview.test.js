@@ -119,3 +119,20 @@ test("labels say what each view is not", () => {
   assert.equal(V.fmtLat(47.6), "48° N");
   assert.equal(V.fmtLat(-33.9), "34° S");
 });
+
+test("the deep star slices: 24 files of 15° RA, fainter than the naked-eye list, bright to faint, no star twice", () => {
+  const shown = new Set(stars.map((r) => r[4])), seen = new Set();
+  let total = 0;
+  for (let k = 0; k < 24; k++) {
+    const rows = JSON.parse(fs.readFileSync(path.join(__dirname, `../app/data/skydeep/ra${String(k).padStart(2, "0")}.json`), "utf8")).stars;
+    assert.ok(rows.length > 1000, `slice ${k} has ${rows.length} stars`);
+    rows.forEach((r, i) => {
+      assert.equal(Math.floor(r[0] / 15) % 24, k, `HIP ${r[4]} is in the wrong slice`);
+      assert.ok(r[2] > 6.5 && Math.abs(r[1]) <= 90 && (i === 0 || rows[i - 1][2] <= r[2]), `HIP ${r[4]}`);
+      assert.ok(!shown.has(r[4]) && !seen.has(r[4]), `HIP ${r[4]} twice`);
+      seen.add(r[4]);
+    });
+    total += rows.length;
+  }
+  assert.ok(total > 100000, String(total));
+});

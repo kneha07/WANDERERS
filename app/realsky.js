@@ -351,6 +351,66 @@
   const online = () => navigator.onLine !== false;
   // How much of the view the photographs cover: compass.js fades its dark backdrop by it, drawEye its stars.
   const cover = () => (DEEP.state === "ready" ? (R.sky === "deep" ? 1 : online() ? scope() : 0) : 0);
+  // ---------- tappable stars on the photographs ----------
+  // Zoomed in (or in Deep) the photographs replace the drawn dots, so a faint ring marks each star a tap can open:
+  // the naked-eye list plus every fainter Hipparcos star (data/skydeep, NASA HEASARC; pipeline/make_sky_stars.py --deep).
+  // One file per 15 degrees of RA, loaded only when it is in view. Not in the time machine: these stars do not move.
+  const FAINT = { slices: [], loading: new Set(), failedAt: [], key: "", up: [] };
+  function slicesInView(P, f, W, H, now, L) {
+    const c = Sky.frame(now, L.lat, L.lon).toJ2000(P.forward), r = Math.atan(Math.hypot(W, H) / 2 / f) / D2R + 1;
+    if (Math.abs(c.dec) + r >= 89) return [...Array(24).keys()];
+    const w = Math.min(180, r / Math.cos(c.dec * D2R)), out = new Set();
+    for (let a = c.ra - w; a <= c.ra + w + 15; a += 15) out.add(((Math.floor(Math.min(a, c.ra + w) / 15) % 24) + 24) % 24);
+    return [...out];
+  }
+  function loadFaint(k) {
+    if (FAINT.slices[k] || FAINT.loading.has(k) || Date.now() - (FAINT.failedAt[k] || 0) < 30000) return;   // a failed slice waits 30 s
+    FAINT.loading.add(k);
+    fetch(`data/skydeep/ra${String(k).padStart(2, "0")}.json`).then((r) => r.json()).then((d) => {
+      FAINT.slices[k] = { stars: d.stars, xyz: d.stars.map((s) => Sky.unit(s[0], s[1])) }; FAINT.key = "";
+    }).catch(() => { FAINT.failedAt[k] = Date.now(); }).finally(() => FAINT.loading.delete(k));
+  }
+  // [east, north, up, mag, slice (-1: the naked-eye list), row], bright to faint; worked out once a second
+  function faintUp(now, L) {
+    const key = `${L.lat.toFixed(2)}|${L.lon.toFixed(2)}|${Math.floor(now.getTime() / 1000)}|${FAINT.slices.filter(Boolean).length}`;
+    if (key === FAINT.key) return FAINT.up;
+    const fr = Sky.frame(now, L.lat, L.lon), out = EYE.stars ? starsUp(now, L, 6.5).map((v) => [v[0], v[1], v[2], v[3], -1, v[5]]) : [];
+    FAINT.slices.forEach((sl, k) => { if (sl) sl.xyz.forEach((u, i) => { const v = fr.toHorizon(u[0], u[1], u[2]); if (v[2] >= 0) out.push([v[0], v[1], v[2], sl.stars[i][2], k, i]); }); });
+    out.sort((a, b) => a[3] - b[3]);
+    FAINT.key = key; FAINT.up = out;
+    return out;
+  }
+  const RINGS = 300;    // at most this many rings, the brightest in view: more turns the photograph into a pattern
+  function drawRings(g, P, f, W, H, proj, now, L) {
+    const t = cover();
+    if (!t || R.years) return;
+    for (const k of slicesInView(P, f, W, H, now, L)) loadFaint(k);
+    g.strokeStyle = "#6cc4ff"; g.lineWidth = 1; g.globalAlpha = 0.45 * t;
+    let n = 0;
+    for (const s of faintUp(now, L)) {
+      const q = proj(s); if (!q || q[0] < -8 || q[1] < -8 || q[0] > W + 8 || q[1] > H + 8) continue;
+      g.beginPath(); g.arc(q[0], q[1], Math.max(4, 9 - 0.6 * s[3]), 0, 7); g.stroke();
+      if (++n >= RINGS) break;
+    }
+    g.globalAlpha = 1;
+  }
+  // a fainter Hipparcos star under the finger, as a star pick (the star sheet shows these values: it has no record of them)
+  function faintAt(x, y, proj, now, L) {
+    if (!cover() || R.years) return null;
+    let best = null;
+    for (const s of faintUp(now, L)) {
+      if (s[4] < 0) continue;
+      const q = proj(s); if (!q || Math.hypot(q[0] - x, q[1] - y) >= 18) continue;
+      best = s; break;     // the list is bright to faint: the first one in reach is the brightest
+    }
+    if (!best) return null;
+    const [ra, dec, mag, spect, hip, ly] = FAINT.slices[best[4]].stars[best[5]];
+    const lines = [`Magnitude ${mag.toFixed(1)}: too faint for the eye, seen in the survey photograph.`,
+      spect ? `Spectral type ${spect}.` : "", ly ? `About ${ly.toLocaleString("en")} light-years away.` : "Distance not measured.",
+      "Hipparcos (ESA) via NASA HEASARC."].filter(Boolean);
+    return { kind: "star", key: `hip${hip}`, title: `HIP ${hip}`, lines, ra, dec, mag, spect, dist: ly || null };
+  }
+
   // The photographs are wanted in Deep, and from 2x (started early, so they are ready by 3x; on mobile data or with
   // Save-Data on, from 3x, so nothing unseen is fetched). Their opacity is set here every frame, written to the page
   // only when it changes. Aladin must not start in a hidden box, so the box stays shown (at opacity 0 below 3x) while
@@ -374,6 +434,7 @@
     if (R.lines) drawLines(g, proj, now, L);
     drawGalaxies(g, proj, now, L, f);
     if (R.sky === "eye") drawEye(g, proj, now, L, f);
+    drawRings(g, P, f, W, H, proj, now, L);
     if (!R.years) drawPlanets(g, proj, now, L);   // the planets and the Moon belong to today, not to the time machine's year
   }
 
@@ -434,12 +495,13 @@
     if (galaxyHit && R.sky !== "off") return galaxyHit;   // after the Moon, Sun and planets, before single stars
     if (EYE.stars && R.sky !== "off") {
       let best = null;
-      for (const s of starsUp(now, L, R.sky === "eye" ? SkyView.limitMag(R.limit) : 6.5)) {
+      for (const s of starsUp(now, L, R.sky === "eye" && !cover() ? SkyView.limitMag(R.limit) : 6.5)) {   // on the photographs: every ringed star
         const q = proj(s); if (!q) continue;
         if (Math.hypot(q[0] - x, q[1] - y) < 18 && (!best || s[3] < best[3])) best = s;   // the brightest one within reach
       }
       if (best) { const row = EYE.stars[best[5]], card = SkyView.starCard(row, EYE.cons); return { kind: "star", key: card.key, title: card.title, lines: card.lines, ra: row[0], dec: row[1] }; }
     }
+    if (R.sky !== "off") { const fp = faintAt(x, y, proj, now, L); if (fp) return fp; }
     return null;
   }
   function showCard(pk) {

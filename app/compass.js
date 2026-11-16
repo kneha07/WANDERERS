@@ -1020,7 +1020,7 @@ RealSky.init({
   // a tapped star opens the same star sheet as the search, found by its star-database key
   onStar: async (pk) => {
     const list = await StarSearch.load().catch(() => []);
-    const st = list.find((x) => x.key === pk.key) || { name: pk.title, alt: [], ra: pk.ra, dec: pk.dec, key: pk.key };
+    const st = list.find((x) => x.key === pk.key) || { name: pk.title, alt: [], ra: pk.ra, dec: pk.dec, key: pk.key, mag: pk.mag, spect: pk.spect, dist: pk.dist };
     selectStar(st); showDetails(S.sel);
   },
 });
