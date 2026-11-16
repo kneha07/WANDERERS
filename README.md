@@ -223,8 +223,9 @@ photographed, and works with no connection. **Deep** shows survey photographs un
 projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMass and IPAC/Caltech), both tiled by CDS
 and served by NASA/IPAC IRSA. They are decades old, not a live view. Tap a planet for a card, or a star to open its
 star sheet. Pinch with two fingers (or use the mouse wheel) to zoom in, up to 8 times. "Drag the sky" in the Sight check sheet moves the sky onto something you can see. The page opens with no
-signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days, and "Save the sky for a place" in
-the ⓘ sheet keeps them for a latitude before a trip (each saved place has its own Remove). Once a day the
+signal after one visit (`sw.js`); recent sky pictures stay on the phone for 7 days. "Save the sky for a place" in the ⓘ sheet keeps them for a
+latitude before a trip (each saved place has its own Remove); it is hidden until the owner decides, and `?later=1`
+shows it. Once a day the
 page asks the archive whether a survey was reissued, and fetches its pictures again when it was. Checks: `node --test test/sky.test.js test/hips.test.js
 test/skyview.test.js` and `node test/browser/realsky.mjs` (headless Edge or Chrome, needs the network; `SHARP=1` also
 saves and removes the 34 MB Sharp level). GitHub Actions (`.github/workflows/checks.yml`) runs the Node, Python and
