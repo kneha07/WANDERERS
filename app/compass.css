@@ -258,3 +258,12 @@ p.pv-dim { font-size: .8rem; }
 /* the name of the star, planet or target under the mouse (realsky.js) */
 .hover-name { position: fixed; z-index: 4; pointer-events: none; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
   font: 600 .8rem var(--font); color: #e8eefb; background: rgba(4, 9, 20, .82); border: 1px solid rgba(108, 196, 255, .35); }
+
+/* first visit: the pull tabs bounce, so a new user finds the hidden bars */
+.pull.nudge i { animation: nudge-down 1s ease-in-out 3; }
+.pull-bottom.nudge i { animation-name: nudge-up; }
+@keyframes nudge-down { 50% { transform: translateY(7px); background: var(--cyan); } }
+@keyframes nudge-up { 50% { transform: translateY(-7px); background: var(--cyan); } }
+
+/* sheets: a grabber shows that a swipe down closes them */
+.sheet::before { content: ""; display: block; width: 42px; height: 5px; margin: -8px auto 10px; border-radius: 3px; background: var(--line); }

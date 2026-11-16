@@ -108,8 +108,29 @@ $("go").onclick = async () => {
 async function startCamera() {
   try {
     const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-    $("cam").srcObject = st; S.camOn = true; setZoom(S.zoom);
+    $("cam").srcObject = st; camStream = st; S.camOn = true; setZoom(S.zoom);
   } catch { S.camOn = false; }
+}
+// Camera power: while the sky photographs cover the camera fully (Deep with the slider at Sky, or zoomed in to the
+// telescope view), the camera picture cannot be seen, so the camera is stopped to save battery. It starts again as
+// soon as the photographs let any of it through. S.camOn stays true: the view keeps the camera's lens geometry.
+let camStream = null, camCoveredAt = 0, camRetryAt = 0;
+function camPower() {
+  if (!S.camOn) return;
+  const now = performance.now(), covered = RealSky.DEEP.state === "ready" && RealSky.DEEP.op === 1;
+  if (covered) {
+    if (!camCoveredAt) camCoveredAt = now;
+    if (camStream && now - camCoveredAt > 1500) {   // a short wait: a quick zoom in and out does not restart the camera
+      camStream.getTracks().forEach((t) => t.stop()); camStream = null; $("cam").srcObject = null;
+    }
+    return;
+  }
+  camCoveredAt = 0;
+  if (camStream || now < camRetryAt) return;
+  camRetryAt = now + 5000;                          // one try at a time; a refused camera is tried again in 5 s
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then((st) => {
+    camStream = st; $("cam").srcObject = st; $("cam").play().catch(() => {}); camRetryAt = 0;
+  }).catch(() => {});
 }
 
 if (Q.get("cam") === "0") $("useCam").checked = false;
@@ -155,8 +176,16 @@ function afterIntro(place) {
   $("cosmos").hidden = true; $("ar").hidden = false; $("hud").hidden = false;
   if (S.camOn) { $("cam").hidden = false; $("cam").play().catch(() => {}); }
   fit(); requestAnimationFrame(loop);
+  keepAwake();
   setTimeout(() => (S.sensors ? showCalibration() : desktopMode()), 300);
 }
+// keep the screen on while the sky is open; the browser drops the lock when the page is hidden, so take it again
+function keepAwake() {
+  if (!navigator.wakeLock || document.hidden) return;
+  navigator.wakeLock.request("screen").catch(() => {});
+}
+document.addEventListener("visibilitychange", () => { if (!$("ar").hidden) keepAwake(); });
+
 function desktopMode() {
   $("guideSub").textContent = "No motion sensors here: drag the sky or use the arrow keys to look around.";
 }
@@ -321,7 +350,11 @@ $("hud").addEventListener("pointerup", () => (drag = null));
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   stopGlide();
-  if (e.key === "Escape") { if (![...document.querySelectorAll(".sheet")].some((el) => !el.hidden)) setZoom(1); return; }
+  if (e.key === "Escape") {   // close the open sheet; with none open, back to 1x
+    const open = [...document.querySelectorAll(".sheet")].filter((el) => !el.hidden);
+    if (open.length) open.forEach((el) => (el.hidden = true)); else setZoom(1);
+    return;
+  }
   if (phoneSteers()) return;
   const s = (e.shiftKey ? 10 : 2) / Math.max(1, S.zoom);
   if (e.key === "ArrowLeft") S.manual.az = (S.manual.az - s + 360) % 360;
@@ -334,8 +367,9 @@ window.addEventListener("keydown", (e) => {
 const LONG_SIDE_FOV = 67;   // typical main phone camera: field of view along the image's long side
 function focalPx(W, H) {
   const v = $("cam");
-  if (S.camOn && v.videoWidth) {
-    const vw = v.videoWidth, vh = v.videoHeight, scale = Math.max(W / vw, H / vh);      // object-fit: cover
+  if (v.videoWidth) S.camSize = [v.videoWidth, v.videoHeight];   // kept while the camera is stopped (camPower)
+  if (S.camOn && S.camSize) {
+    const [vw, vh] = S.camSize, scale = Math.max(W / vw, H / vh);      // object-fit: cover
     return (Math.max(vw, vh) / 2) / Math.tan(LONG_SIDE_FOV / 2 * D2R) * scale * S.zoom;
   }
   return (H / 2) / Math.tan(S.vfovNoCam / 2 * D2R) * S.zoom;
@@ -352,7 +386,7 @@ function fit() {
 }
 window.addEventListener("resize", fit);
 
-function loop() { draw(); calibrationTick(); requestAnimationFrame(loop); }
+function loop() { draw(); calibrationTick(); camPower(); requestAnimationFrame(loop); }
 
 function draw() {
   const W = innerWidth, H = innerHeight, now = nowDate(), L = loc();
@@ -427,15 +461,16 @@ function draw() {
     g.fillText(`${l.name} · ${a.km < 10 ? a.km.toFixed(1) : Math.round(a.km)} km`, q[0] + 11, q[1] - 2);
   }
 
-  // Webb (JWST) pointings around where you look: small gold squares
+  // Webb (JWST) pointings around where you look: small violet diamonds (the amber brackets are WANDERERS targets)
   if (S.webbAround && S.webbAround.length) {
     g.font = "600 10px 'JetBrains Mono', monospace"; g.textAlign = "left"; g.textBaseline = "middle";
     for (const w of S.webbAround) {
       const s = Sky.observe({ ra: w.ra, dec: w.dec }, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); if (!q) continue;
       const hot = S.webbHere && S.webbHere.obs === w.obs;
-      g.strokeStyle = s.alt < 0 ? "rgba(255,210,122,.35)" : hot ? "#ffd27a" : "rgba(255,210,122,.75)"; g.lineWidth = hot ? 2 : 1.2;
-      g.strokeRect(q[0] - (hot ? 6 : 4), q[1] - (hot ? 6 : 4), hot ? 12 : 8, hot ? 12 : 8);
-      if (hot) { g.fillStyle = "#ffd27a"; g.fillText("JWST · " + w.target, q[0] + 10, q[1]); }
+      const r = hot ? 7 : 5;
+      g.strokeStyle = s.alt < 0 ? "rgba(201,167,255,.35)" : hot ? "#c9a7ff" : "rgba(201,167,255,.75)"; g.lineWidth = hot ? 2 : 1.2;
+      g.beginPath(); g.moveTo(q[0], q[1] - r); g.lineTo(q[0] + r, q[1]); g.lineTo(q[0], q[1] + r); g.lineTo(q[0] - r, q[1]); g.closePath(); g.stroke();
+      if (hot) { g.fillStyle = "#c9a7ff"; g.fillText("JWST · " + w.target, q[0] + 10, q[1]); }
     }
   }
 
@@ -510,6 +545,15 @@ function draw() {
     g.strokeStyle = style; g.lineWidth = w;
     g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.stroke();
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { g.beginPath(); g.moveTo(cx + dx * 28, cy + dy * 28); g.lineTo(cx + dx * 40, cy + dy * 40); g.stroke(); }
+  }
+
+  // the name of the star, planet or target in the crosshair: pointing the phone works like a mouse hover
+  if (performance.now() - (S.aimNameAt || 0) > 250) { S.aimNameAt = performance.now(); const pk = S.aim ? null : RealSky.pickAt(cx, cy); S.aimName = pk ? pk.title : ""; }
+  if (S.aimName) {
+    g.font = "600 13px 'Space Grotesk', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    const w = g.measureText(S.aimName).width + 16;
+    g.fillStyle = "rgba(4,9,20,.78)"; g.beginPath(); g.roundRect(cx - w / 2, cy - 64, w, 22, 6); g.fill();
+    g.fillStyle = "#e8eefb"; g.fillText(S.aimName, cx, cy - 53);
   }
 
   drawTape(W, P, T);
@@ -841,12 +885,26 @@ $("northClose").onclick = () => { $("north").hidden = true; };
 
 // ---------- pull-out bars ----------
 // Tap a tab, or swipe it, to show or hide its bar. The top tab opens down, the bottom tab opens up.
+// The open or closed state is remembered for the next visit. On the first visit the tabs bounce, as a hint.
+const keep = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
+if (!keep("wanderers.barsSeen")) { keep("wanderers.barsSeen", "1"); $("pullTop").classList.add("nudge"); $("pullBottom").classList.add("nudge"); }
 for (const [id, cls, dir, what] of [["pullTop", "top-open", 1, "the top controls"], ["pullBottom", "bottom-open", -1, "the targets and search"]]) {
   const b = $(id); let y0 = null, swiped = false;
-  const set = (on) => { $("ar").classList.toggle(cls, on); b.setAttribute("aria-expanded", on); b.setAttribute("aria-label", `${on ? "Hide" : "Show"} ${what}`); };
+  const set = (on) => {
+    $("ar").classList.toggle(cls, on); b.setAttribute("aria-expanded", on); b.setAttribute("aria-label", `${on ? "Hide" : "Show"} ${what}`);
+    b.classList.remove("nudge"); keep("wanderers." + cls, on ? "1" : "0");
+  };
+  if (keep("wanderers." + cls) === "1") set(true);
   b.onpointerdown = (e) => { y0 = e.clientY; swiped = false; b.setPointerCapture(e.pointerId); };
   b.onpointerup = (e) => { if (y0 == null) return; const dy = (e.clientY - y0) * dir; y0 = null; if (Math.abs(dy) >= 12) { swiped = true; set(dy > 0); } };
   b.onclick = () => { if (swiped) { swiped = false; return; } set(!$("ar").classList.contains(cls)); };
+}
+
+// sheets: a swipe down from the top of a sheet closes it (as its Done button does)
+for (const sh of document.querySelectorAll(".sheet")) {
+  let y0 = null;
+  sh.addEventListener("touchstart", (e) => { y0 = sh.scrollTop <= 0 && !e.target.closest("input, select, .webb-view") ? e.touches[0].clientY : null; }, { passive: true });
+  sh.addEventListener("touchend", (e) => { if (y0 != null && e.changedTouches[0].clientY - y0 > 90) sh.hidden = true; y0 = null; }, { passive: true });
 }
 
 // ---------- info ----------
