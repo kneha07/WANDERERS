@@ -796,7 +796,7 @@ function selectStar(star) {
     S.targets.unshift(t);
   } else t.star = star;
   S.sel = t; renderTargets(); $("aboutBtn").hidden = false;
-  const u = new URL(location); u.searchParams.set("target", star.wanderers || "found"); u.searchParams.set("star", star.name); history.replaceState(null, "", u);
+  const u = new URL(location); u.searchParams.set("target", star.wanderers || "found"); u.searchParams.set("star", star.name); setUrl(u);
 }
 function showDetails(T) {
   const st = T.star || { name: T.name, alt: [], ra: T.ra, dec: T.dec, wanderers: T.id };
@@ -835,7 +835,7 @@ function renderTargets() {
     S.sel = S.targets.find((t) => t.id === b.dataset.id); renderTargets(); $("aboutBtn").hidden = false; flyTo(S.sel);
     const u = new URL(location); u.searchParams.set("target", S.sel.id);
     if (S.sel.found) u.searchParams.set("star", S.sel.name); else u.searchParams.delete("star");   // no stale ?star=
-    history.replaceState(null, "", u);
+    setUrl(u);
   }));
 }
 
@@ -934,32 +934,47 @@ for (const sh of document.querySelectorAll(".sheet")) {
 // One layer at a time; a learn mode (learnPanel) may stay under one other layer. Each open layer owns one history
 // entry, so the phone's back button (and Esc) closes the top layer and does not leave the compass.
 // A layer closed by its ×, Done or a swipe drops its entry again. Every open and close goes through `hidden`.
+// history.go() is async: a push asked for while our own go() is still running waits for its popstate, or the go()
+// would remove the new entry instead (a menu that opens a mode closes and opens in the same task).
 const LAYERS = [...document.querySelectorAll(".sheet"), $("skyCard"), $("searchPane"), $("learnMenu"), $("learnPanel")];
 const layerStack = [];   // open layers, oldest first
-let skipPops = 0;        // popstate events caused by our own history.go(), not by the user
+let skipPops = 0, owedPushes = 0;   // popstates of our own history.go(); pushes that wait for them
 function closeLayer(el) {
-  if (el.id === "learnPanel") window.WanderersLearn?.close();
+  if (el.id === "learnPanel") window.WanderersLearn ? WanderersLearn.close() : (el.hidden = true);
   else if (el.id === "searchPane") searchOpen(false);
   else { el.hidden = true; if (el.id === "learnMenu") $("learnBtn").setAttribute("aria-expanded", false); }
 }
-function dropEntries(n) { if (n > 0) { skipPops++; history.go(-n); } }
+function moveEntries(n) {   // n > 0: push n entries; n < 0: drop -n entries
+  if (n < 0) { const k = Math.min(owedPushes, -n); owedPushes -= k; n += k; }   // a waiting push and a drop cancel out
+  if (n < 0) { skipPops++; history.go(n); }
+  else if (skipPops) owedPushes += n;
+  else for (let k = 0; k < n; k++) history.pushState({ layer: 1 }, "");
+}
 const layerObs = new MutationObserver((recs) => {
+  let n = 0;   // net entries for this batch: one push or one drop per layer, never both racing
   for (const el of new Set(recs.map((r) => r.target))) {
     const i = layerStack.indexOf(el);
     if (!el.hidden && i < 0) {
       const others = layerStack.filter((o) => !(o.id === "learnPanel" && el.id !== "learnMenu"));
       for (const o of others) layerStack.splice(layerStack.indexOf(o), 1);   // off the stack first: no second drop
       others.forEach(closeLayer);
-      layerStack.push(el);
-      if (others.length) dropEntries(others.length - 1); else history.pushState({ layer: el.id }, "");
-    } else if (el.hidden && i >= 0) { layerStack.splice(i, 1); dropEntries(1); }
+      layerStack.push(el); n += 1 - others.length;
+    } else if (el.hidden && i >= 0) { layerStack.splice(i, 1); n--; }
   }
+  moveEntries(n);
 });
 LAYERS.forEach((el) => layerObs.observe(el, { attributes: true, attributeFilter: ["hidden"] }));
+// A star picked while a layer is open writes the URL of that layer's entry; keep it when the entry goes.
+function setUrl(u) { history.replaceState(history.state, "", u); S.url = location.href; }
+const keepUrl = () => { if (S.url && location.href !== S.url) history.replaceState(history.state, "", S.url); };
 window.addEventListener("popstate", () => {
-  if (skipPops) { skipPops--; return; }
+  if (skipPops) {
+    keepUrl();
+    if (!--skipPops && owedPushes) { const n = owedPushes; owedPushes = 0; moveEntries(n); }
+    return;
+  }
   const top = layerStack.pop();
-  if (top) closeLayer(top);
+  if (top) { keepUrl(); closeLayer(top); }
 });
 const closeTopLayer = () => {
   if (layerStack.length) { history.back(); return true; }   // popstate closes it and drops its entry

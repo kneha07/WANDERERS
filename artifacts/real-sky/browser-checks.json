@@ -1,5 +1,5 @@
 {
- "when": "2026-11-16T04:05:41.515Z",
+ "when": "2026-11-16T04:16:00.146Z",
  "browser": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
  "screen": {
   "width": 390,
@@ -114,7 +114,7 @@
    "label": "Standard, 34° S",
    "lat": -33.9,
    "order": 2,
-   "seconds": 8,
+   "seconds": 7,
    "plan": "Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole sky). It also works anywhere near this latitude, on any night. Free space here: 10.0 GB.",
    "msg": "Saved for latitude 34° S. On an iPhone, add this page to the Home Screen, or Safari may delete saved pictures after 7 days without a visit.",
    "tiles": 248
@@ -239,7 +239,7 @@
   {
    "name": "a reissued survey: its recent pictures are dropped and the new date is recorded",
    "ok": true,
-   "detail": "8 → 0, {\"at\":1794801999265,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "8 → 0, {\"at\":1794802618164,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "Eye, dark site: about 2,500 stars above the horizon",
@@ -334,22 +334,32 @@
   {
    "name": "layers: the Learn menu closes when the search opens",
    "ok": true,
-   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null}"
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null}"
   },
   {
    "name": "layers: back closes the search and stays on the compass",
    "ok": true,
-   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null}"
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null}"
   },
   {
    "name": "layers: a sheet over the time machine closes first, then the time machine",
    "ok": true,
-   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null}"
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null}"
   },
   {
    "name": "layers: a sheet closed by × leaves no history entry behind",
    "ok": true,
-   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null}"
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null}"
+  },
+  {
+   "name": "layers: a mode picked from the Learn menu owns an entry; back closes it on the compass",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null}"
+  },
+  {
+   "name": "layers: Details -> Webb owns an entry; back closes Webb on the compass, with no entry left",
+   "ok": true,
+   "detail": "{\"one\":\"searchPane\",\"afterBack\":\"\",\"page\":\"/compass.html\",\"stack\":\"learnPanel,info\",\"back1\":\"learnPanel\",\"back2\":\"\",\"closed\":\"\",\"state\":null,\"mode\":\"learnPanel\",\"modeEntry\":true,\"modeBack\":\"\",\"modePage\":\"/compass.html\",\"webbEntry\":true,\"webbBack\":true,\"webbPage\":\"/compass.html\",\"endState\":null}"
   },
   {
    "name": "save Basic, 48° N: finished",
@@ -374,12 +384,12 @@
   {
    "name": "a reissued survey: the saved pictures are fetched again in place",
    "ok": true,
-   "detail": "spoiled tile 3 → 42390 bytes, 65 → 65 files, {\"at\":1794802032486,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
+   "detail": "spoiled tile 3 → 48299 bytes, 65 → 65 files, {\"at\":1794802657249,\"release\":\"2019-05-07T10:55Z\",\"savedDue\":false}"
   },
   {
    "name": "save Standard, 34° S: finished",
    "ok": true,
-   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (8 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
+   "detail": "Saved for latitude 34° S. On an iPhone, add this page to the (7 s; Latitude 34° S, Visible: 248 pictures, about 9.8 MB (92% of the whole )"
   },
   {
    "name": "Standard, 34° S: about 190 tiles of its own on top",
@@ -414,7 +424,7 @@
   {
    "name": "offline with nothing saved: falls back to Eye and says so",
    "ok": true,
-   "detail": "0.7 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
+   "detail": "1.8 s; note: Sky photographs are not reachable. Showing the Eye view. · Drawn from measured star positions and computed planets. Not a photograph. · No motion sensors: drag to aim"
   }
  ]
 }

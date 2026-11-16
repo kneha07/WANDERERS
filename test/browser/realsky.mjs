@@ -296,12 +296,23 @@ async function main() {
     WanderersLearn.open("time"); await wait(); $("infoBtn").click(); await wait(); out.stack = shown();
     history.back(); await wait(); out.back1 = shown(); history.back(); await wait(); out.back2 = shown();
     $("infoBtn").click(); await wait(); $("infoClose").click(); await wait(); out.closed = shown(); out.state = history.state;
+    // a layer that opens in the same task as another one closes (menu -> mode, Details -> Webb) still owns an entry
+    $("learnBtn").click(); await wait(); $("learnMenu").querySelector('[data-mode="log"]').click(); await wait();
+    out.mode = shown(); out.modeEntry = !!(history.state && history.state.layer);
+    history.back(); await wait(); out.modeBack = shown(); out.modePage = location.pathname;
+    $("details").hidden = false; await wait(); $("details").hidden = true; $("webb").hidden = false; await wait();
+    out.webbEntry = !!(history.state && history.state.layer);
+    history.back(); await wait(); out.webbBack = $("webb").hidden; out.webbPage = location.pathname; out.endState = history.state;
     return out; })()`);
   check("layers: the Learn menu closes when the search opens", layers.one === "searchPane", JSON.stringify(layers));
   check("layers: back closes the search and stays on the compass", layers.afterBack === "" && /compass\.html$/.test(layers.page), JSON.stringify(layers));
   check("layers: a sheet over the time machine closes first, then the time machine",
     layers.stack === "learnPanel,info" && layers.back1 === "learnPanel" && layers.back2 === "", JSON.stringify(layers));
   check("layers: a sheet closed by × leaves no history entry behind", layers.closed === "" && layers.state === null, JSON.stringify(layers));
+  check("layers: a mode picked from the Learn menu owns an entry; back closes it on the compass",
+    layers.mode === "learnPanel" && layers.modeEntry && layers.modeBack === "" && /compass\.html$/.test(layers.modePage), JSON.stringify(layers));
+  check("layers: Details -> Webb owns an entry; back closes Webb on the compass, with no entry left",
+    layers.webbEntry && layers.webbBack && /compass\.html$/.test(layers.webbPage) && layers.endState === null, JSON.stringify(layers));
 
   // ---- 2. save the sky for places, through the info sheet; then remove one place ----
   // Basic for Seattle's latitude stays for part 3. Standard for Sydney's is saved, then removed again: that must

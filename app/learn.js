@@ -67,11 +67,12 @@ async function ready() {
 }
 
 // ---------- the panel and the mode ----------
-let mode = null, timer = 0, next = 0;   // next: the quiz's wait before the next round
+let mode = null, timer = 0, next = 0, opening = 0;   // next: the quiz's wait before the next round
 async function open(m) {
   close();
+  const me = ++opening;   // a second open() while the first still loads wins; the first stops
   mode = m; document.body.classList.add("learning"); $("learnMenu").hidden = true; $("learnPanel").hidden = false;
-  if (m === "tour" || m === "quiz") { panel(`${closeBtn}<p class="small">Loading the sky…</p>`); await ready(); if (mode !== m) return; }
+  if (m === "tour" || m === "quiz") { panel(`${closeBtn}<p class="small">Loading the sky…</p>`); await ready(); if (opening !== me) return; }
   ({ time: startTime, tour: startTour, quiz: startQuiz, infrared: startInfrared, class: startClass, log: startLog, near: startNear })[m]();
 }
 function close() {
@@ -270,7 +271,7 @@ function startClass() {
 // ---------- 6. my sky log ----------
 // Objects the user saw: logged by a tour stop, a quiz find, or "I saw it" on a card. Kept on this phone only.
 const readLog = () => { try { return JSON.parse(keep("wanderers.skyLog") || "{}"); } catch { return {}; } };
-const today = () => new Date().toLocaleDateString("sv");   // YYYY-MM-DD on the phone's own calendar, not UTC
+const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;   // the phone's own calendar, not UTC
 // n counts the nights an object was seen: a second tap (or a double tap) on the same day does not add one
 function log(name, kind) {
   if (!name) return;
