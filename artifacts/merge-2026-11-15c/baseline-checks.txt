@@ -1,0 +1,26 @@
+ℹ tests 669
+ℹ suites 0
+ℹ pass 667
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 17378.5113
+node-check-done
+C:\Users\user\AppData\Local\Programs\Python\Python313\python.exe: No module named pytest
+
+OK
+C:\Users\user\AppData\Local\Programs\Python\Python313\python.exe: No module named pytest
+ERROR tests/test_survey_spherex_run.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!
+4 errors in 5.67s
+ERROR backend/test_spherex.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!
+4 errors in 1.11s
+--- python (Windows: skip Unix-only 'resource' imports)
+FAILED tests/test_survey_rank_score.py::test_every_term_is_documented_in_the_table
+2 failed, 1104 passed, 2 skipped, 445 warnings in 166.61s (0:02:46)
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!
+4 errors in 1.02s
+117 passed in 3.83s
+note: test_survey_rank_score tile_edge also fails on origin/main 58722d9 (pre-existing)
