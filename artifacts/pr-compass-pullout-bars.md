@@ -18,6 +18,8 @@ Sky Compass: the sky fills the screen. The bars hide until the user pulls them o
 - **Screen stays on:** Screen Wake Lock while the sky is open.
 - **Close sheets:** Esc closes an open sheet. A swipe down from the top of a sheet closes it.
 - **Search pane:** a 🔎 button (bottom right) or the `/` key opens the live star search (`StarSearch.attach()`) under the compass tape, while the bars stay hidden.
+- **Shining constellations:** the lines get a soft cyan glow that slowly brightens and dims (steady with reduced motion).
+- **Galaxies:** 16 well-known galaxies (Andromeda, Triangulum, the Magellanic Clouds, Whirlpool, Sombrero, Centaurus A, M87 and more) draw at their true size and tilt, coloured by type. Hover or tap shows type, distance and size.
 - **Webb frames:** violet diamonds, so they do not look like the amber target brackets.
 
 ## Verification
