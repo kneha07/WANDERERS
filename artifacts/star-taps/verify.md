@@ -36,7 +36,7 @@ compass.js    onStar fallback passes mag, spectral type and distance, so the she
 | Console errors | | none |
 | `node --test test/*.test.js` | | 678 pass, 0 fail (new test: the 24 deep slices) |
 
-## Not done
+## Not done (follow-ups: kneha07/WANDERERS#114)
 
 - `test/browser/realsky.mjs` was not run locally (needs Edge through WSL). CI runs it.
 - The star sheet shows "No motion is known" for deep stars: the deep files carry no proper motion. Add pm_ra / pm_dec to the rows if the path view is wanted for them.
