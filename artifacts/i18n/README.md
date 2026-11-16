@@ -49,4 +49,4 @@ No redesign is needed for one more language: add a dictionary file and a build s
 4. Only if search ranking matters: build `/zh/...` pages at deploy time.
 
 Tracked in issue kneha07/WANDERERS#94 (https://github.com/kneha07/WANDERERS/issues/94).
-- Translations are machine-made and not reviewed by native speakers. Vietnamese constellation names use formal Hán-Việt forms. Korean uses "웹 망원경" in one short label but "Webb" in longer sentences.
+- Translations are machine-made and not reviewed by native speakers (issue kneha07/WANDERERS#96). Vietnamese constellation names use formal Hán-Việt forms. Korean uses "웹 망원경" in one short label but "Webb" in longer sentences.
