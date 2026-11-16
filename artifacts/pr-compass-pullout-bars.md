@@ -24,6 +24,10 @@ Sky Compass: the sky fills the screen. The bars hide until the user pulls them o
   - **Time machine:** a year slider (±50,000 years). Each star moves along its Hipparcos proper motion, and the constellation lines move with their stars. "Show me the Big Dipper" points the arrow at it. Straight-line motion only; precession is not shown, and the panel says so.
   - **Tonight's tour:** five stops of different kinds (bright star, constellation, planet, galaxy, WANDERERS target) chosen from what is up now, in order around the horizon, with the arrow and "✓ You are looking at it".
   - **Find it quiz:** five rounds; hold the crosshair on the named object for 0.6 s; 10 points, or 5 after a hint (the arrow); best score kept.
+- **More learning modes** (🎓 menu): Why infrared? (flip the Deep photographs between visible and 2MASS infrared over a dusty place that is up), Candidates near here (the Sky Survey candidates nearest the crosshair, with a link to each), My sky log with badges ("✓ I saw it" on cards, tour stops and quiz finds; kept on the phone), Class link (place rounded to about 10 km, optional frozen moment).
+- **Time machine, full model:** stars move through space (proper motion plus radial velocity: near stars curve and change brightness), and precession turns Earth's axis. The panel names the pole star of the year (Polaris today, Thuban in 2775 BCE, Vega in 14,026 CE). Planets, the Moon and today's markers hide in another year.
+- **Look-back:** star and galaxy cards add a "For scale" line from history (for example, Polaris: Galileo's first telescope, 1610).
+- **Fix #95:** the path view checks `stars/pred/index.json` before it asks for a prediction file, so stars without one no longer cause a 404.
 - **Distances:** star, planet, Moon, Sun and galaxy cards (and the star sheet on the compass and the Observatory) show km from you, light's travel time, and the time Voyager 1 would need. Planet distances come from `Sky.planets()` (new `au`), the Moon's from its parallax, the Sun's from Earth's orbit.
 - **Webb frames:** violet diamonds, so they do not look like the amber target brackets.
 
@@ -40,7 +44,7 @@ Sky Compass: the sky fills the screen. The bars hide until the user pulls them o
 ## Related
 
 - #93: real-phone test list.
-- #95: missing path prediction files (404), seen during testing; not changed here.
+- Closes #95 (missing prediction files) and #98 (time machine precession and space motion). Learning half of #99.
 - Run record: `artifacts/compass-pullout-bars.md`.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
