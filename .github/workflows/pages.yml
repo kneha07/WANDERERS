@@ -37,12 +37,12 @@ jobs:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         # workflow_run would otherwise check out the commit before the vote update; a PR checks its own commit
         with: { ref: "${{ github.event_name == 'pull_request' && github.sha || 'main' }}" }
       - name: Check the site's entry pages are in app/
         run: for f in index.html observatory.html compass.html stories.html survey.html sw.js data/index.json; do test -s "app/$f" || { echo "missing app/$f"; exit 1; }; done
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with: { path: app }
 
   deploy:
@@ -57,6 +57,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
