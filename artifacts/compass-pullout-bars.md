@@ -44,3 +44,5 @@ Built (verified in the browser pane; tests 80 pass):
 Removed on user request: red night mode (built, then removed; the user did not like it).
 
 Not tested: the real camera stop and restart, the wake lock and the swipe-down on a real phone (issue #93).
+
+Assumption to confirm: the user asked to turn the camera off at "deep and move full z-score". This was read as Deep sky with the Camera/Sky slider at full Sky. The user was told and can correct it.
