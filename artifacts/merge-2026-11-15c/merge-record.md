@@ -1,6 +1,6 @@
 # Merge record: integrate/2026-11-15d (rebuilt from integrate/2026-11-15c)
 
-Status: DONE for #103 and #104. PR #97 is held (review FAIL). `main` is fast-forwarded to this branch. Nothing is pushed.
+Status: DONE for #103, #104 and #97. #97 was held on a review FAIL, then fixed on request and reviewed again (round 2 below). Nothing is pushed.
 
 ## Result
 
@@ -63,3 +63,19 @@ Post-merge audit: `git diff --check` clean, no unmerged files, no conflict marke
 1. Push `main`. Then #103 and #104 close as merged on GitHub, and #90 closes.
 2. Decide on #97: fix H1–H3 on the PR branch and review again, or accept the risk and merge 357b8af.
 3. Optional: drop the now-redundant `pages.yml` diff in `.worktrees/security-review`.
+
+## Round 2: PR #97 (integrate/2026-11-15e)
+
+The owner asked to fix the 3 Highs. Fixes on `feature/compass-pullout-bars`: c9aa6d7, f7d15e5, f2c8b28, review records 0503e20. See `artifacts/review-pr-97-357b8af.md`, "Fix rounds".
+
+| Step | SHA |
+|---|---|
+| base `main` | 345d56c |
+| merge PR #97 (reviewed code f2c8b28) | 5c6b2d7 |
+| doc drift: README says "Save the sky for a place" is hidden unless `?later=1` | e60bf9a |
+
+- No conflicts. `app/skyview.js` and `app/realsky.js` auto-merged with #103.
+- Checks on e60bf9a: `node --test` 670 pass, 0 fail, 2 skipped; `node --check` pass; `realsky.mjs` 60 PASS, 0 FAIL. No Python files changed.
+- Audit: `git diff --check` clean, no unmerged files, no unpinned `uses:`, no change to `app/_headers`, `server.js` or `.github/`.
+- Follow-ups: #108 (aim mode and drag bar as layers), #109 (tests, UX and process items from the reviews), #93 (real-phone test).
+- Environment: an orphan headless Edge from a crashed `realsky.mjs` run held `artifacts/real-sky/prof`; stopped with `taskkill`.
