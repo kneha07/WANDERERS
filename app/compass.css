@@ -254,3 +254,7 @@ p.pv-dim { font-size: .8rem; }
 .pull-top { top: calc(env(safe-area-inset-top) + 74px); height: 24px; }
 .pull-bottom { bottom: 100%; }
 .pull:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; border-radius: 10px; }
+
+/* the name of the star, planet or target under the mouse (realsky.js) */
+.hover-name { position: fixed; z-index: 4; pointer-events: none; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  font: 600 .8rem var(--font); color: #e8eefb; background: rgba(4, 9, 20, .82); border: 1px solid rgba(108, 196, 255, .35); }

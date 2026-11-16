@@ -272,6 +272,8 @@
   function pickAt(x, y) {
     if (!LAST) return null;
     const { P, f, W, H, now, L } = LAST, proj = projector(P, f, W, H), reach = 22;
+    const t = C.targetAt && C.targetAt(x, y);   // a WANDERERS target (the bracketed ones) wins: it is what the user aimed for
+    if (t) return { kind: "target", title: t.name, target: t };
     const off = (o) => { const s = Sky.observe(o, now, L.lat, L.lon), q = proj(vec(s.az, s.alt)); return q ? Math.hypot(q[0] - x, q[1] - y) : 1e9; };
     const where = (o) => { const a = Math.round(Sky.observe(o, now, L.lat, L.lon).alt); return a >= 0 ? `${a}° above the horizon now.` : "Below the horizon now."; };
     for (const b of [{ name: "Moon", body: "moon" }, { name: "Sun", body: "sun" }]) if (off(b) < reach) return { kind: "body", title: b.name, lines: [where(b), "Its place is worked out for this moment, not taken from a picture."] };
@@ -294,7 +296,8 @@
   }
   function onTap(x, y) {
     const pk = pickAt(x, y);
-    if (pk && pk.kind === "star") { showCard(null); C.onStar(pk); } else showCard(pk);
+    if (pk && pk.kind === "target") { showCard(null); C.onTarget(pk.target); }
+    else if (pk && pk.kind === "star") { showCard(null); C.onStar(pk); } else showCard(pk);
     return pk;
   }
 
@@ -516,6 +519,19 @@
       grab = { P0, A: 0, T: 0, v: unproject(P0, C.focal(W, H), W, H, e.clientX, e.clientY), fine: [C.F.fineAz, C.F.fineAlt], manual: { ...C.S.manual } };
     });
     hud.addEventListener("pointermove", (e) => { if (grab) { e.stopImmediatePropagation(); follow(grab, e.clientX, e.clientY); } });
+    // a mouse over a star, planet or target shows its name; a click on it opens it (onTap)
+    let hoverAt = null, hoverT = null;
+    const hoverName = (x, y) => {
+      const pk = R.calDrag ? null : pickAt(x, y), el = $("hoverName");
+      el.hidden = !pk; hud.style.cursor = pk ? "pointer" : "";
+      if (pk) { el.textContent = pk.title; el.style.left = `${x + 14}px`; el.style.top = `${y + 14}px`; }
+    };
+    hud.addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "mouse" || e.buttons) { $("hoverName").hidden = true; return; }
+      hoverAt = { x: e.clientX, y: e.clientY };
+      if (!hoverT) hoverT = setTimeout(() => { hoverT = null; hoverName(hoverAt.x, hoverAt.y); }, 40);   // at most 25 times a second
+    });
+    hud.addEventListener("pointerleave", () => { $("hoverName").hidden = true; hud.style.cursor = ""; });
     hud.addEventListener("pointerup", (e) => {
       if (grab) { e.stopImmediatePropagation(); grab = null; }
       if (tap && Date.now() - tap.t < 600 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8) onTap(e.clientX, e.clientY);

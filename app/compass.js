@@ -873,6 +873,14 @@ function renderInfo(now, L, lst, tz) {
 RealSky.init({
   pose, focal: focalPx, loc, camOn: () => S.camOn, phoneSteers, F, S,
   openSight: () => $("northBtn").click(),
+  // the WANDERERS target drawn nearest (x, y), within a finger's reach of its brackets; null when none
+  targetAt: (x, y) => {
+    const W = innerWidth, H = innerHeight, proj = RealSky.projector(pose(), focalPx(W, H), W, H);
+    let best = null, bestD = 26;
+    for (const t of S.targets) { const q = t._v && proj(t._v), d = q ? Math.hypot(q[0] - x, q[1] - y) : 1e9; if (d < bestD) { best = t; bestD = d; } }
+    return best;
+  },
+  onTarget: (t) => { S.sel = t; renderTargets(); $("aboutBtn").hidden = false; showDetails(t); },
   // a tapped star opens the same star sheet as the search, found by its star-database key
   onStar: async (pk) => {
     const list = await StarSearch.load().catch(() => []);
