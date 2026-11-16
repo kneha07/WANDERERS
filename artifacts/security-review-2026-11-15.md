@@ -61,7 +61,7 @@ old code.
 
 ## 3. No branch protection on `main`
 
-`gh api repos/kneha07/WANDERERS/branches/main/protection` gives 404, and there are no rulesets. Anyone with write
+`gh api repos/kneha07/WANDERERS/branches/main/protection` gives 404, and there are no rulesets. Tracked in kneha07/WANDERERS#105. Anyone with write
 access (6 collaborators) can push or force-push `main`. Our account has WRITE, not admin, so the owner (kneha07) must
 add a ruleset: require a pull request, block force pushes and deletion. Allow the `github-actions[bot]` push from
 `classifications.yml`, or change that workflow to open a pull request.
