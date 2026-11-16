@@ -136,3 +136,18 @@ test("the deep star slices: 24 files of 15° RA, fainter than the naked-eye list
   }
   assert.ok(total > 100000, String(total));
 });
+
+test("raSlices: every point of a view circle falls in a listed slice, also near the poles and across RA 0", () => {
+  const D = Math.PI / 180, slice = (ra) => Math.floor((((ra % 360) + 360) % 360) / 15) % 24;
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let n = 0; n < 20000; n++) {
+    const ra = rnd() * 360, dec = Math.asin(rnd() * 2 - 1) / D, r = 0.5 + rnd() * 14, got = new Set(V.raSlices(ra, dec, r));
+    // a point at distance d <= r in direction b from the centre (spherical destination formula)
+    const d = r * Math.sqrt(rnd()) * D, b = rnd() * 2 * Math.PI, p1 = dec * D;
+    const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+    const l2 = ra * D + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+    assert.ok(got.has(slice(l2 / D)), `centre ${ra.toFixed(2)},${dec.toFixed(2)} r ${r.toFixed(2)}: point ${(l2 / D).toFixed(2)},${(p2 / D).toFixed(2)}`);
+  }
+  assert.equal(V.raSlices(10, 89, 2).length, 24);                      // holds the pole: every slice
+  assert.deepEqual(V.raSlices(359, 0, 3).sort((a, b) => a - b), [0, 23]);   // across RA 0
+});

@@ -31,25 +31,25 @@ DATA = Path(__file__).resolve().parent.parent / "app" / "data"
 NAKED_EYE = 6.5
 LY_PER_PC = 3.26156
 # the TAP endpoint answers only in binary VOTable; xamin's text query is plain "|"-separated rows
-HEASARC = ("https://heasarc.gsfc.nasa.gov/xamin/query?table=hipparcos&fields=hip_number,ra_deg,dec_deg,vmag,pm_ra,pm_dec,spect_type,parallax"
+HEASARC = ("https://heasarc.gsfc.nasa.gov/xamin/query?table=hipparcos&fields=hip_number,ra_deg,dec_deg,vmag,pm_ra,pm_dec,spect_type,parallax,parallax_error"
            "&resultmax=0&format=text")
 YEARS = 2000.0 - 1991.25
 D3 = "https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/"
 
 
 def hipparcos(constraint="", min_rows=15000):
-    """{hip: (ra, dec, vmag, spectral type, parallax mas)} at J2000 from NASA HEASARC; pm_ra already includes cos(dec)."""
+    """{hip: (ra, dec, vmag, spectral type, parallax mas, parallax error mas)} at J2000 from NASA HEASARC; pm_ra already includes cos(dec)."""
     with urllib.request.urlopen(HEASARC + constraint, timeout=300) as r:
         text = r.read().decode("utf-8")
     out = {}
     for line in text.splitlines():
         f = ["" if x.strip() == "null" else x.strip() for x in line.split("|")]
-        if len(f) != 8 or not f[0].isdigit() or not (f[1] and f[2] and f[3]):
+        if len(f) != 9 or not f[0].isdigit() or not (f[1] and f[2] and f[3]):
             continue
         ra, dec, pmra, pmdec = float(f[1]), float(f[2]), float(f[4] or 0), float(f[5] or 0)
         dec2 = dec + pmdec * YEARS / 3.6e6
         ra2 = (ra + pmra * YEARS / 3.6e6 / max(1e-6, math.cos(math.radians(dec)))) % 360
-        out[int(f[0])] = (ra2, dec2, float(f[3]), f[6], float(f[7] or 0))
+        out[int(f[0])] = (ra2, dec2, float(f[3]), f[6], float(f[7] or 0), float(f[8] or 0))
     if "OVERFLOW" in text or len(out) < min_rows:
         sys.exit(f"HEASARC answer looks cut short ({len(out)} rows)")
     return out
@@ -88,7 +88,7 @@ def stars():
                     "fields": "ra, dec (deg, J2000), V mag, spectral letter, HIP number or key, distance (ly, 0 = unknown), constellation index, name",
                     "cons": cons}, "stars": rows}
     path = DATA / "skystars.json"
-    path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(f"{nasa} from HEASARC Hipparcos, {hyg_only} HYG only")
     print(f"{len(rows)} stars -> {path} ({path.stat().st_size / 1024:.0f} KB); brightest {rows[0]}; "
           f"to 6.0: {sum(r[2] <= 6.0 for r in rows)}, to 4.5: {sum(r[2] <= 4.5 for r in rows)}, to 3.0: {sum(r[2] <= 3.0 for r in rows)}")
@@ -96,7 +96,7 @@ def stars():
 
 def deep():
     shown = {r[4] for r in json.loads((DATA / "skystars.json").read_text(encoding="utf-8"))["stars"]}
-    rows = [[round(h[0], 3), round(h[1], 3), round(h[2], 2), h[3][:8], hip, round(3261.56 / h[4]) if h[4] > 1 else 0]
+    rows = [[round(h[0], 3), round(h[1], 3), round(h[2], 2), h[3][:8], hip, round(LY_PER_PC * 1000 / h[4]) if h[4] > 5 * h[5] > 0 else 0]   # distance only from a parallax known to 20%
             for hip, h in hipparcos(min_rows=110000).items() if h[2] > NAKED_EYE and hip not in shown]
     rows.sort(key=lambda r: r[2])
     out = DATA / "skydeep"
@@ -105,7 +105,7 @@ def deep():
         part = [r for r in rows if int(r[0] // 15) % 24 == k]
         (out / f"ra{k:02d}.json").write_text(json.dumps({"meta": {"source": "Hipparcos Main Catalogue (ESA) via NASA HEASARC, J2000",
             "fields": "ra, dec (deg), V mag, spectral type, HIP number, distance (ly, 0 = unknown)"}, "stars": part},
-            separators=(",", ":")) + "\n", encoding="utf-8")
+            separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
     size = sum(f.stat().st_size for f in out.glob("ra*.json"))
     print(f"{len(rows)} deep stars -> {out} (24 files, {size / 1024:.0f} KB together)")
 

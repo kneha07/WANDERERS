@@ -94,8 +94,8 @@ a { color: var(--cyan); }
 
 /* AR HUD controls */
 .ar { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
-/* only the controls take taps: the empty and text parts of the bars let a tap through to the star under them */
-.ar .radar, .ar .hud-buttons > *, .ar .guide :is(button, a, input, .suggest, .targets) { pointer-events: auto; }
+/* the top bars' empty and text parts let a tap through to the star under them; the bottom guide is nearly opaque, so it keeps its taps */
+.ar .radar, .ar .guide, .ar .hud-buttons > * { pointer-events: auto; }
 .telemetry { position: absolute; top: calc(env(safe-area-inset-top) + 82px); left: 0; right: 0; font-size: .64rem;
   color: var(--hud-text); display: flex; flex-wrap: wrap; gap: 2px 10px; pointer-events: none; padding: 5px 10px;
   background: var(--hud-bg); border-bottom: 1px solid var(--line); }

@@ -79,6 +79,16 @@
   const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : b >= 1048576 ? `${(b / 1048576).toFixed(b >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
   const fmtLat = (lat) => `${Math.abs(Math.round(lat))}° ${lat >= 0 ? "N" : "S"}`;
 
-  const api = { radial, LIMITS, limitMag, countToLimit, starRadius, starAlpha, starColour, pointing, screenRoll, starCard, LABELS, CREDITS, fmtBytes, fmtLat };
+  // The 15-degree RA slices (0..23) that a circle of radius r (degrees) around (ra, dec) touches; all 24 when it holds
+  // a pole. The circle's half-width in RA is asin(sin r / cos dec), wider than r / cos dec near the poles.
+  function raSlices(ra, dec, r) {
+    const s = Math.sin(r * D2R) / Math.cos(dec * D2R);
+    if (Math.abs(dec) + r >= 90 || s >= 1) return [...Array(24).keys()];
+    const w = Math.asin(s) / D2R, out = new Set();
+    for (let k = Math.floor((ra - w) / 15); k <= Math.floor((ra + w) / 15); k++) out.add(((k % 24) + 24) % 24);
+    return [...out];
+  }
+
+  const api = { raSlices, radial, LIMITS, limitMag, countToLimit, starRadius, starAlpha, starColour, pointing, screenRoll, starCard, LABELS, CREDITS, fmtBytes, fmtLat };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SkyView = api;
 })(typeof window !== "undefined" ? window : globalThis);
