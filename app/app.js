@@ -43,8 +43,8 @@
     $("raIn").value = StarSearch.hms(st.ra); $("decIn").value = StarSearch.dms(st.dec);
     const facts = st.spect || st.mag != null ? StarSearch.describe(st) : [];
     $("starCard").hidden = false;
-    $("starCard").innerHTML = `<h3>${st.name}${st.wanderers ? ' <span class="hint">· WANDERERS target</span>' : ""}</h3>` +
-      `<div class="alt">${st.alt.slice(0, 4).join(" · ")}</div>${facts.length ? `<ul>${facts.map((f) => `<li>${f}</li>`).join("")}</ul>` : ""}` +
+    $("starCard").innerHTML = `<h3>${esc(st.name)}${st.wanderers ? ' <span class="hint">· WANDERERS target</span>' : ""}</h3>` +
+      `<div class="alt">${st.alt.slice(0, 4).map(esc).join(" · ")}</div>${facts.length ? `<ul>${facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}` +
       `<p class="hint">Star data: HYG database v4.0 (Hipparcos, Yale Bright Star, Gliese), CC BY-SA 4.0. ` +
       `<a href="compass.html?star=${encodeURIComponent(st.name)}">Find it with your phone →</a></p>`;
     showPath({ star: st });

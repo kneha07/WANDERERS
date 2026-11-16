@@ -104,7 +104,20 @@ function bodyBytes(req, limit) {
 const STAR_FIX_MAX = 30 * 1024 * 1024;
 let starFixBusy = false;
 
+// Only pages served by this server may call it. 127.0.0.1 alone is not enough: any website the user opens can POST
+// here (a text/plain body needs no CORS preflight) or reach it through DNS rebinding, and /api/ask runs claude -p.
+// The Host check stops DNS rebinding; the Origin check stops cross-site POSTs. No Origin = not a browser (curl, tests).
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+function trusted(req) {
+  const host = req.headers.host || "";
+  let name; try { name = new URL("http://" + host).hostname; } catch { return false; }
+  if (!LOCAL_HOSTS.has(name)) return false;
+  const origin = req.headers.origin;
+  return req.method === "GET" || req.method === "HEAD" || origin === undefined || origin === "http://" + host;
+}
+
 http.createServer(async (req, res) => {
+  if (!trusted(req)) { req.resume(); res.writeHead(403, { "content-type": "text/plain", connection: "close" }); return res.end("forbidden"); }
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/api/health") { res.writeHead(200); return res.end("ok"); }
   if (req.method === "POST" && url.pathname === "/api/star-fix") {
@@ -181,7 +194,10 @@ http.createServer(async (req, res) => {
         throw new Error("bad request");
       const t = JSON.parse(fs.readFileSync(path.join(ROOT, "data", target, "target.json"), "utf8"));
       const prompt = `${RULES}\nMeasurements:\n${JSON.stringify(slim(t))}\n\nQuestion: ${question}`;
-      execFile("claude", ["-p", prompt, "--output-format", "text"], { timeout: 120000, maxBuffer: 1e6 }, (err, out, errOut) => {
+      // The question is untrusted text. No tools and no MCP servers, so a prompt injection can only change the answer,
+      // even when the user's Claude settings use bypassPermissions.
+      execFile("claude", ["-p", prompt, "--output-format", "text", "--tools", "", "--strict-mcp-config",
+        "--permission-mode", "dontAsk"], { timeout: 120000, maxBuffer: 1e6 }, (err, out, errOut) => {
         if (err) { res.writeHead(502); return res.end(JSON.stringify({ error: "Claude CLI failed: " + (errOut || err.message).slice(0, 200) })); }
         res.writeHead(200); res.end(JSON.stringify({ answer: out.trim() }));
       });

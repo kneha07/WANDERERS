@@ -153,5 +153,21 @@ class Files(unittest.TestCase):
         self.assertEqual(p.stdout.decode("ascii").strip().splitlines(), ['{"status": "bad_file"}'])
 
 
+class SamplePrivacy(unittest.TestCase):
+    """The sample photos are public: their GPS must be rounded to 0.1 degree (about 11 km), never the exact spot."""
+
+    def test_sample_gps_is_coarse(self):
+        names = sorted(n.name for n in (ROOT / "star_image").glob("*.heic"))
+        if not names:
+            raise unittest.SkipTest("star_image/ has no photos")
+        for name in names:
+            m = sf.read_meta(Image.open(io.BytesIO((ROOT / "star_image" / name).read_bytes())))
+            if not m.get("gps"):
+                continue
+            for k in ("lat", "lon"):
+                v = m["gps"][k] * 10
+                self.assertAlmostEqual(v, round(v), places=6, msg=f"{name}: {k} is more exact than 0.1 degree")
+
+
 if __name__ == "__main__":
     unittest.main()

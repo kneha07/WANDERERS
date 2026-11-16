@@ -29,3 +29,23 @@ test('static files cannot reach a sibling folder whose name starts with "app"',a
 });
 test('unknown target does not leak filesystem path',async()=>{const r=await request('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({target:'nonexistent_target_999',question:'What is this?'})});assert.equal(r.status,404);const msg=await r.text();assert.doesNotMatch(msg,/ENOENT|\/Users\/|\/home\/|\\\\/);});
 
+// Another website must not reach /api/ask (it runs claude -p): cross-site POST and DNS rebinding (foreign Host).
+const http = require('node:http');
+function raw(path, headers, body) {
+  return new Promise((ok, bad) => {
+    const u = new URL(base + path);
+    const r = http.request({ host: u.hostname, port: u.port, path, method: body ? 'POST' : 'GET', headers }, (res) => { res.resume(); ok(res.statusCode); });
+    r.on('error', bad); r.end(body);
+  });
+}
+const ASK = JSON.stringify({ target: 'nonexistent_target_999', question: 'hi' });
+test('rejects a POST from another website', async () => {
+  assert.equal(await raw('/api/ask', { origin: 'https://evil.example', 'content-type': 'text/plain' }, ASK), 403);
+});
+test('rejects a foreign Host header (DNS rebinding)', async () => {
+  assert.equal(await raw('/api/health', { host: 'attacker.example:' + new URL(base).port }), 403);
+  assert.equal(await raw('/api/ask', { host: 'localhost.attacker.example' }, ASK), 403);
+});
+test('accepts a POST from its own page', async () => {
+  assert.equal(await raw('/api/ask', { origin: base, 'content-type': 'application/json' }, ASK), 404);
+});

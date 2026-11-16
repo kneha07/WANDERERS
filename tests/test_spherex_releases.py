@@ -618,7 +618,8 @@ def test_workflow_permissions_are_minimal(wf):
 
 def test_workflow_actions_are_pinned(wf):
     uses = [s["uses"] for s in all_steps(wf) if "uses" in s]
-    assert uses and all(re.fullmatch(r"actions/(checkout|setup-python)@v\d+(\.\d+)*", u) for u in uses)
+    # a full commit SHA: a tag such as v4 can be moved to other code; the YAML comment after it names the tag
+    assert uses and all(re.fullmatch(r"actions/(checkout|setup-python)@[0-9a-f]{40}", u) for u in uses)
 
 
 def test_workflow_never_pushes_to_main(wf):
