@@ -1,6 +1,6 @@
 # Merge record: integrate/2026-11-15d (rebuilt from integrate/2026-11-15c)
 
-Status: DONE for #103, #104 and #97. #97 was held on a review FAIL, then fixed on request and reviewed again (round 2 below). Nothing is pushed.
+Status: DONE for #103, #104 and #97. #97 was held on a review FAIL, then fixed on request and reviewed again (round 2 below). Pushed on request (see "Push").
 
 ## Result
 
@@ -79,3 +79,22 @@ The owner asked to fix the 3 Highs. Fixes on `feature/compass-pullout-bars`: c9a
 - Audit: `git diff --check` clean, no unmerged files, no unpinned `uses:`, no change to `app/_headers`, `server.js` or `.github/`.
 - Follow-ups: #108 (aim mode and drag bar as layers), #109 (tests, UX and process items from the reviews), #93 (real-phone test).
 - Environment: an orphan headless Edge from a crashed `realsky.mjs` run held `artifacts/real-sky/prof`; stopped with `taskkill`.
+
+## Push (on the owner's request)
+
+- Before the push, the owner merged PRs #97 (at 357b8af), #103 and #104 on GitHub (653bc50, 29d0b0c, 79393c1, 20:54-20:55).
+- Local `main` already held those commits plus the security fixes and the #97 fixes. `git merge-tree` of `main` and `origin/main` gave the same tree as fc0daa9.
+- 4635cb3 merges `origin/main` into `main` with no file change. Pushed: `main` 79393c1..4635cb3, `feature/compass-pullout-bars` 357b8af..0503e20.
+- Closed by the push or the PR merges: #90, #95, #106. Open: #93, #105, #107, #108, #109.
+- CI on 4635cb3: `checks` running at push time. `pages` fails because GitHub Pages is not turned on (#102, owner step).
+
+## Branches not in `main` after the push
+
+| Branch | State | Action |
+|---|---|---|
+| `feature/chinese-version` | 11 commits, no PR; Hong Kong wording check by the owner | owner decision: open a PR and review |
+| `docs/paid-features-plan` | local only by decision | leave |
+| `origin/docs/submission-and-credits`, `origin/docs/architecture-diagram`, `origin/chore/unify-tests` | PRs #29, #30, #20 closed without merge | leave |
+| `origin/docs/readme-honest` | older copy of `docs/readme-accuracy` (#67, merged) | superseded |
+| `feature/real-sky`, `feature/real-sky-core`, `feature/real-sky-finish` | earlier versions of #40 real-sky (merged) | superseded |
+| `feature/real-sky-main`, `origin/feature/star-database-ml`, `integrate/2026-11-15c` | same patches already on `main` | already in |
