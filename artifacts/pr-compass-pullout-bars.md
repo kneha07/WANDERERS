@@ -13,10 +13,11 @@ Sky Compass: the sky fills the screen. The bars hide until the user pulls them o
 
 - **Pull-out bars:** the top bar (telemetry, Sight check, Recalibrate, info, sky bar) and the bottom bar (guide, search, targets, radar) start hidden. A tab at each edge shows or hides its bar with a tap or a swipe. The bar state is kept for the next visit. On the first visit the tabs bounce, as a hint.
 - **Hover and click:** a mouse over a star, planet, the Moon or a WANDERERS target shows its name. A click on a WANDERERS target now opens its sheet, the same as a click on a star.
-- **Crosshair name:** the name of the object in the crosshair shows above it. On a phone, pointing works like hover.
+- **Crosshair name:** the name of the star in the crosshair shows above it (stars only: the Moon, planets and targets have their own labels). On a phone, pointing works like hover.
 - **Camera power:** the camera stops while the sky photographs cover it fully (Deep with the slider at Sky, or the telescope view). It starts again when they do not. The lens geometry is kept, so the view does not jump.
 - **Screen stays on:** Screen Wake Lock while the sky is open.
 - **Close sheets:** Esc closes an open sheet. A swipe down from the top of a sheet closes it.
+- **Search pane:** a 🔎 button (bottom right) or the `/` key opens the live star search (`StarSearch.attach()`) under the compass tape, while the bars stay hidden.
 - **Webb frames:** violet diamonds, so they do not look like the amber target brackets.
 
 ## Verification
