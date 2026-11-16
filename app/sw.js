@@ -31,7 +31,7 @@ const SHELL = ["compass.html", "compass.css", "compass.js", "brand.css", "theme.
   "pathview.js", "telescope.js", "orient.js", "intro.js", "skyview.js", "hips.js", "realsky.js", "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "data/skystars.json", "data/stars.json", "data/constellations.json", "data/index.json", "data/declination.json", "data/earth/cities.json", "data/paths.json",
   // Space Camera and Story Studio (stories.html); sky.js, orient.js, theme.js and the data above are shared
-  "stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js",
+  "i18n.js", "i18n-zh.js", "stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js",
 ].map((f) => new URL(f, self.registration.scope).href);
 const IS_SHELL = new Set(SHELL);
 // Story Studio's "real NASA fact" list reads every target.json named in data/index.json.
