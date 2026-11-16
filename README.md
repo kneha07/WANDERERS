@@ -217,7 +217,7 @@ example and, on a static host, says how to start the local server. Checks:
 `node --test test/starfixcore.test.js test/starfix-server.test.js`. Spec: `docs/specs/star-fix-build.md`.
 
 **The real sky behind the Sky Compass** (`app/realsky.js`), so clouds and city lights do not matter. A switch under the
-buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (HYG via the star database, with a City /
+buttons picks **Off · Eye · Deep**. **Eye** draws the stars a person can see (Hipparcos via NASA HEASARC, names from the star database, with a City /
 Suburb / Dark choice), constellation lines (d3-celestial) and the planets (JPL elements); it is drawn, not
 photographed, and works with no connection. **Deep** shows survey photographs under the AR view, in the camera's own
 projection: Digitized Sky Survey (STScI/NASA) or, with **Infrared**, 2MASS (UMass and IPAC/Caltech), both tiled by CDS
@@ -692,6 +692,7 @@ Setup, options and known limits: [docs/blink/README.md](docs/blink/README.md). A
 | Luhman & Esplin 2016, AJ 152, 78 | motion of WISE 0855, which is too cold for Gaia |
 | astropy built-in solar-system ephemeris | Earth's position, for the parallax term of the predicted star paths |
 | HYG Database v4.1 (astronexus, CC BY-SA 4.0) | the searchable star list |
+| Hipparcos Main Catalogue (ESA) via NASA HEASARC | positions, magnitudes and spectral types of the Sky Compass stars (`app/data/skystars.json`) |
 | NASA Kepler short-cadence light curves (MAST) | real starquakes of four Kepler LEGACY stars |
 | ESA Gaia archive TAP (Gaia DR1-3, Hipparcos-2, Tycho-2, 2MASS, AllWISE, Pan-STARRS1, URAT1, UCAC4, PPMXL, GSC 2.3, CatWISE2020) | measured positions that train each star's trajectory model |
 | IRSA HiPS: SPHEREx DR1 all-sky cube, AllWISE colour | live sky map in the browser (Aladin Lite 3.8.2, CDS) |
