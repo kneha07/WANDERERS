@@ -44,4 +44,4 @@ No redesign is needed for one more language: add a dictionary file and a build s
 3. Add a test that fails when a visible string has no translation.
 4. Only if search ranking matters: build `/zh/...` pages at deploy time.
 
-Whether to file an issue for this is an open owner decision (asked 2026-11-15).
+Tracked in issue kneha07/WANDERERS#94 (https://github.com/kneha07/WANDERERS/issues/94).
