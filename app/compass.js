@@ -18,6 +18,9 @@ const S = {
 window.__wanderers = { F, S };   // debug handle for automated tests (feed sensor events with exact timestamps)
 // Links for checks and screenshots: ?at=2026-11-15T06:00:00Z&lat=47.6&lon=-122.3&go=1&intro=skip&cam=0&sky=eye
 const Q = new URLSearchParams(location.search), qnum = (k) => (Q.get(k) != null && Q.get(k) !== "" && isFinite(+Q.get(k)) ? +Q.get(k) : null);
+// Some features are hidden for now, until the owner decides (class="later" in compass.html).
+// ?later=1 shows them, for the team to test. To release them for everyone, delete the .later rule in compass.css.
+if (Q.get("later") === "1") document.documentElement.classList.add("with-later");
 const FIXED_AT = Q.get("at") && !isNaN(new Date(Q.get("at"))) ? new Date(Q.get("at")) : null;
 const nowDate = () => FIXED_AT || new Date();
 

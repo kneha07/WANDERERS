@@ -29,6 +29,7 @@ Sky Compass: the sky fills the screen. The bars hide until the user pulls them o
 - **Look-back:** star and galaxy cards add a "For scale" line from history (for example, Polaris: Galileo's first telescope, 1610).
 - **Fix #95:** the path view checks `stars/pred/index.json` before it asks for a prediction file, so stars without one no longer cause a 404.
 - **Distances:** star, planet, Moon, Sun and galaxy cards (and the star sheet on the compass and the Observatory) show km from you, light's travel time, and the time Voyager 1 would need. Planet distances come from `Sky.planets()` (new `au`), the Moon's from its parallax, the Sun's from Earth's orbit.
+- **Hidden for now (owner decision):** "Save the sky for a place" (offline sky packs, ⓘ sheet) and the Class link (🎓 menu) carry `class="later"` and do not show. `?later=1` shows them for team tests; delete the `.later` rule in `compass.css` to release them.
 - **Webb frames:** violet diamonds, so they do not look like the amber target brackets.
 
 ## Verification

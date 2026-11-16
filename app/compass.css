@@ -301,3 +301,7 @@ p.pv-dim { font-size: .8rem; }
 .badge.on { color: var(--amber); border-color: var(--amber); }
 .sky-card .saw-it { margin-top: 6px; padding: 4px 10px; font-size: .8rem; }
 .learn-menu { max-height: 70vh; overflow: auto; }
+
+/* hidden for now, until the owner decides: "Save the sky for a place" and the Class link. ?later=1 shows them. */
+.later { display: none !important; }
+html.with-later .later { display: revert !important; }
