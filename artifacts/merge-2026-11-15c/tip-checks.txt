@@ -1,0 +1,9 @@
+tip 96a3fa4
+ℹ tests 672
+ℹ pass 670
+ℹ fail 0
+ℹ skipped 2
+node-check-done
+FAILED tests/test_survey_rank_score.py::test_every_term_is_documented_in_the_table
+1 failed, 1105 passed, 2 skipped in 171.80s (0:02:51)
+OK
