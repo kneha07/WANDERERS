@@ -56,7 +56,7 @@ self.addEventListener("fetch", (e) => {
   const url = e.request.url;
   if (e.request.method !== "GET") return;
   if (url.startsWith(TILES) || url.startsWith(TILES2)) e.respondWith(url.endsWith("/properties") ? properties(url, e) : tile(url, e));
-  else if (url.startsWith(ALADIN) || url.startsWith(THREE_JS)) e.respondWith(pinned(url));
+  else if (url.startsWith(ALADIN) || url.startsWith(THREE_JS) || url.includes("/data/skydeep/")) e.respondWith(pinned(url));   // skydeep: versioned URLs
   else if (IS_SHELL.has(bare(url)) || isTargetJson(url)) e.respondWith(fresh(e.request));
 });
 
