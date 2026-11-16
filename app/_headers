@@ -1,0 +1,8 @@
+# Response headers for the static site on Cloudflare Workers (wrangler deploy --assets app). Workers read this
+# file and do not serve it. No script-src here: the sky map loads Aladin Lite (WASM) from cdn.jsdelivr.net.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'; object-src 'none'; base-uri 'self'
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000

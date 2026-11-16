@@ -20,8 +20,8 @@
 
   const R = {
     sky: pick("sky", (v) => ["off", "eye", "deep"].includes(v), load("wanderers.sky", "eye")),
-    limit: pick("limit", (v) => SkyView.LIMITS[v], load("wanderers.skyLimit", "dark")),
-    survey: pick("survey", (v) => SURVEYS[v], load("wanderers.skySurvey", "visible")),
+    limit: pick("limit", (v) => Object.hasOwn(SkyView.LIMITS, v), load("wanderers.skyLimit", "dark")),
+    survey: pick("survey", (v) => Object.hasOwn(SURVEYS, v), load("wanderers.skySurvey", "visible")),
     lines: load("wanderers.skyLines", true), mix: load("wanderers.skyMix", 0.8), msg: "", calDrag: null,
   };
   let C = null;            // what compass.js gives: pose(), focal(), loc(), now(), camOn(), phoneSteers(), F, S, onStar(key), openSight()
