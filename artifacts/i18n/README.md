@@ -34,3 +34,14 @@ To add strings: add pairs to a `zh-*.json` file, then run the build script again
 - Some sentences are split by links into parts; each part is translated alone, so word order can read a bit stiff.
 - New English text added later stays English until someone adds it to the dictionary.
 - No separate URL per language for search engines; English shows briefly before the dictionary loads.
+
+## Upgrade path (if more languages are planned)
+
+No redesign is needed for one more language: add a dictionary file and a build step. For real localization, upgrade step by step:
+
+1. Format numbers and dates with `Intl`.
+2. Change JS sentences built with numbers into `t("key", {n})` templates per language (fixes the main gap).
+3. Add a test that fails when a visible string has no translation.
+4. Only if search ranking matters: build `/zh/...` pages at deploy time.
+
+Whether to file an issue for this is an open owner decision (asked 2026-11-15).
