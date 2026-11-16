@@ -40,7 +40,7 @@ To add a language: add `<lang>-*.json`, run the build, add the code to `LANGS` i
 ## Known limits
 
 - Text that no probe saw stays English. Numbers inside text are handled by number templates (see the decision note).
-- Translations are machine-made and not reviewed by native speakers (issue kneha07/WANDERERS#96). Vietnamese constellation names use formal Hán-Việt forms. Korean uses "웹 망원경" in one short label but "Webb" in longer sentences.
+- Translations are machine-made and not reviewed by native speakers (issue kneha07/WANDERERS#96; Taiwan and Hong Kong are not listed there yet, owner said "not now" on 2026-11-15). Vietnamese constellation names use formal Hán-Việt forms. Korean uses "웹 망원경" in one short label but "Webb" in longer sentences.
 - Some sentences are split by links into parts; each part is translated alone, so word order can read a bit stiff.
 - New English text added later stays English until someone adds it to the dictionary.
 - No separate URL per language for search engines; English shows briefly before the dictionary loads.
