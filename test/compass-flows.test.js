@@ -78,7 +78,7 @@ function loadCompass({ search = "", intro = "ok", geolocation = null, webb = nul
   const env = {
     window, document, location: loc, history: { replaceState(_, __, u) { loc.href = String(u); } }, navigator, fetch: fetchFile,
     // realsky.js (the team's real-sky layer) draws extra sky detail; these flow tests only need it to be present
-    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cover: () => 0, cancelGesture() {}, cancelDrag() {}, renderSaved() {}, projector: () => () => null },
+    RealSky: { R: { sky: "off" }, DEEP: { state: "off" }, init() {}, draw() {}, cover: () => 0, pickAt: () => null, cancelGesture() {}, cancelDrag() {}, renderSaved() {}, projector: () => () => null },
     Orient, Sky: SkyLocal, StarSearch, Webb: webb || { load: () => new Promise(() => {}), near: () => [] }, PathView: pathView,
     getComputedStyle: () => ({ paddingTop: "0" }), requestAnimationFrame: (fn) => rafs.push(fn), performance: { now: () => (clock += 300) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (h) => { if (timers[h - 1]) timers[h - 1].fn = null; },
