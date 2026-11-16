@@ -17,20 +17,20 @@ Changing the language reloads the page. Hindi (हिन्दी) is the Indian
 
 ## Dictionary
 
-1. `en-*.json`: `en-0…3` are 1,169 strings seen at page load; `en-4…7` are 756 strings and number templates seen only after clicks (all 4 visitor modes); `en-8` is one loading message added by hand.
+1. `en-*.json`: `en-0…3` are 1,169 strings seen at page load; `en-4…7` are 756 strings and number templates seen only after clicks (all 4 visitor modes); `en-8` is one loading message added by hand; `en-9` is 183 strings and number templates that main added after the branch base 58722d9 (Sky Compass pull-out bars and search pane, 🎓 Learn menu and its 7 modes, sight check, distance and "For scale" lines, HEASARC credits), written at the merge into main on 2026-11-15 by `.probe`-style click checks (`<lang>-9.json`).
 2. `<lang>-*.json`: translations by parallel translator agents; every key checked present.
 3. `python scripts/build_i18n.py` writes `app/i18n-<lang>.js` for every language found.
-   Entries (strings that stay the same are dropped): zh 1,792 · ko 1,783 · vi 1,780 · hi 1,682 (Hindi keeps the 88 constellation names in English).
+   Entries (strings that stay the same are dropped): zh 1,975 · ko 1,966 · vi 1,963 · hi 1,865 (Hindi keeps the 88 constellation names in English).
 
 Traditional Chinese is not translated from English. `scripts/zh_to_traditional.py` converts every `zh-*.json` with OpenCC
 (`s2twp` → `tw-*.json` with Taiwan words such as 軟體 / 影片 / 網路; `s2hk` → `hk-*.json` with Hong Kong characters such as 裏 / 着 / 户).
 `s2hk` changes characters only, so mainland words stayed (搜索, 保存, 加載, 屏幕, 實時, 視頻 …). The owner pointed this out (Hong Kong uses 影片, not 視頻).
 `HK_WORDS` in the script now replaces 33 mainland words with Hong Kong words (搜尋, 儲存, 載入, 螢幕, 即時, 影片 …) and keeps the words Hong Kong shares with the mainland (軟件, 網絡, 數據, 像素, 項目).
-質量 changes only in "quality" phrases (數據質素), because it also means "mass" (木星質量). After the fix, none of the listed mainland words is left in `hk-*.json`.
-Needs `pip install opencc-python-reimplemented==0.1.7` at build time only. Entries: tw 1,792 · hk 1,792.
+質量 changes only in "quality" phrases (數據質素), because it also means "mass" (木星質量). After the fix, none of the listed mainland words is left in `hk-*.json`. At the merge into main, 6 more were added: 上傳 → 上載, 粘貼 → 貼上, 撤銷 → 復原, 設置 → 設定, 原始文件 → 原始檔案, and 韋布 → 韋伯 (the Webb telescope's Hong Kong name).
+Needs `pip install opencc-python-reimplemented==0.1.7` at build time only. Entries: tw 1,975 · hk 1,975.
 
 To add strings: add pairs to a `<lang>-*.json` file, then run the build script again. After a change to `zh-*.json`, run `zh_to_traditional.py` first.
-To add a language: add `<lang>-*.json`, run the build, add the code to `LANGS` in `app/i18n.js` and the file to `SHELL` in `app/sw.js`.
+To add a language: add `<lang>-*.json`, run the build, add the code to `LANGS` in `app/i18n.js` and to `LAZY` in `app/sw.js` (a dictionary is stored offline when first used, not at install).
 
 ## Checks
 

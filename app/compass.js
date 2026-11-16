@@ -865,16 +865,16 @@ function startAim(x) {
     : `Move the phone until the big gold crosshair sits on ${x.top ? `the top of ${x.label}` : x.label} in the camera view, then tap Calibrate.` +
       (x.landmark ? " Ignore the teal marker: it shows where the app currently thinks it is." : "") + (x.sun ? " Never look at the Sun directly: watch the screen." : "");
   $("aimMsg").textContent = S.sensors ? "" : "This needs a phone's motion sensors (open this page on your phone).";
-  $("aimMsg").className = "small"; $("aimGo").disabled = false; $("aimGo").textContent = "Calibrate";
+  $("aimMsg").className = "small"; $("aimGo").disabled = false; $("aimGo").textContent = "Calibrate"; S.aimOk = false;
 }
 function endAim() { clearTimeout(S.aimDone); S.aim = null; $("aimBar").hidden = true; $("aimCancel").hidden = false; document.body.classList.remove("aiming"); }
 $("aimCancel").onclick = endAim;
 $("aimGo").onclick = () => {
   if (!S.aim) return endAim();
-  if ($("aimGo").textContent === "Done") return endAim();
+  if (S.aimOk) return endAim();   // a flag, not the button text: the language menu translates "Done"
   const ok = applyFine(S.aim, $("aimMsg"));
   $("aimMsg").className = "small " + (ok ? "ok" : "warn");
-  if (ok) { $("aimGo").textContent = "Done"; $("aimCancel").hidden = true; S.aimDone = setTimeout(endAim, 4000); }
+  if (ok) { S.aimOk = true; $("aimGo").textContent = "Done"; $("aimCancel").hidden = true; S.aimDone = setTimeout(endAim, 4000); }
 };
 function applyFine(x, out = $("northMsg")) {
   if (!S.sensors) { out.textContent = "This needs a phone's motion sensors (open this page on your phone)."; return false; }

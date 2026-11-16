@@ -3,7 +3,7 @@
 Run: python scripts/build_i18n.py
 To add strings: put more {"English": "translation"} pairs in a <lang>-*.json file and run again.
 To add a language: add <lang>-*.json files, run this, then add the language to LANGS in app/i18n.js
-and the file to SHELL in app/sw.js.
+and the code to LAZY in app/sw.js.
 """
 import json
 import re

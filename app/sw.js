@@ -31,9 +31,12 @@ const SHELL = ["compass.html", "compass.css", "compass.js", "brand.css", "theme.
   "pathview.js", "telescope.js", "orient.js", "intro.js", "skyview.js", "hips.js", "realsky.js", "learn.js", "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "data/skystars.json", "data/stars.json", "data/constellations.json", "data/index.json", "data/declination.json", "data/earth/cities.json", "data/paths.json",
   // Space Camera and Story Studio (stories.html); sky.js, orient.js, theme.js and the data above are shared
-  "i18n.js", "i18n-zh.js", "i18n-tw.js", "i18n-hk.js", "i18n-hi.js", "i18n-vi.js", "i18n-ko.js", "stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js",
+  "i18n.js", "stories.html", "stories.css", "stories.js", "story-render.js", "share.js", "explorer.js", "explorer.css", "discoveries.js", "explorer-home.js",
 ].map((f) => new URL(f, self.registration.scope).href);
-const IS_SHELL = new Set(SHELL);
+// Language dictionaries (i18n.js loads one): about 1.5 MB together, so they are not fetched at install. Each is
+// answered like the shell and so stored the first time its language is used; that language then works offline.
+const LAZY = ["zh", "tw", "hk", "hi", "vi", "ko"].map((l) => new URL(`i18n-${l}.js`, self.registration.scope).href);
+const IS_SHELL = new Set([...SHELL, ...LAZY]);
 // Story Studio's "real NASA fact" list reads every target.json named in data/index.json.
 const isTargetJson = (url) => { const u = new URL(url); return u.origin === self.location.origin && u.pathname.startsWith(new URL("data/", self.registration.scope).pathname) && /^[\w-]+\/target\.json$/.test(u.pathname.slice(new URL("data/", self.registration.scope).pathname.length)); };
 async function storeTargets(c) {

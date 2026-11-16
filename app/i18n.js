@@ -33,7 +33,7 @@
   document.documentElement.lang = LANGS[lang][1];
 
   const sc = document.createElement("script");
-  sc.src = `i18n-${lang}.js?v=20261116e`;
+  sc.src = `i18n-${lang}.js?v=20261118a`;
   sc.onload = () => {
     const D = window.I18N_DICT || {};
     // Exact text first. Then the number template: scripts paste numbers into English sentences, so
@@ -45,7 +45,7 @@
       let i = 0; const shape = k.replace(NUM, () => `{${i++}}`);
       return Object.hasOwn(D, shape) ? D[shape].replace(/\{(\d+)\}/g, (_, j) => nums[j]) : null;
     };
-    const tr = (v) => { const k = v.trim().replace(/\s+/g, " "); const t = k && look(k); return t ? v.replace(v.trim(), t) : null; };
+    const tr = (v) => { const k = v.trim().replace(/\s+/g, " "); const t = k && look(k); return t ? v.replace(v.trim(), () => t) : null; };
     const text = (n) => { const p = n.parentElement; if (!p || p.closest("script,style,svg,select.lang-toggle")) return; const t = tr(n.nodeValue); if (t !== null && t !== n.nodeValue) n.nodeValue = t; };
     const attrs = (e) => { if (e.closest?.(".lang-toggle")) return; ATTRS.forEach((a) => { const v = e.getAttribute(a); if (v) { const t = tr(v); if (t !== null && t !== v) e.setAttribute(a, t); } }); };
     const walk = (root) => {
